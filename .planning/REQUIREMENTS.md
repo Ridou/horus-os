@@ -68,16 +68,72 @@
 | REL-01 | Tag v0.1.0 and write release notes | active | 11 |
 | REL-02 | Public GitHub repo published with README, LICENSE, CONTRIBUTING | active | 11 |
 
+## v0.2 Multi-Agent + Streaming
+
+### Multi-agent (MA)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MA-01 | Named agent profiles persist in SQLite (name, system prompt, default model, allowed tools, memory scope) | active | 12 |
+| MA-02 | A coordinator agent can delegate to one or more sub-agents via a registered tool | active | 13 |
+| MA-03 | Every multi-agent run produces a trace with parent/child linkage | active | 13 |
+| MA-04 | At least one default agent profile is auto-created on `horus-os init` | active | 12 |
+
+### Streaming (STREAM)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| STREAM-01 | `run_agent_stream` yields incremental tokens from Anthropic and Gemini | active | 14 |
+| STREAM-02 | CLI `run` shows streamed output by default; `--no-stream` falls back to v0.1 behavior | active | 15 |
+| STREAM-03 | Dashboard chat surface renders streamed tokens live | active | 16 |
+
+### Adapter (ADAPT)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| ADAPT-01 | Plugin contract defined via `horus_os.adapters` entry point | active | 17 |
+| ADAPT-02 | One reference adapter ships: HTTP webhook receiver | active | 17 |
+| ADAPT-03 | Third-party adapters register without forking horus-os | active | 17 |
+
+### Migration (MIG)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MIG-01 | v0.1 SQLite database upgrades to v0.2 schema idempotently | active | 12 |
+| MIG-02 | v0.1 single-agent traces remain readable in the v0.2 dashboard | active | 12, 16 |
+| MIG-03 | Migration is one-way; downgrade is not supported and is documented | active | 18 |
+
+### Test and CI (continued from v0.1)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-04 | Multi-agent end-to-end tests pass on three-OS matrix | active | 19, 20 |
+| TEST-05 | Streaming tests pass on three-OS matrix | active | 19, 20 |
+| TEST-06 | Adapter contract tests pass on three-OS matrix | active | 19, 20 |
+
+### Release (continued from v0.1)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-03 | Tag v0.2.0 with CHANGELOG and GitHub Release | active | 21 |
+| REL-04 | Migration notes documented for v0.1 users | active | 18, 21 |
+
 ## Coverage summary
 
 | Category | Total | Active | Validated |
 |----------|-------|--------|-----------|
-| CORE | 5 | 5 | 0 |
-| AGENT | 3 | 3 | 0 |
-| TOOL | 3 | 3 | 0 |
-| MEM | 3 | 3 | 0 |
-| DASH | 3 | 3 | 0 |
-| WIZARD | 4 | 4 | 0 |
-| TEST | 3 | 3 | 0 |
-| REL | 2 | 2 | 0 |
-| **Total** | **26** | **26** | **0** |
+| CORE | 5 | 5 | 5 |
+| AGENT | 3 | 3 | 3 |
+| TOOL | 3 | 3 | 3 |
+| MEM | 3 | 3 | 3 |
+| DASH | 3 | 3 | 3 |
+| WIZARD | 4 | 4 | 4 |
+| TEST | 6 | 6 | 3 |
+| REL | 4 | 4 | 2 |
+| MA | 4 | 4 | 0 |
+| STREAM | 3 | 3 | 0 |
+| ADAPT | 3 | 3 | 0 |
+| MIG | 3 | 3 | 0 |
+| **Total** | **44** | **44** | **26** |
+
+"Validated" means the requirement is covered by a shipped phase. v0.1 requirements (CORE through original TEST/REL) flipped to validated on 2026-05-23. v0.2 requirements stay unvalidated until their phases ship.

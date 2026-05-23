@@ -3,6 +3,7 @@
 ## Milestones
 
 - [x] **v0.1 Foundation** (Phases 01-11), shipped 2026-05-23 as v0.1.0. CLI + web chat, Anthropic + Gemini, one agent, six tools, full memory layer, 3-OS install gate, first public release.
+- [ ] **v0.2 Multi-Agent + Streaming** (Phases 12-21), active. Named agent profiles, coordinator-to-sub-agent delegation, provider streaming on both CLI and dashboard, adapter plugin interface.
 
 ## Phases
 
@@ -24,11 +25,29 @@
 - [x] **Phase 10: Three-OS install verification**, Fresh-VM install on macOS, Ubuntu, Windows via the install-smoke CI job. (completed 2026-05-23)
 - [x] **Phase 11: First public release**, Tagged v0.1.0 on origin, CHANGELOG written, version bumped. (completed 2026-05-23)
 
+### v0.2 Multi-Agent + Streaming (Phases 12-21)
+
+**Milestone Goal:** Move from "one agent answers questions" to "a personal team of agents that can hand off to each other, with live streaming responses in the CLI and dashboard." Named agent profiles persist in SQLite. A coordinator delegates to sub-agents. Both providers stream incremental tokens. The adapter plugin interface opens the door to external surfaces (Discord, Slack, webhook receivers) which arrive in v0.3.
+
+**Parallelization:** 12 → 13 → (14 ∥ 15 ∥ 16 ∥ 17) → 18 → 19 → 20 → 21. Phase 12 (agent profile schema + migration) gates everything because it changes the storage layer. After 13 (runtime support for delegation) lands, surfaces and adapters can ship in parallel.
+
+- [ ] **Phase 12: Agent profile model and schema migration**, `agent_profiles` table with name, system prompt, default model, allowed tools, memory scope. Idempotent forward migration from v0.1 schema. CRUD API. At least one default agent auto-created on `init`.
+- [ ] **Phase 13: Multi-agent orchestration runtime**, `delegate_to_agent` tool. Parent and child trace linkage. A coordinator can invoke one or more sub-agents synchronously or in parallel. Iteration bound applies to the whole tree.
+- [ ] **Phase 14: Streaming response support**, `run_agent_stream` async generator. Anthropic and Gemini streaming SDK paths. `run_agent` and `run_agent_loop` continue to work unchanged for non-streaming callers.
+- [ ] **Phase 15: CLI multi-agent surface**, `horus-os agents` subcommand (list, show, create, edit, delete). `horus-os run --agent <name>`. Streaming output to terminal by default; `--no-stream` falls back to the v0.1 behavior.
+- [ ] **Phase 16: Dashboard multi-agent view and streaming chat**, agents list, per-agent activity, delegate-tree visualization per run, live token streaming in the chat surface.
+- [ ] **Phase 17: Adapter plugin interface**, Plugin contract via `importlib.metadata.entry_points("horus_os.adapters")`. One reference adapter ships: HTTP webhook receiver. Third-party adapters can register without forking horus-os.
+- [ ] **Phase 18: Documentation and examples refresh**, Update ARCHITECTURE.md for the multi-agent shape. Add `examples/multi_agent.py`, `examples/streaming.py`, `examples/custom_adapter.py`. Document the migration path for v0.1 users.
+- [ ] **Phase 19: Test surface expansion**, End-to-end multi-agent flows, streaming partial-failure modes, adapter contract tests. Cross-OS coverage maintained.
+- [ ] **Phase 20: Three-OS install verification (v0.2)**, Same hard gate as Phase 10, re-targeted at the v0.2 feature set. Fresh-VM install on macOS, Ubuntu, Windows passes through `install-smoke`.
+- [ ] **Phase 21: v0.2.0 release**, Tag v0.2.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes.
+
 ## Progress
 
-- Total phases: 11
-- Completed phases: 11
-- Total plans: 13
-- Completed plans: 13
-- Percent: 100
-- Milestone v0.1 Foundation: SHIPPED as v0.1.0 on 2026-05-23
+- Total phases: 21
+- Completed phases: 11 (v0.1)
+- Active milestone: v0.2 Multi-Agent + Streaming (0/10 phases)
+- Total plans (v0.1): 13
+- Completed plans (v0.1): 13
+- Percent complete (overall): 52%
+- Last shipped: v0.1.0 on 2026-05-23
