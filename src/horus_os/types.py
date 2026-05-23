@@ -13,9 +13,7 @@ class Tool:
 
     `parameters` is a JSON Schema object describing the inputs the model
     must produce. `handler` is the Python callable that runs when the
-    tool is selected. Phase 02 captures the model's tool_use intent but
-    does not auto-invoke the handler; the full execution loop lands in
-    Phase 04.
+    tool is selected.
     """
 
     name: str
@@ -31,6 +29,17 @@ class ToolUse:
     id: str
     name: str
     input: dict[str, Any]
+
+
+@dataclass
+class ToolResult:
+    """The outcome of running a single tool_use through a registry handler."""
+
+    tool_use_id: str
+    name: str
+    output: Any = None
+    error: str | None = None
+    latency_ms: int | None = None
 
 
 @dataclass
