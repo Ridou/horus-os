@@ -21,7 +21,7 @@ from horus_os.types import (
     ToolUse,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 
 def create_app(data_dir=None):
