@@ -36,6 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite an existing config file if one is present.",
     )
+    init_p.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Run the setup wizard with API key onboarding and live validation.",
+    )
     init_p.set_defaults(func=run_init)
 
     traces_p = sub.add_parser("traces", help="List recent agent traces")
