@@ -11,21 +11,35 @@ Third-party packages declare an adapter in their `pyproject.toml`:
     my_adapter = "my_package.adapter:MyAdapter"
 
 `MyAdapter` must be a callable (typically a class) that returns an
-object satisfying the `Adapter` Protocol.
+object satisfying the `Adapter` Protocol. Long-running adapters can
+additionally implement the optional `LifecycleAdapter` Protocol to
+get `start`/`stop` hooks tied to the FastAPI app lifespan.
 """
 
 from horus_os.adapters.base import (
     ADAPTER_ENTRY_POINT_GROUP,
+    ADAPTER_STATUS_ERROR,
+    ADAPTER_STATUS_RUNNING,
+    ADAPTER_STATUS_STOPPED,
     Adapter,
     AdapterContext,
+    AdapterEntry,
+    AdapterRegistry,
+    LifecycleAdapter,
     discover_adapters,
 )
 from horus_os.adapters.webhook import WebhookAdapter
 
 __all__ = [
     "ADAPTER_ENTRY_POINT_GROUP",
+    "ADAPTER_STATUS_ERROR",
+    "ADAPTER_STATUS_RUNNING",
+    "ADAPTER_STATUS_STOPPED",
     "Adapter",
     "AdapterContext",
+    "AdapterEntry",
+    "AdapterRegistry",
+    "LifecycleAdapter",
     "WebhookAdapter",
     "discover_adapters",
 ]
