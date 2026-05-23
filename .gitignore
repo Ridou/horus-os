@@ -10,3 +10,22 @@ node_modules/
 .next/
 *.log
 .claude/worktrees/
+
+# Python build/test artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+
+# horus-os local state
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.horus-init-state.json
