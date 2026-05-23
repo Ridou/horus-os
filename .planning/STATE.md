@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
 status: phase_complete
-stopped_at: Phase 07 shipped, ready for Phase 08 planning
-last_updated: "2026-05-23T08:30:00Z"
-last_activity: 2026-05-23, Phase 07 (CLI surface + multi-turn loop + run) complete
+stopped_at: Phase 08 shipped, ready for Phase 09 planning
+last_updated: "2026-05-23T09:30:00Z"
+last_activity: 2026-05-23, Phase 08 (FastAPI server + HTML dashboard + serve subcommand) complete
 progress:
   total_phases: 11
-  completed_phases: 7
-  total_plans: 8
-  completed_plans: 8
-  percent: 64
+  completed_phases: 8
+  total_plans: 10
+  completed_plans: 10
+  percent: 73
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 08, Web chat and dashboard (next up)
+**Current focus:** Phase 09, Setup wizard (next up)
 
 ## Current Position
 
-Phase: 08 (web-chat-and-dashboard), READY TO PLAN
+Phase: 09 (setup-wizard), READY TO PLAN
 Plan: 0 of N
-Status: Phase 07 complete, Phase 08 ready to plan
-Last activity: 2026-05-23, Phase 07 shipped (multi-turn agent loop, Conversation per provider, `horus-os run` subcommand with default tool registry and audit-trail wiring, 28 new tests, 148 total). v0.1 milestone is 64% complete.
+Status: Phase 08 complete, Phase 09 ready to plan
+Last activity: 2026-05-23, Phase 08 shipped (FastAPI server with 5 endpoints, single-file HTML dashboard, functional `horus-os serve` via uvicorn, 17 new tests, 165 total, live end-to-end verified). v0.1 milestone is 73% complete.
 
 ### v0.1 Foundation Milestone Snapshot
 

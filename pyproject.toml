@@ -52,6 +52,9 @@ Source = "https://github.com/Ridou/horus-os"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"horus_os.server" = ["static/*.html", "static/*.css", "static/*.js"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
