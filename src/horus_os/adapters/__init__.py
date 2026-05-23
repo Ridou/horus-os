@@ -28,6 +28,7 @@ from horus_os.adapters.base import (
     LifecycleAdapter,
     discover_adapters,
 )
+from horus_os.adapters.calendar_adapter import CalendarAdapter
 from horus_os.adapters.discord_adapter import DiscordAdapter
 from horus_os.adapters.email_adapter import EmailAdapter
 from horus_os.adapters.slack_adapter import SlackAdapter
@@ -42,6 +43,7 @@ __all__ = [
     "AdapterContext",
     "AdapterEntry",
     "AdapterRegistry",
+    "CalendarAdapter",
     "DiscordAdapter",
     "EmailAdapter",
     "LifecycleAdapter",

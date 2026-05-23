@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from horus_os.config import Config
+from horus_os.tools.registry import ToolRegistry
 
 ADAPTER_ENTRY_POINT_GROUP = "horus_os.adapters"
 
@@ -126,11 +127,20 @@ class AdapterContext:
     The `registry` field is a frozen reference to a mutable
     AdapterRegistry. Adapters can call `context.registry.touch(name)`
     to bump their `last_activity_at` from request handlers.
+
+    The `tool_registry` field is the master tool registry adapters
+    can register agent-callable tools onto. It is None by default
+    so existing callers (Phases 17 through 25) remain byte-identical.
+    Tool-providing adapters like the Calendar adapter check for None
+    and surface a clear error via the AdapterRegistry rather than
+    raise. Phase 27 will wire this field through `create_app` so the
+    dashboard can surface registered tools.
     """
 
     config: Config
     data_dir: Path
     registry: AdapterRegistry = field(default_factory=AdapterRegistry)
+    tool_registry: ToolRegistry | None = None
 
 
 @runtime_checkable
