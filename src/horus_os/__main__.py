@@ -115,6 +115,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not persist a trace row for this run.",
     )
+    run_p.add_argument(
+        "--agent",
+        default=None,
+        help="Run against a named agent profile (loaded via `horus-os agents`).",
+    )
+    run_p.add_argument(
+        "--no-stream",
+        dest="no_stream",
+        action="store_true",
+        help="Disable streaming output; buffer the full response before printing.",
+    )
     run_p.set_defaults(func=run_run)
 
     agents_p = sub.add_parser("agents", help="Manage agent profiles")
