@@ -37,8 +37,9 @@ def test_init_creates_schema_on_fresh_db(tmp_path: Path) -> None:
         }
         assert "traces" in tables
         assert "schema_version" in tables
+        assert "note_writes" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 1
+        assert version == 2
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:
@@ -163,3 +164,60 @@ def test_string_path_is_accepted(tmp_path: Path) -> None:
     db.init()
     trace_id = db.record_trace("hi", _make_result())
     assert db.get_trace(trace_id) is not None
+
+
+def test_record_note_write_returns_uuid_hex(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    write_id = db.record_note_write("create", "a.md", 0, 5, "hello")
+    assert isinstance(write_id, str)
+    assert len(write_id) == 32
+    int(write_id, 16)
+
+
+def test_list_note_writes_newest_first(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.record_note_write("create", "a.md", 0, 1, "a")
+    db.record_note_write("append", "a.md", 1, 3, "ab")
+    db.record_note_write("create", "b.md", 0, 1, "x")
+    writes = db.list_note_writes()
+    assert len(writes) == 3
+    assert writes[0].rel_path == "b.md"
+    assert writes[-1].rel_path == "a.md"
+    assert writes[-1].operation == "create"
+
+
+def test_schema_v1_database_upgrades_to_v2(tmp_path: Path) -> None:
+    # Simulate a database created by a v1 build (just the v1 surface).
+    db_path = tmp_path / "horus.sqlite"
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY);
+            INSERT INTO schema_version (version) VALUES (1);
+            CREATE TABLE traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                response_text TEXT NOT NULL DEFAULT '',
+                tool_uses TEXT NOT NULL DEFAULT '[]',
+                usage TEXT NOT NULL DEFAULT '{}',
+                latency_ms INTEGER,
+                status TEXT NOT NULL DEFAULT 'success',
+                error_message TEXT
+            );
+            """
+        )
+    db = Database(db_path)
+    db.init()
+    with sqlite3.connect(str(db_path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 2
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "note_writes" in tables

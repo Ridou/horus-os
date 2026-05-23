@@ -1,8 +1,12 @@
-"""NotesStore: a thin read-only view over a markdown notes folder.
+"""NotesStore: read and write access to a markdown notes folder.
 
 For v0.1 the search is a case-insensitive substring match across
 filename and file content. Future phases can swap the implementation
 for FTS5 or a vector store without changing the public surface.
+
+Writes are append-or-create. There is no overwrite or delete in v0.1.
+Every successful write produces a NoteWrite and (when configured)
+fires an `on_write` callback for audit-trail persistence.
 
 Path safety: every operation resolves the requested path against the
 configured notes_dir and refuses any path that escapes it.
@@ -10,28 +14,39 @@ configured notes_dir and refuses any path that escapes it.
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from horus_os.types import NoteRef
+from horus_os.types import NoteRef, NoteWrite
 
 PREVIEW_CHARS = 240
 
 
 class NotesStore:
-    """Read-only view over a directory of markdown files."""
+    """Read and write view over a directory of markdown files."""
 
-    def __init__(self, notes_dir: str | Path) -> None:
+    def __init__(
+        self,
+        notes_dir: str | Path,
+        *,
+        on_write: Callable[[NoteWrite], None] | None = None,
+    ) -> None:
         self.notes_dir = Path(notes_dir)
+        self._on_write = on_write
 
     def _resolved_root(self) -> Path:
         return self.notes_dir.resolve()
 
-    def _resolve(self, rel_path: str) -> Path:
+    def _resolve(self, rel_path: str, *, must_be_under_root: bool = True) -> Path:
         root = self._resolved_root()
         candidate = Path(rel_path)
-        resolved = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
-        if root != resolved and root not in resolved.parents:
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+        else:
+            resolved = (root / candidate).resolve()
+        if must_be_under_root and root != resolved and root not in resolved.parents:
             raise PermissionError(f"Path {rel_path!r} resolves outside the notes directory")
         return resolved
 
@@ -86,6 +101,58 @@ class NotesStore:
             scored.append((score, ref.path, ref))
         scored.sort(key=lambda item: (-item[0], item[1]))
         return [ref for _, _, ref in scored[:limit]]
+
+    def create_note(self, rel_path: str, content: str) -> NoteWrite:
+        """Create a new note. Raises FileExistsError if it already exists."""
+        target = self._resolve(rel_path)
+        if target.exists():
+            raise FileExistsError(f"Note already exists: {rel_path!r}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        write = self._make_write("create", rel_path, 0, len(content.encode("utf-8")), content)
+        self._notify(write)
+        return write
+
+    def append_note(self, rel_path: str, content: str) -> NoteWrite:
+        """Append `content` to an existing note. Raises FileNotFoundError if missing."""
+        target = self._resolve(rel_path)
+        if not target.exists():
+            raise FileNotFoundError(f"Note does not exist: {rel_path!r}")
+        existing = target.read_text(errors="replace")
+        bytes_before = len(existing.encode("utf-8"))
+        prefix = "" if existing.endswith("\n") or not existing else "\n"
+        payload = prefix + content
+        target.write_text(existing + payload)
+        bytes_after = bytes_before + len(payload.encode("utf-8"))
+        write = self._make_write("append", rel_path, bytes_before, bytes_after, payload)
+        self._notify(write)
+        return write
+
+    def _make_write(
+        self,
+        operation: str,
+        rel_path: str,
+        bytes_before: int,
+        bytes_after: int,
+        content: str,
+    ) -> NoteWrite:
+        return NoteWrite(
+            write_id=uuid.uuid4().hex,
+            created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            operation=operation,
+            rel_path=rel_path,
+            bytes_before=bytes_before,
+            bytes_after=bytes_after,
+            content=content,
+        )
+
+    def _notify(self, write: NoteWrite) -> None:
+        if self._on_write is None:
+            return
+        try:
+            self._on_write(write)
+        except BaseException:
+            pass
 
 
 def _extract_title(text: str, *, fallback: str) -> str:

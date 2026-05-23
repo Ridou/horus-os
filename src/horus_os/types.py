@@ -62,3 +62,17 @@ class NoteRef:
     size_bytes: int
     modified_at: str  # ISO-8601 UTC
     preview: str
+
+
+@dataclass
+class NoteWrite:
+    """A persisted record of one write to the notes folder."""
+
+    write_id: str
+    created_at: str  # ISO-8601 UTC
+    operation: str  # "create" | "append"
+    rel_path: str
+    bytes_before: int
+    bytes_after: int
+    content: str
+    trace_id: str | None = None
