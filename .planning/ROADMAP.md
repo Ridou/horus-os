@@ -20,14 +20,14 @@
 - [x] **Phase 06: Memory layer, write path**, Agent appends to the notes folder with a structured trail. Every write is reviewable. (completed 2026-05-23)
 - [x] **Phase 07: CLI surface**, `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve` (stub), `traces`. Multi-turn tool-execution loop shipped. (completed 2026-05-23)
 - [x] **Phase 08: Web chat and dashboard**, single-page HTML dashboard served locally by FastAPI. Hosts a chat surface, traces explorer, and writes audit view. (completed 2026-05-23; Next.js deferred to a v0.x evolution if richer UX is needed)
-- [ ] **Phase 09: Setup wizard with API key onboarding**, `horus-os init` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable.
+- [x] **Phase 09: Setup wizard with API key onboarding**, `horus-os init --interactive` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable. (completed 2026-05-23)
 - [ ] **Phase 10: Three-OS install verification**, Fresh-VM install on macOS, Ubuntu 22.04, Windows 11.
 - [ ] **Phase 11: First public release**, Tag v0.1.0, write release notes, publish the public repo.
 
 ## Progress
 
 - Total phases: 11
-- Completed phases: 8
-- Total plans: 10
-- Completed plans: 10
-- Percent: 73
+- Completed phases: 9
+- Total plans: 11
+- Completed plans: 11
+- Percent: 82
