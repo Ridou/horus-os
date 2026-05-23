@@ -66,10 +66,11 @@ Plans:
   2. Every sub-agent trace carries a `parent_id` linking it to the coordinator's run
   3. The 10-iteration cap applies across the entire delegation tree, not per-agent
   4. Parallel delegation to multiple sub-agents completes without deadlock and merges results back to the coordinator
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 13-01: Delegate-to-agent tool, parent/child traces, iteration cap propagation
+- [ ] 13-01-PLAN.md -- Schema v4 migration, TraceRecord extension, IterationBudget, _filter_registry
+- [ ] 13-02-PLAN.md -- make_delegate_tool factory, run_agent_loop budget+system_prompt, parallel delegation, integration tests
 
 ### Phase 14: Streaming response support
 **Goal**: `run_agent_stream` async generator yields incremental tokens from both providers without breaking the existing `run_agent` surface.
