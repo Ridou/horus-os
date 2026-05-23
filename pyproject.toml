@@ -52,6 +52,7 @@ horus-os = "horus_os.__main__:main"
 webhook = "horus_os.adapters.webhook:WebhookAdapter"
 discord = "horus_os.adapters.discord_adapter:DiscordAdapter"
 slack = "horus_os.adapters.slack_adapter:SlackAdapter"
+email = "horus_os.adapters.email_adapter:EmailAdapter"
 
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"
