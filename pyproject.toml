@@ -24,8 +24,15 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+gemini = ["google-genai>=0.3"]
+all = [
+    "anthropic>=0.40",
+    "google-genai>=0.3",
+]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
     "ruff>=0.6",
 ]
 
@@ -67,3 +74,4 @@ indent-style = "space"
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
