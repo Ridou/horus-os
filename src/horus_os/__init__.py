@@ -23,6 +23,14 @@ from horus_os.types import (
 
 __version__ = "0.0.1"
 
+
+def create_app(data_dir=None):
+    """Lazy re-export of `horus_os.server.create_app` to avoid loading FastAPI at import time."""
+    from horus_os.server import create_app as _create_app
+
+    return _create_app(data_dir)
+
+
 __all__ = [
     "AgentResult",
     "Config",
@@ -37,6 +45,7 @@ __all__ = [
     "TraceRecord",
     "__version__",
     "append_note_tool",
+    "create_app",
     "create_note_tool",
     "execute_tool_uses",
     "list_notes_tool",
