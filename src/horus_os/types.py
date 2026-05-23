@@ -51,3 +51,14 @@ class AgentResult:
     provider: str = ""
     model: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class NoteRef:
+    """A pointer to a markdown note in a NotesStore."""
+
+    path: str  # relative path inside notes_dir, posix style
+    title: str
+    size_bytes: int
+    modified_at: str  # ISO-8601 UTC
+    preview: str
