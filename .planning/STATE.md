@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
 status: phase_complete
-stopped_at: Phase 09 shipped, ready for Phase 10 planning
-last_updated: "2026-05-23T10:00:00Z"
-last_activity: 2026-05-23, Phase 09 (setup wizard with API key onboarding) complete
+stopped_at: Phase 10 shipped, ready for Phase 11 planning
+last_updated: "2026-05-23T10:30:00Z"
+last_activity: 2026-05-23, Phase 10 (three-OS install smoke) complete
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 11
-  completed_plans: 11
-  percent: 82
+  completed_phases: 10
+  total_plans: 12
+  completed_plans: 12
+  percent: 91
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 10, Three-OS install verification (next up)
+**Current focus:** Phase 11, First public release (last v0.1 phase)
 
 ## Current Position
 
-Phase: 10 (three-os-install-verification), READY TO PLAN
+Phase: 11 (first-public-release), READY TO PLAN
 Plan: 0 of N
-Status: Phase 09 complete, Phase 10 ready to plan
-Last activity: 2026-05-23, Phase 09 shipped (setup wizard with API key onboarding via console links and live 1-token validation, .env writer with 0600 mode, resumable state file, 10 new tests, 175 total). v0.1 milestone is 82% complete.
+Status: Phase 10 complete, Phase 11 (final) ready to plan
+Last activity: 2026-05-23, Phase 10 shipped (cross-OS install_smoke.py with 8 checks, install-smoke CI job, 175 tests still passing). v0.1 milestone is 91% complete. One phase left for v0.1.0.
 
 ### v0.1 Foundation Milestone Snapshot
 
