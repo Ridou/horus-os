@@ -109,12 +109,15 @@ def test_get_adapters_returns_expected_shape(
             "last_activity_at",
             "error_count",
             "error_message",
+            "supports_toggle",
         }
         assert entry["name"] == "fake_third_party"
         assert entry["status"] == ADAPTER_STATUS_RUNNING
         assert entry["last_activity_at"] is None
         assert entry["error_count"] == 0
         assert entry["error_message"] is None
+        # Phase 27: the fake adapter has neither start nor stop.
+        assert entry["supports_toggle"] is False
 
 
 def test_get_adapters_lists_real_webhook_as_running(tmp_path: Path) -> None:
@@ -128,6 +131,8 @@ def test_get_adapters_lists_real_webhook_as_running(tmp_path: Path) -> None:
         assert "webhook" in names
         assert names["webhook"]["status"] == ADAPTER_STATUS_RUNNING
         assert names["webhook"]["last_activity_at"] is None
+        # Phase 27: the reference WebhookAdapter has no lifecycle hooks.
+        assert names["webhook"]["supports_toggle"] is False
 
 
 def test_get_adapters_sorted_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

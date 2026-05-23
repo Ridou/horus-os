@@ -58,10 +58,15 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     _resolved_data_dir = (
         Path(data_dir).expanduser() if data_dir is not None else Config.load(None).data_dir
     )
+    # Phase 27 wiring: build one app-level ToolRegistry so tool-providing
+    # adapters (Calendar today) can register tools at bind time. Exposed
+    # on app.state.tool_registry below for future surfaces to read.
+    _app_tool_registry = ToolRegistry()
     _adapter_context = AdapterContext(
         config=Config.load(Path(data_dir).expanduser() if data_dir is not None else None),
         data_dir=_resolved_data_dir,
         registry=_registry,
+        tool_registry=_app_tool_registry,
     )
 
     @asynccontextmanager
@@ -100,6 +105,8 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         lifespan=_lifespan,
     )
     app.state.adapter_registry = _registry
+    app.state.tool_registry = _app_tool_registry
+    app.state.adapters = list(_adapters)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -405,19 +412,88 @@ def create_app(data_dir: str | Path | None = None) -> Any:
 
     @app.get("/api/adapters")
     def list_adapters() -> dict[str, Any]:
-        """Return the per-adapter status snapshot from the registry."""
-        return {
-            "adapters": [
+        """Return the per-adapter status snapshot from the registry.
+
+        Phase 27 addition: each entry carries a `supports_toggle` field
+        so the dashboard can disable the toggle button for adapters
+        without `start`/`stop` hooks.
+        """
+        by_name = {a.name: a for a in _adapters}
+        out: list[dict[str, Any]] = []
+        for entry in _registry.entries():
+            adapter = by_name.get(entry.name)
+            supports_toggle = (
+                adapter is not None and hasattr(adapter, "start") and hasattr(adapter, "stop")
+            )
+            out.append(
                 {
                     "name": entry.name,
                     "status": entry.status,
                     "last_activity_at": entry.last_activity_at,
                     "error_count": entry.error_count,
                     "error_message": entry.error_message,
+                    "supports_toggle": supports_toggle,
                 }
-                for entry in _registry.entries()
-            ]
-        }
+            )
+        return {"adapters": out}
+
+    @app.post("/api/adapters/{name}/disable")
+    async def disable_adapter(name: str) -> dict[str, Any]:
+        """Call the adapter's stop hook and flip status to stopped.
+
+        Returns 404 if the adapter is not discovered, 400 if the
+        adapter has no stop hook, 500 if the hook raises (the
+        registry entry is marked error in that case so the next
+        dashboard poll surfaces the failure).
+        """
+        by_name = {a.name: a for a in _adapters}
+        adapter = by_name.get(name)
+        if adapter is None:
+            raise HTTPException(404, detail=f"adapter {name!r} not found")
+        stop = getattr(adapter, "stop", None)
+        if stop is None:
+            raise HTTPException(
+                400,
+                detail=f"adapter {name!r} does not support disable; it has no stop() hook",
+            )
+        try:
+            await stop()
+        except Exception as exc:
+            _registry.mark_error(name, f"{type(exc).__name__}: {exc}")
+            raise HTTPException(
+                500, detail=f"stop hook raised: {type(exc).__name__}: {exc}"
+            ) from exc
+        _registry.mark_stopped(name)
+        entry = _registry.get(name)
+        return {"name": name, "status": entry.status if entry is not None else "stopped"}
+
+    @app.post("/api/adapters/{name}/enable")
+    async def enable_adapter(name: str) -> dict[str, Any]:
+        """Call the adapter's start hook and flip status to running.
+
+        Same error semantics as disable: 404 unknown, 400 missing
+        hook, 500 with registry error capture on hook raise.
+        """
+        by_name = {a.name: a for a in _adapters}
+        adapter = by_name.get(name)
+        if adapter is None:
+            raise HTTPException(404, detail=f"adapter {name!r} not found")
+        start = getattr(adapter, "start", None)
+        if start is None:
+            raise HTTPException(
+                400,
+                detail=f"adapter {name!r} does not support enable; it has no start() hook",
+            )
+        try:
+            await start(_adapter_context)
+        except Exception as exc:
+            _registry.mark_error(name, f"{type(exc).__name__}: {exc}")
+            raise HTTPException(
+                500, detail=f"start hook raised: {type(exc).__name__}: {exc}"
+            ) from exc
+        _registry.mark_running(name)
+        entry = _registry.get(name)
+        return {"name": name, "status": entry.status if entry is not None else "running"}
 
     # Bind each discovered adapter. Discovery already happened above
     # so the lifespan can close over the adapter list; here we just
