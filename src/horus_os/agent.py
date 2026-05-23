@@ -11,14 +11,14 @@ only job is provider selection and uniform return shape.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from horus_os._providers import _anthropic, _gemini
 from horus_os.tools.delegation import IterationBudget
 from horus_os.tools.loop import execute_tool_uses
 from horus_os.tools.registry import ToolRegistry
-from horus_os.types import AgentResult, Tool, ToolResult
+from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult
 
 SUPPORTED_PROVIDERS = ("anthropic", "gemini")
 
@@ -69,6 +69,48 @@ async def run_agent_async(
     if provider == "anthropic":
         return await _anthropic.call_anthropic_async(prompt, tools=tools, model=model, **kwargs)
     return await _gemini.call_gemini_async(prompt, tools=tools, model=model, **kwargs)
+
+
+async def run_agent_stream(
+    prompt: str,
+    *,
+    provider: str = "anthropic",
+    model: str | None = None,
+    max_tokens: int = 1024,
+    system: str | None = None,
+) -> AsyncGenerator[str | ToolCallEvent, None]:
+    """Stream incremental tokens from one provider turn.
+
+    Yields each text delta as a `str` as the model produces it, then any
+    `ToolCallEvent` values observed in the final assembled response. This
+    is a purely additive surface: existing `run_agent`, `run_agent_async`,
+    and `run_agent_loop` are unchanged.
+
+    Tool execution is intentionally not handled here. Streaming and tool
+    dispatch do not compose in a single pass; callers that need tools
+    must use `run_agent_loop`. `ToolCallEvent` is surfaced so consumers
+    (CLI, dashboard) can observe a mid-flight tool request, not act on it.
+
+    `_check_provider` runs when the generator body executes, which happens
+    on the first `__anext__` call. Iteration is what triggers the
+    `ValueError` for unknown providers.
+    """
+    _check_provider(provider)
+    if provider == "anthropic":
+        async for chunk in _anthropic.stream_anthropic_async(
+            prompt,
+            model=model or _anthropic.DEFAULT_MODEL,
+            max_tokens=max_tokens,
+            system=system,
+        ):
+            yield chunk
+    else:
+        async for chunk in _gemini.stream_gemini_async(
+            prompt,
+            model=model or _gemini.DEFAULT_MODEL,
+            system=system,
+        ):
+            yield chunk
 
 
 def run_agent_loop(

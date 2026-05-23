@@ -11,7 +11,14 @@ from typing import Any
 
 import pytest
 
-from horus_os import AgentResult, Tool, run_agent, run_agent_async
+from horus_os import (
+    AgentResult,
+    Tool,
+    ToolCallEvent,
+    run_agent,
+    run_agent_async,
+    run_agent_stream,
+)
 from horus_os._providers import _anthropic, _gemini
 
 
@@ -90,3 +97,102 @@ def test_run_agent_async_rejects_unknown_provider() -> None:
 
     with pytest.raises(ValueError, match="Unknown provider"):
         asyncio.run(_runner())
+
+
+async def _collect(gen: Any) -> list[Any]:
+    return [item async for item in gen]
+
+
+def test_run_agent_stream_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_stream(prompt: str, **kwargs: Any) -> Any:
+        for token in ["hello", " world"]:
+            yield token
+
+    monkeypatch.setattr(_anthropic, "stream_anthropic_async", fake_stream)
+    items = asyncio.run(_collect(run_agent_stream("hi", provider="anthropic")))
+    assert items == ["hello", " world"]
+
+
+def test_run_agent_stream_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_stream(prompt: str, **kwargs: Any) -> Any:
+        for token in ["hola", " mundo"]:
+            yield token
+
+    monkeypatch.setattr(_gemini, "stream_gemini_async", fake_stream)
+    items = asyncio.run(_collect(run_agent_stream("hi", provider="gemini")))
+    assert items == ["hola", " mundo"]
+
+
+def test_run_agent_stream_unknown_provider() -> None:
+    with pytest.raises(ValueError, match="Unknown provider"):
+        asyncio.run(_collect(run_agent_stream("hi", provider="openai")))
+
+
+def test_run_agent_stream_passes_model_and_system(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_stream(prompt: str, **kwargs: Any) -> Any:
+        captured["prompt"] = prompt
+        captured.update(kwargs)
+        yield "ok"
+
+    monkeypatch.setattr(_anthropic, "stream_anthropic_async", fake_stream)
+    asyncio.run(
+        _collect(
+            run_agent_stream(
+                "hi",
+                provider="anthropic",
+                model="claude-haiku-4-5",
+                max_tokens=512,
+                system="you are helpful",
+            )
+        )
+    )
+    assert captured["prompt"] == "hi"
+    assert captured["model"] == "claude-haiku-4-5"
+    assert captured["max_tokens"] == 512
+    assert captured["system"] == "you are helpful"
+
+
+def test_run_agent_stream_default_model_falls_back_to_provider_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_anthropic: dict[str, Any] = {}
+    captured_gemini: dict[str, Any] = {}
+
+    async def fake_anthropic_stream(prompt: str, **kwargs: Any) -> Any:
+        captured_anthropic.update(kwargs)
+        yield "ok"
+
+    async def fake_gemini_stream(prompt: str, **kwargs: Any) -> Any:
+        captured_gemini.update(kwargs)
+        yield "ok"
+
+    monkeypatch.setattr(_anthropic, "stream_anthropic_async", fake_anthropic_stream)
+    monkeypatch.setattr(_gemini, "stream_gemini_async", fake_gemini_stream)
+    asyncio.run(_collect(run_agent_stream("hi", provider="anthropic")))
+    asyncio.run(_collect(run_agent_stream("hi", provider="gemini")))
+    assert captured_anthropic["model"] == _anthropic.DEFAULT_MODEL
+    assert captured_gemini["model"] == _gemini.DEFAULT_MODEL
+
+
+def test_run_agent_stream_forwards_tool_call_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_stream(prompt: str, **kwargs: Any) -> Any:
+        yield "calling"
+        yield ToolCallEvent(name="echo", input={"text": "hi"})
+
+    monkeypatch.setattr(_anthropic, "stream_anthropic_async", fake_stream)
+    items = asyncio.run(_collect(run_agent_stream("hi", provider="anthropic")))
+    assert items[0] == "calling"
+    assert isinstance(items[1], ToolCallEvent)
+    assert items[1].name == "echo"
+    assert items[1].input == {"text": "hi"}
+
+
+def test_run_agent_stream_and_tool_call_event_are_public() -> None:
+    """Smoke test: package-level imports for the Phase 14 surface."""
+    from horus_os import ToolCallEvent as PublicToolCallEvent
+    from horus_os import run_agent_stream as public_run_agent_stream
+
+    assert public_run_agent_stream is run_agent_stream
+    assert PublicToolCallEvent is ToolCallEvent
