@@ -81,10 +81,10 @@ Plans:
   2. The non-streaming `run_agent` and `run_agent_loop` continue to pass v0.1 tests unchanged
   3. Streaming handles a mid-flight tool call by emitting a synthetic event the consumer can observe
   4. Trace recording captures the final assembled response, not the partial chunks
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 14-01: Streaming generator, provider stream paths, trace assembly
+- [ ] 14-01-PLAN.md -- ToolCallEvent type, stream_anthropic_async, stream_gemini_async, run_agent_stream dispatcher, public exports, unit tests
 
 ### Phase 15: CLI multi-agent surface
 **Goal**: New `horus-os agents` subcommand plus `--agent <name>` and streaming output on `run`.
