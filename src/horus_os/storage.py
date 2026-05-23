@@ -1,0 +1,201 @@
+"""SQLite persistence for agent traces.
+
+A single table, `traces`, captures one row per `run_agent` invocation.
+Tool uses and usage metadata are stored as JSON strings; the `TraceRecord`
+dataclass returns them decoded so callers never touch raw JSON.
+
+Connection lifecycle is per-operation: each public method opens, runs,
+and closes a connection. This keeps the module thread-safe and avoids
+long-lived state. WAL mode plus a 5 second busy timeout handles the
+default desktop concurrency profile.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from horus_os.types import AgentResult, ToolUse
+
+SCHEMA_VERSION = 1
+
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS traces (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id        TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL,
+    provider        TEXT NOT NULL,
+    model           TEXT NOT NULL,
+    prompt          TEXT NOT NULL,
+    response_text   TEXT NOT NULL DEFAULT '',
+    tool_uses       TEXT NOT NULL DEFAULT '[]',
+    usage           TEXT NOT NULL DEFAULT '{}',
+    latency_ms      INTEGER,
+    status          TEXT NOT NULL DEFAULT 'success',
+    error_message   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_traces_created_at ON traces(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traces_provider_model ON traces(provider, model);
+"""
+
+
+@dataclass
+class TraceRecord:
+    """One persisted agent invocation."""
+
+    trace_id: str
+    created_at: str
+    provider: str
+    model: str
+    prompt: str
+    response_text: str
+    tool_uses: list[ToolUse] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
+    latency_ms: int | None = None
+    status: str = "success"
+    error_message: str | None = None
+
+
+class Database:
+    """SQLite-backed trace store.
+
+    The path is stored eagerly but the file is created lazily on first
+    `init()` call. Subsequent operations open and close connections
+    on demand so the object is safe to share across threads.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.path), isolation_level=None)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init(self) -> None:
+        """Create the schema. Idempotent."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as conn:
+            conn.executescript(SCHEMA_SQL)
+            row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+            if row is None:
+                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+
+    def record_trace(
+        self,
+        prompt: str,
+        result: AgentResult,
+        *,
+        latency_ms: int | None = None,
+        status: str = "success",
+        error_message: str | None = None,
+    ) -> str:
+        """Write one trace row. Returns the generated trace_id (UUID4)."""
+        trace_id = uuid.uuid4().hex
+        created_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        tool_uses_json = json.dumps(
+            [{"id": u.id, "name": u.name, "input": u.input} for u in result.tool_uses]
+        )
+        usage_json = json.dumps(result.usage)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO traces (
+                    trace_id, created_at, provider, model, prompt,
+                    response_text, tool_uses, usage, latency_ms,
+                    status, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    trace_id,
+                    created_at,
+                    result.provider,
+                    result.model,
+                    prompt,
+                    result.text,
+                    tool_uses_json,
+                    usage_json,
+                    latency_ms,
+                    status,
+                    error_message,
+                ),
+            )
+        return trace_id
+
+    def list_traces(self, *, limit: int = 50, offset: int = 0) -> list[TraceRecord]:
+        """Return traces ordered by creation time, newest first."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT trace_id, created_at, provider, model, prompt,
+                       response_text, tool_uses, usage, latency_ms,
+                       status, error_message
+                FROM traces
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            )
+            return [self._row_to_record(row) for row in cursor.fetchall()]
+
+    def get_trace(self, trace_id: str) -> TraceRecord | None:
+        """Return one trace by id, or None if not found."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT trace_id, created_at, provider, model, prompt,
+                       response_text, tool_uses, usage, latency_ms,
+                       status, error_message
+                FROM traces
+                WHERE trace_id = ?
+                """,
+                (trace_id,),
+            ).fetchone()
+            return self._row_to_record(row) if row is not None else None
+
+    @staticmethod
+    def _row_to_record(row: sqlite3.Row) -> TraceRecord:
+        try:
+            raw_tool_uses = json.loads(row["tool_uses"] or "[]")
+        except json.JSONDecodeError:
+            raw_tool_uses = []
+        try:
+            usage = json.loads(row["usage"] or "{}")
+        except json.JSONDecodeError:
+            usage = {}
+        tool_uses = [
+            ToolUse(
+                id=str(item.get("id", "")),
+                name=str(item.get("name", "")),
+                input=dict(item.get("input") or {}),
+            )
+            for item in raw_tool_uses
+            if isinstance(item, dict)
+        ]
+        return TraceRecord(
+            trace_id=row["trace_id"],
+            created_at=row["created_at"],
+            provider=row["provider"],
+            model=row["model"],
+            prompt=row["prompt"],
+            response_text=row["response_text"],
+            tool_uses=tool_uses,
+            usage=usage if isinstance(usage, dict) else {},
+            latency_ms=row["latency_ms"],
+            status=row["status"],
+            error_message=row["error_message"],
+        )
