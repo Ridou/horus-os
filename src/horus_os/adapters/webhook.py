@@ -148,6 +148,10 @@ class WebhookAdapter:
                 latency_ms=latency_ms,
                 agent_profile_name=agent_name,
             )
+            # Bump last_activity_at for this adapter so /api/adapters
+            # reflects when the webhook last successfully handled a
+            # request.
+            context.registry.touch(self.name)
             return {
                 "trace_id": trace_id,
                 "text": result.text,

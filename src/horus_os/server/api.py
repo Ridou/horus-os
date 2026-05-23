@@ -17,12 +17,13 @@ import json
 import os
 import time
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from horus_os import __version__
-from horus_os.adapters.base import AdapterContext, discover_adapters
+from horus_os.adapters.base import AdapterContext, AdapterRegistry, discover_adapters
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
 from horus_os.memory import NotesStore
@@ -47,12 +48,58 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     from fastapi.responses import FileResponse, Response, StreamingResponse
     from fastapi.staticfiles import StaticFiles
 
+    # Discover adapters before FastAPI instantiation so the lifespan
+    # context manager can close over the resolved adapter list.
+    _adapters = discover_adapters()
+    _registry = AdapterRegistry()
+    for _adapter in _adapters:
+        _registry.register(_adapter.name)
+
+    _resolved_data_dir = (
+        Path(data_dir).expanduser() if data_dir is not None else Config.load(None).data_dir
+    )
+    _adapter_context = AdapterContext(
+        config=Config.load(Path(data_dir).expanduser() if data_dir is not None else None),
+        data_dir=_resolved_data_dir,
+        registry=_registry,
+    )
+
+    @asynccontextmanager
+    async def _lifespan(_app: Any) -> AsyncGenerator[None, None]:
+        # Startup: call `start(context)` on each adapter that has one.
+        # A failing start is captured into the registry; other adapters
+        # still get their turn.
+        for _a in _adapters:
+            _start = getattr(_a, "start", None)
+            if _start is None:
+                continue
+            try:
+                await _start(_adapter_context)
+            except Exception as exc:
+                _registry.mark_error(_a.name, f"{type(exc).__name__}: {exc}")
+        try:
+            yield
+        finally:
+            # Shutdown: call `stop()` on each adapter that has one,
+            # in reverse order. A failing stop bumps error_count but
+            # never aborts shutdown.
+            for _a in reversed(_adapters):
+                _stop = getattr(_a, "stop", None)
+                if _stop is None:
+                    continue
+                try:
+                    await _stop()
+                except Exception as exc:
+                    _registry.mark_error(_a.name, f"{type(exc).__name__}: {exc}")
+
     app = FastAPI(
         title="horus-os",
         version=__version__,
         docs_url="/api/docs",
         redoc_url=None,
+        lifespan=_lifespan,
     )
+    app.state.adapter_registry = _registry
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -356,20 +403,34 @@ def create_app(data_dir: str | Path | None = None) -> Any:
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
-    # Discover and bind any third-party adapters declared via the
-    # `horus_os.adapters` entry point group. Discovery is a one-time
-    # walk at app construction; adapters mount their own routes on
-    # `app`. An individual adapter failure must not break the core
-    # dashboard, so both the discovery list and each bind call are
-    # treated defensively.
-    _adapters = discover_adapters()
-    _resolved_data_dir = Path(data_dir).expanduser() if data_dir is not None else _config().data_dir
-    _adapter_context = AdapterContext(config=_config(), data_dir=_resolved_data_dir)
+    @app.get("/api/adapters")
+    def list_adapters() -> dict[str, Any]:
+        """Return the per-adapter status snapshot from the registry."""
+        return {
+            "adapters": [
+                {
+                    "name": entry.name,
+                    "status": entry.status,
+                    "last_activity_at": entry.last_activity_at,
+                    "error_count": entry.error_count,
+                    "error_message": entry.error_message,
+                }
+                for entry in _registry.entries()
+            ]
+        }
+
+    # Bind each discovered adapter. Discovery already happened above
+    # so the lifespan can close over the adapter list; here we just
+    # mount routes and flip registry status. A bind failure is
+    # captured into the registry but does not break the core
+    # dashboard.
     for _adapter in _adapters:
         try:
             _adapter.bind(app, _adapter_context)
-        except Exception:
+        except Exception as exc:
+            _registry.mark_error(_adapter.name, f"{type(exc).__name__}: {exc}")
             continue
+        _registry.mark_running(_adapter.name)
 
     return app
 
