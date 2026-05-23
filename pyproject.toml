@@ -33,8 +33,9 @@ dev = [
 horus-os = "horus_os.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/horus-os/horus-os"
-Issues = "https://github.com/horus-os/horus-os/issues"
+Homepage = "https://github.com/Ridou/horus-os"
+Issues = "https://github.com/Ridou/horus-os/issues"
+Source = "https://github.com/Ridou/horus-os"
 
 [tool.setuptools.packages.find]
 where = ["src"]

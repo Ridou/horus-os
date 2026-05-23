@@ -50,11 +50,10 @@ Run a personal team of AI agents on your laptop, with full transparency over eve
 
 | Decision | Rationale | Status |
 |----------|-----------|--------|
-| Anthropic + Gemini, no abstraction layer | Both providers have first-class support in the maintainer's existing setups. An abstraction layer adds debt before the first user. | accepted (v0.1) |
+| Anthropic + Gemini, no abstraction layer | Both providers have first-class SDK support and well-documented APIs. An abstraction layer adds debt before the first user. | accepted (v0.1) |
 | CLI and web chat parallel at v0.1 | Different users prefer different surfaces. Both share the same backend so the marginal cost is the second UI shell, not a second runtime. | accepted (v0.1) |
 | SQLite over Postgres for default | Single file, zero ops, trivially portable, ships with the binary. Postgres is an option later for users who want it. | accepted (v0.1) |
 | Apache 2.0 license | Permissive, patent-grant clause important for AI tooling. Compatible with most third-party libraries we will use. | accepted (v0.1) |
-| No private sibling reference | This project is built from scratch as public-from-day-one. No code or planning is imported from any private project. | accepted (permanent) |
 
 ## Out of Scope (initial release)
 

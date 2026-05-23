@@ -48,4 +48,4 @@ The goal is a personal command center for one person, running locally, with full
 
 ## Status
 
-Pre-alpha. No releases. No public repo yet.
+Pre-alpha. No releases. The public repo lives at `https://github.com/Ridou/horus-os`.
