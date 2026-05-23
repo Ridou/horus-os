@@ -1,8 +1,9 @@
-"""SQLite persistence for agent traces and note writes.
+"""SQLite persistence for agent traces, note writes, and agent profiles.
 
-Two tables for v0.1:
+Three tables for v0.2:
   * `traces` is one row per agent invocation.
   * `note_writes` is one row per file write the memory layer performs.
+  * `agent_profiles` is one row per named agent configuration.
 
 Tool uses, usage, and write content are stored as text; structured
 columns return parsed objects via the dataclass wrappers below.
@@ -22,9 +23,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from horus_os.types import AgentResult, NoteWrite, ToolUse
+from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -63,6 +64,18 @@ CREATE TABLE IF NOT EXISTS note_writes (
 
 CREATE INDEX IF NOT EXISTS idx_note_writes_created_at ON note_writes(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_note_writes_path ON note_writes(rel_path);
+
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL UNIQUE,
+    system_prompt TEXT NOT NULL DEFAULT '',
+    default_model TEXT,
+    allowed_tools TEXT,
+    memory_scope  TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_name ON agent_profiles(name);
 """
 
 
@@ -113,6 +126,16 @@ class Database:
                 conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
             elif row[0] < SCHEMA_VERSION:
                 conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+            now = _now_iso()
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO agent_profiles (
+                    name, system_prompt, default_model, allowed_tools,
+                    memory_scope, created_at, updated_at
+                ) VALUES (?, ?, NULL, NULL, NULL, ?, ?)
+                """,
+                ("default", "You are a helpful assistant.", now, now),
+            )
 
     def record_trace(
         self,

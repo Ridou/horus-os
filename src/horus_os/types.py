@@ -76,3 +76,16 @@ class NoteWrite:
     bytes_after: int
     content: str
     trace_id: str | None = None
+
+
+@dataclass
+class AgentProfile:
+    """A named agent configuration stored in the database."""
+
+    name: str
+    system_prompt: str
+    default_model: str | None = None
+    allowed_tools: list[str] | None = None  # None means unrestricted
+    memory_scope: str | None = None  # opaque, deferred to Phase 13
+    created_at: str = ""  # ISO-8601 UTC, set by Database methods
+    updated_at: str = ""  # ISO-8601 UTC, set by Database methods

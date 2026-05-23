@@ -38,8 +38,9 @@ def test_init_creates_schema_on_fresh_db(tmp_path: Path) -> None:
         assert "traces" in tables
         assert "schema_version" in tables
         assert "note_writes" in tables
+        assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 2
+        assert version == 3
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:
@@ -188,7 +189,7 @@ def test_list_note_writes_newest_first(tmp_path: Path) -> None:
     assert writes[-1].operation == "create"
 
 
-def test_schema_v1_database_upgrades_to_v2(tmp_path: Path) -> None:
+def test_schema_v1_database_upgrades_to_current(tmp_path: Path) -> None:
     # Simulate a database created by a v1 build (just the v1 surface).
     db_path = tmp_path / "horus.sqlite"
     with sqlite3.connect(str(db_path)) as conn:
@@ -216,8 +217,79 @@ def test_schema_v1_database_upgrades_to_v2(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 2
+        assert version == 3
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "note_writes" in tables
+        assert "agent_profiles" in tables
+
+
+def test_init_creates_default_agent(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    with sqlite3.connect(str(tmp_path / "horus.sqlite")) as conn:
+        row = conn.execute("SELECT name, system_prompt FROM agent_profiles WHERE name='default'").fetchone()
+        assert row is not None
+        assert row[0] == "default"
+        assert row[1] == "You are a helpful assistant."
+
+
+def test_init_default_agent_is_idempotent(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.init()
+    db.init()
+    with sqlite3.connect(str(tmp_path / "horus.sqlite")) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM agent_profiles").fetchone()[0]
+        assert count == 1
+
+
+def test_schema_v2_database_upgrades_to_v3(tmp_path: Path) -> None:
+    db_path = tmp_path / "horus.sqlite"
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY);
+            INSERT INTO schema_version (version) VALUES (2);
+            CREATE TABLE traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                response_text TEXT NOT NULL DEFAULT '',
+                tool_uses TEXT NOT NULL DEFAULT '[]',
+                usage TEXT NOT NULL DEFAULT '{}',
+                latency_ms INTEGER,
+                status TEXT NOT NULL DEFAULT 'success',
+                error_message TEXT
+            );
+            INSERT INTO traces (trace_id, created_at, provider, model, prompt)
+                VALUES ('abc123', '2026-01-01T00:00:00Z', 'anthropic', 'claude-sonnet-4-6', 'hello');
+            CREATE TABLE note_writes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                write_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                rel_path TEXT NOT NULL,
+                bytes_before INTEGER NOT NULL,
+                bytes_after INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                trace_id TEXT
+            );
+            """
+        )
+    db = Database(db_path)
+    db.init()
+    with sqlite3.connect(str(db_path)) as conn:
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "agent_profiles" in tables
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 3
+    record = db.get_trace("abc123")
+    assert record is not None
+    assert record.prompt == "hello"

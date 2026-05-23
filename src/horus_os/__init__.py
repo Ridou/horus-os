@@ -13,6 +13,7 @@ from horus_os.memory import (
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, execute_tool_uses, read_file_tool
 from horus_os.types import (
+    AgentProfile,
     AgentResult,
     NoteRef,
     NoteWrite,
@@ -32,6 +33,7 @@ def create_app(data_dir=None):
 
 
 __all__ = [
+    "AgentProfile",
     "AgentResult",
     "Config",
     "Database",
