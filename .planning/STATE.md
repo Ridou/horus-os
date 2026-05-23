@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
-status: phase_in_progress
-stopped_at: Phase 07-00 shipped, 07-01 (multi-turn loop + run) pending
-last_updated: "2026-05-23T07:45:00Z"
-last_activity: 2026-05-23, Phase 07-00 (CLI scaffold + init + traces + serve stub) complete
+status: phase_complete
+stopped_at: Phase 07 shipped, ready for Phase 08 planning
+last_updated: "2026-05-23T08:30:00Z"
+last_activity: 2026-05-23, Phase 07 (CLI surface + multi-turn loop + run) complete
 progress:
   total_phases: 11
-  completed_phases: 6
-  total_plans: 7
-  completed_plans: 7
-  percent: 55
+  completed_phases: 7
+  total_plans: 8
+  completed_plans: 8
+  percent: 64
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 07-01, multi-turn loop + run subcommand (next up)
+**Current focus:** Phase 08, Web chat and dashboard (next up)
 
 ## Current Position
 
-Phase: 07 (cli-surface), IN PROGRESS
-Plan: 07-01 of 2
-Status: 07-00 complete, 07-01 ready to plan
-Last activity: 2026-05-23, Phase 07-00 shipped (Config dataclass, init/traces/serve subcommands via argparse, 22 new tests, 120 total). v0.1 milestone is 55% complete.
+Phase: 08 (web-chat-and-dashboard), READY TO PLAN
+Plan: 0 of N
+Status: Phase 07 complete, Phase 08 ready to plan
+Last activity: 2026-05-23, Phase 07 shipped (multi-turn agent loop, Conversation per provider, `horus-os run` subcommand with default tool registry and audit-trail wiring, 28 new tests, 148 total). v0.1 milestone is 64% complete.
 
 ### v0.1 Foundation Milestone Snapshot
 

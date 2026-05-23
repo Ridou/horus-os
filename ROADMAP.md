@@ -24,7 +24,7 @@
 | 04 | Tool registry | Register a callable as a tool, expose it to the agent, log every invocation. First example tool: read a local file. | shipped 2026-05-23 |
 | 05 | Memory layer, read path | Agent searches a markdown notes folder and reads files. No writes yet. | shipped 2026-05-23 |
 | 06 | Memory layer, write path | Agent appends to the notes folder with a structured trail. Every write is reviewable. | shipped 2026-05-23 |
-| 07 | CLI surface | `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve`, `traces`. | 07-00 shipped, 07-01 pending |
+| 07 | CLI surface | `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve` (stub), `traces`. | shipped 2026-05-23 |
 | 08 | Web chat and dashboard | Next.js app served locally. Hosts a chat surface and a traces explorer. Reads from the same SQLite the CLI uses. | planning |
 | 09 | Setup wizard with API key onboarding | `horus-os init` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable. | planning |
 | 10 | Three-OS install verification | Fresh-VM install on macOS, Ubuntu 22.04, Windows 11. Same exit codes, same first-run experience. | planning |
