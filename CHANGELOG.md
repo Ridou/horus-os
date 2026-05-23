@@ -4,6 +4,12 @@ All notable changes to horus-os are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
 ## [0.1.0] - 2026-05-23
 
 First alpha release. A working v0.1 foundation: install the package,
@@ -57,10 +63,16 @@ markdown notes folder with a full SQLite audit trail.
 - Tool execution loop bails out at 10 iterations by default; users
   can override with `--max-iterations`.
 
-## [Unreleased]
+## [0.2.0] - 2026-05-23
 
-Heading into v0.2.0. Phase 21 will replace this section with a
-`[0.2.0] - YYYY-MM-DD` heading and tag the release.
+Second alpha. Moves from "one agent answers questions" to "a personal
+team of agents that can hand off to each other, with live streaming
+responses in the CLI and dashboard." Named agent profiles persist in
+SQLite. A coordinator delegates to sub-agents. Both providers stream
+incremental tokens. An adapter plugin interface opens the door to
+external surfaces.
+
+See `docs/MIGRATION-v0.1-to-v0.2.md` for upgrade notes from v0.1.
 
 ### Added
 
@@ -133,5 +145,3 @@ Heading into v0.2.0. Phase 21 will replace this section with a
 - GitHub issue templates (bug report, feature request) and pull
   request template added under `.github/`.
 
-See `ROADMAP.md` for the rest of the v0.2 work (test surface
-expansion, three-OS install verification, v0.2.0 release).
