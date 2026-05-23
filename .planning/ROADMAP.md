@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v0.1 Foundation** (Phases 01-11), shipped 2026-05-23 as v0.1.0. CLI + web chat, Anthropic + Gemini, one agent, six tools, full memory layer, 3-OS install gate, first public release.
-- [ ] **v0.2 Multi-Agent + Streaming** (Phases 12-21), active. Named agent profiles, coordinator-to-sub-agent delegation, provider streaming on both CLI and dashboard, adapter plugin interface.
+- [x] **v0.2 Multi-Agent + Streaming** (Phases 12-21), shipped 2026-05-23 as v0.2.0. Named agent profiles, coordinator-to-sub-agent delegation, provider streaming on both CLI and dashboard, adapter plugin interface.
 
 ## Phases
 
@@ -31,15 +31,15 @@
 **Parallelization:** 12 → 13 → (14 ∥ 15 ∥ 16 ∥ 17) → 18 → 19 → 20 → 21. Phase 12 (agent profile schema + migration) gates everything because it changes the storage layer. After 13 (runtime support for delegation) lands, surfaces and adapters can ship in parallel.
 
 - [x] **Phase 12: Agent profile model and schema migration**, `agent_profiles` table with name, system prompt, default model, allowed tools, memory scope. Idempotent forward migration from v0.1 schema. CRUD API. At least one default agent auto-created on `init`. (completed 2026-05-23)
-- [ ] **Phase 13: Multi-agent orchestration runtime**, `delegate_to_agent` tool. Parent and child trace linkage. A coordinator can invoke one or more sub-agents synchronously or in parallel. Iteration bound applies to the whole tree.
-- [ ] **Phase 14: Streaming response support**, `run_agent_stream` async generator. Anthropic and Gemini streaming SDK paths. `run_agent` and `run_agent_loop` continue to work unchanged for non-streaming callers.
-- [ ] **Phase 15: CLI multi-agent surface**, `horus-os agents` subcommand (list, show, create, edit, delete). `horus-os run --agent <name>`. Streaming output to terminal by default; `--no-stream` falls back to the v0.1 behavior.
-- [ ] **Phase 16: Dashboard multi-agent view and streaming chat**, agents list, per-agent activity, delegate-tree visualization per run, live token streaming in the chat surface.
-- [ ] **Phase 17: Adapter plugin interface**, Plugin contract via `importlib.metadata.entry_points("horus_os.adapters")`. One reference adapter ships: HTTP webhook receiver. Third-party adapters can register without forking horus-os.
-- [ ] **Phase 18: Documentation and examples refresh**, Update ARCHITECTURE.md for the multi-agent shape. Add `examples/multi_agent.py`, `examples/streaming.py`, `examples/custom_adapter.py`. Document the migration path for v0.1 users.
-- [ ] **Phase 19: Test surface expansion**, End-to-end multi-agent flows, streaming partial-failure modes, adapter contract tests. Cross-OS coverage maintained.
-- [ ] **Phase 20: Three-OS install verification (v0.2)**, Same hard gate as Phase 10, re-targeted at the v0.2 feature set. Fresh-VM install on macOS, Ubuntu, Windows passes through `install-smoke`.
-- [ ] **Phase 21: v0.2.0 release**, Tag v0.2.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes.
+- [x] **Phase 13: Multi-agent orchestration runtime**, `delegate_to_agent` tool. Parent and child trace linkage. A coordinator can invoke one or more sub-agents synchronously or in parallel. Iteration bound applies to the whole tree. (completed 2026-05-23)
+- [x] **Phase 14: Streaming response support**, `run_agent_stream` async generator. Anthropic and Gemini streaming SDK paths. `run_agent` and `run_agent_loop` continue to work unchanged for non-streaming callers. (completed 2026-05-23)
+- [x] **Phase 15: CLI multi-agent surface**, `horus-os agents` subcommand (list, show, create, edit, delete). `horus-os run --agent <name>`. Streaming output to terminal by default; `--no-stream` falls back to the v0.1 behavior. (completed 2026-05-23)
+- [x] **Phase 16: Dashboard multi-agent view and streaming chat**, agents list, per-agent activity, delegate-tree visualization per run, live token streaming in the chat surface. (completed 2026-05-23)
+- [x] **Phase 17: Adapter plugin interface**, Plugin contract via `importlib.metadata.entry_points("horus_os.adapters")`. One reference adapter ships: HTTP webhook receiver. Third-party adapters can register without forking horus-os. (completed 2026-05-23)
+- [x] **Phase 18: Documentation and examples refresh**, Update ARCHITECTURE.md for the multi-agent shape. Add `examples/multi_agent.py`, `examples/streaming.py`, `examples/custom_adapter.py`. Document the migration path for v0.1 users. (completed 2026-05-23)
+- [x] **Phase 19: Test surface expansion**, End-to-end multi-agent flows, streaming partial-failure modes, adapter contract tests. Cross-OS coverage maintained. (completed 2026-05-23)
+- [x] **Phase 20: Three-OS install verification (v0.2)**, Same hard gate as Phase 10, re-targeted at the v0.2 feature set. Fresh-VM install on macOS, Ubuntu, Windows passes through `install-smoke`. (completed 2026-05-23)
+- [x] **Phase 21: v0.2.0 release**, Tag v0.2.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes. (completed 2026-05-23)
 
 ## Phase Details
 
@@ -69,8 +69,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Schema v4 migration, TraceRecord extension, IterationBudget, _filter_registry
-- [ ] 13-02-PLAN.md -- make_delegate_tool factory, run_agent_loop budget+system_prompt, parallel delegation, integration tests
+- [x] 13-01-PLAN.md -- Schema v4 migration, TraceRecord extension, IterationBudget, _filter_registry
+- [x] 13-02-PLAN.md -- make_delegate_tool factory, run_agent_loop budget+system_prompt, parallel delegation, integration tests
 
 ### Phase 14: Streaming response support
 **Goal**: `run_agent_stream` async generator yields incremental tokens from both providers without breaking the existing `run_agent` surface.
@@ -84,7 +84,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 14-01-PLAN.md -- ToolCallEvent type, stream_anthropic_async, stream_gemini_async, run_agent_stream dispatcher, public exports, unit tests
+- [x] 14-01-PLAN.md -- ToolCallEvent type, stream_anthropic_async, stream_gemini_async, run_agent_stream dispatcher, public exports, unit tests
 
 ### Phase 15: CLI multi-agent surface
 **Goal**: New `horus-os agents` subcommand plus `--agent <name>` and streaming output on `run`.
@@ -98,7 +98,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 15-01: Agents subcommand + run --agent + streaming output
+- [x] 15-01: Agents subcommand + run --agent + streaming output
 
 ### Phase 16: Dashboard multi-agent view and streaming chat
 **Goal**: Dashboard lists configured agents, shows the delegate tree for each run, and renders streamed tokens in chat.
@@ -112,7 +112,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 16-01: Agents view, delegate tree, streaming chat, v0.1 trace compatibility
+- [x] 16-01: Agents view, delegate tree, streaming chat, v0.1 trace compatibility
 
 ### Phase 17: Adapter plugin interface
 **Goal**: Plugin contract via entry points, with one reference adapter (HTTP webhook receiver) and tests for third-party registration.
@@ -126,7 +126,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 17-01: Adapter contract, entry-point discovery, webhook reference adapter
+- [x] 17-01: Adapter contract, entry-point discovery, webhook reference adapter
 
 ### Phase 18: Documentation and examples refresh
 **Goal**: Refresh ARCHITECTURE.md for multi-agent + streaming, add three new examples, write the v0.1 to v0.2 migration guide.
@@ -140,7 +140,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 18-01: Architecture refresh, three examples, migration guide
+- [x] 18-01: Architecture refresh, three examples, migration guide
 
 ### Phase 19: Test surface expansion
 **Goal**: End-to-end multi-agent flows, streaming partial-failure modes, and adapter contract tests are all covered.
@@ -154,7 +154,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 19-01: Multi-agent E2E + streaming + adapter contract test expansion
+- [x] 19-01: Multi-agent E2E + streaming + adapter contract test expansion
 
 ### Phase 20: Three-OS install verification (v0.2)
 **Goal**: `install-smoke` job re-runs against the v0.2 feature set and stays green on Ubuntu, macOS, Windows.
@@ -168,7 +168,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 20-01: Update install-smoke for v0.2 surface, verify three-OS green
+- [x] 20-01: Update install-smoke for v0.2 surface, verify three-OS green
 
 ### Phase 21: v0.2.0 release
 **Goal**: Tag v0.2.0, update CHANGELOG with the milestone diff, publish GitHub Release with migration notes.
@@ -182,7 +182,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 21-01: Version bump, CHANGELOG, tag, GitHub Release
+- [x] 21-01: Version bump, CHANGELOG, tag, GitHub Release
 
 ## Progress
 
@@ -191,13 +191,13 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 01-11 | v0.1 | 13/13 | Complete | 2026-05-23 |
-| 12. Agent profile model and schema migration | v0.2 | 1/1 | Complete    | 2026-05-23 |
-| 13. Multi-agent orchestration runtime | v0.2 | 0/1 | Not started | - |
-| 14. Streaming response support | v0.2 | 0/1 | Not started | - |
-| 15. CLI multi-agent surface | v0.2 | 0/1 | Not started | - |
-| 16. Dashboard multi-agent view and streaming chat | v0.2 | 0/1 | Not started | - |
-| 17. Adapter plugin interface | v0.2 | 0/1 | Not started | - |
-| 18. Documentation and examples refresh | v0.2 | 0/1 | Not started | - |
-| 19. Test surface expansion | v0.2 | 0/1 | Not started | - |
-| 20. Three-OS install verification (v0.2) | v0.2 | 0/1 | Not started | - |
-| 21. v0.2.0 release | v0.2 | 0/1 | Not started | - |
+| 12. Agent profile model and schema migration | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 13. Multi-agent orchestration runtime | v0.2 | 2/2 | Complete | 2026-05-23 |
+| 14. Streaming response support | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 15. CLI multi-agent surface | v0.2 | 2/2 | Complete | 2026-05-23 |
+| 16. Dashboard multi-agent view and streaming chat | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 17. Adapter plugin interface | v0.2 | 2/2 | Complete | 2026-05-23 |
+| 18. Documentation and examples refresh | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 19. Test surface expansion | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 20. Three-OS install verification (v0.2) | v0.2 | 1/1 | Complete | 2026-05-23 |
+| 21. v0.2.0 release | v0.2 | 1/1 | Complete | 2026-05-23 |
