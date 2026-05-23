@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- [ ] **v0.1 Foundation** (Phases 01-11), CLI + web chat, Anthropic + Gemini, one agent, one tool, one memory layer, 3-OS install gate, first public release
+- [x] **v0.1 Foundation** (Phases 01-11), shipped 2026-05-23 as v0.1.0. CLI + web chat, Anthropic + Gemini, one agent, six tools, full memory layer, 3-OS install gate, first public release.
 
 ## Phases
 
@@ -22,12 +22,13 @@
 - [x] **Phase 08: Web chat and dashboard**, single-page HTML dashboard served locally by FastAPI. Hosts a chat surface, traces explorer, and writes audit view. (completed 2026-05-23; Next.js deferred to a v0.x evolution if richer UX is needed)
 - [x] **Phase 09: Setup wizard with API key onboarding**, `horus-os init --interactive` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable. (completed 2026-05-23)
 - [x] **Phase 10: Three-OS install verification**, Fresh-VM install on macOS, Ubuntu, Windows via the install-smoke CI job. (completed 2026-05-23)
-- [ ] **Phase 11: First public release**, Tag v0.1.0, write release notes, publish the public repo.
+- [x] **Phase 11: First public release**, Tagged v0.1.0 on origin, CHANGELOG written, version bumped. (completed 2026-05-23)
 
 ## Progress
 
 - Total phases: 11
-- Completed phases: 10
-- Total plans: 12
-- Completed plans: 12
-- Percent: 91
+- Completed phases: 11
+- Total plans: 13
+- Completed plans: 13
+- Percent: 100
+- Milestone v0.1 Foundation: SHIPPED as v0.1.0 on 2026-05-23

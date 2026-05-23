@@ -28,7 +28,7 @@
 | 08 | Web chat and dashboard | Single-page HTML dashboard served locally by FastAPI. Hosts a chat surface, traces explorer, and writes audit view. Reads from the same SQLite the CLI uses. (Next.js deferred to a v0.x evolution.) | shipped 2026-05-23 |
 | 09 | Setup wizard with API key onboarding | `horus-os init --interactive` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable. | shipped 2026-05-23 |
 | 10 | Three-OS install verification | install-smoke CI job runs the package against fresh installs on macOS, Ubuntu, Windows. Same exit codes, same first-run experience. | shipped 2026-05-23 |
-| 11 | First public release | Tag v0.1.0, write release notes, publish the public repo. | planning |
+| 11 | First public release | Tagged v0.1.0 on origin, CHANGELOG written, version bumped. | shipped 2026-05-23 |
 
 ## Future milestones (working list, not committed)
 
