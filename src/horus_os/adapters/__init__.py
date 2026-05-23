@@ -29,6 +29,7 @@ from horus_os.adapters.base import (
     discover_adapters,
 )
 from horus_os.adapters.discord_adapter import DiscordAdapter
+from horus_os.adapters.slack_adapter import SlackAdapter
 from horus_os.adapters.webhook import WebhookAdapter
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "AdapterRegistry",
     "DiscordAdapter",
     "LifecycleAdapter",
+    "SlackAdapter",
     "WebhookAdapter",
     "discover_adapters",
 ]
