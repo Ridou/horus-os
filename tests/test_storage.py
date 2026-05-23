@@ -40,7 +40,7 @@ def test_init_creates_schema_on_fresh_db(tmp_path: Path) -> None:
         assert "note_writes" in tables
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 3
+        assert version == 4
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:
@@ -217,7 +217,7 @@ def test_schema_v1_database_upgrades_to_current(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 3
+        assert version == 4
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -291,7 +291,7 @@ def test_schema_v2_database_upgrades_to_v3(tmp_path: Path) -> None:
         }
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 3
+        assert version == 4
     record = db.get_trace("abc123")
     assert record is not None
     assert record.prompt == "hello"
@@ -385,3 +385,133 @@ def test_delete_profile_returns_false_for_missing(tmp_path: Path) -> None:
     db = Database(tmp_path / "horus.sqlite")
     db.init()
     assert db.delete_profile("ghost") is False
+
+
+# ---------------------------------------------------------------------------
+# v3 -> v4 migration: parent_trace_id and agent_profile_name
+# ---------------------------------------------------------------------------
+
+
+def test_migration_v3_to_v4(tmp_path: Path) -> None:
+    """A v3 database (no parent_trace_id or agent_profile_name columns) upgrades to v4."""
+    db_path = tmp_path / "horus.sqlite"
+    # Build a v3 database manually: traces table without the new columns, version=3.
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY);
+            INSERT INTO schema_version (version) VALUES (3);
+            CREATE TABLE traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                response_text TEXT NOT NULL DEFAULT '',
+                tool_uses TEXT NOT NULL DEFAULT '[]',
+                usage TEXT NOT NULL DEFAULT '{}',
+                latency_ms INTEGER,
+                status TEXT NOT NULL DEFAULT 'success',
+                error_message TEXT
+            );
+            INSERT INTO traces (trace_id, created_at, provider, model, prompt)
+                VALUES ('legacy', '2026-01-01T00:00:00Z', 'anthropic', 'claude', 'old');
+            CREATE TABLE note_writes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                write_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                rel_path TEXT NOT NULL,
+                bytes_before INTEGER NOT NULL,
+                bytes_after INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                trace_id TEXT
+            );
+            CREATE TABLE agent_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                system_prompt TEXT NOT NULL DEFAULT '',
+                default_model TEXT,
+                allowed_tools TEXT,
+                memory_scope TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+    db = Database(db_path)
+    db.init()
+    # Version is bumped to 4.
+    with sqlite3.connect(str(db_path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 4
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
+        assert "parent_trace_id" in cols
+        assert "agent_profile_name" in cols
+    # Legacy row still readable.
+    legacy = db.get_trace("legacy")
+    assert legacy is not None
+    assert legacy.parent_trace_id is None
+    assert legacy.agent_profile_name is None
+    # New rows can carry parent_trace_id round-trip.
+    new_id = db.record_trace(
+        "child task",
+        _make_result(),
+        parent_trace_id="legacy",
+        agent_profile_name="helper",
+    )
+    child = db.get_trace(new_id)
+    assert child is not None
+    assert child.parent_trace_id == "legacy"
+    assert child.agent_profile_name == "helper"
+
+
+def test_record_trace_with_parent(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    parent_id = db.record_trace("parent prompt", _make_result())
+    child_id = db.record_trace(
+        "child task",
+        _make_result(),
+        parent_trace_id=parent_id,
+        agent_profile_name="sub",
+    )
+    child = db.get_trace(child_id)
+    assert child is not None
+    assert child.parent_trace_id == parent_id
+    assert child.agent_profile_name == "sub"
+
+
+def test_record_trace_defaults_parent_to_none(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    trace_id = db.record_trace("no parent", _make_result())
+    record = db.get_trace(trace_id)
+    assert record is not None
+    assert record.parent_trace_id is None
+    assert record.agent_profile_name is None
+
+
+def test_list_child_traces_returns_matching_children(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    parent_id = db.record_trace("parent", _make_result())
+    child_a = db.record_trace(
+        "a", _make_result(text="a"), parent_trace_id=parent_id, agent_profile_name="helper"
+    )
+    child_b = db.record_trace(
+        "b", _make_result(text="b"), parent_trace_id=parent_id, agent_profile_name="helper"
+    )
+    # Unrelated trace with a different parent.
+    db.record_trace("c", _make_result(text="c"), parent_trace_id="other-parent")
+    children = db.list_child_traces(parent_id)
+    assert len(children) == 2
+    child_ids = {c.trace_id for c in children}
+    assert child_ids == {child_a, child_b}
+
+
+def test_list_child_traces_unknown_parent_returns_empty(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    assert db.list_child_traces("nonexistent") == []

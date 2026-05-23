@@ -25,7 +25,7 @@ from typing import Any
 
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -33,22 +33,26 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 CREATE TABLE IF NOT EXISTS traces (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    trace_id        TEXT NOT NULL UNIQUE,
-    created_at      TEXT NOT NULL,
-    provider        TEXT NOT NULL,
-    model           TEXT NOT NULL,
-    prompt          TEXT NOT NULL,
-    response_text   TEXT NOT NULL DEFAULT '',
-    tool_uses       TEXT NOT NULL DEFAULT '[]',
-    usage           TEXT NOT NULL DEFAULT '{}',
-    latency_ms      INTEGER,
-    status          TEXT NOT NULL DEFAULT 'success',
-    error_message   TEXT
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id            TEXT NOT NULL UNIQUE,
+    created_at          TEXT NOT NULL,
+    provider            TEXT NOT NULL,
+    model               TEXT NOT NULL,
+    prompt              TEXT NOT NULL,
+    response_text       TEXT NOT NULL DEFAULT '',
+    tool_uses           TEXT NOT NULL DEFAULT '[]',
+    usage               TEXT NOT NULL DEFAULT '{}',
+    latency_ms          INTEGER,
+    status              TEXT NOT NULL DEFAULT 'success',
+    error_message       TEXT,
+    parent_trace_id     TEXT,
+    agent_profile_name  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_traces_created_at ON traces(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traces_provider_model ON traces(provider, model);
+-- idx_traces_parent_trace_id is created post-migration in init() because the
+-- column may not exist on a pre-v4 database when this script first runs.
 
 CREATE TABLE IF NOT EXISTS note_writes (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +98,8 @@ class TraceRecord:
     latency_ms: int | None = None
     status: str = "success"
     error_message: str | None = None
+    parent_trace_id: str | None = None
+    agent_profile_name: str | None = None
 
 
 class Database:
@@ -122,10 +128,28 @@ class Database:
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
             row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+            stored_version = row[0] if row is not None else None
             if row is None:
                 conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
             elif row[0] < SCHEMA_VERSION:
                 conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+            # v3 -> v4: ALTER TABLE is not idempotent; guard with OperationalError.
+            if stored_version is not None and stored_version < 4:
+                for ddl in (
+                    "ALTER TABLE traces ADD COLUMN parent_trace_id TEXT",
+                    "ALTER TABLE traces ADD COLUMN agent_profile_name TEXT",
+                ):
+                    try:
+                        conn.execute(ddl)
+                    except sqlite3.OperationalError:
+                        # Column already exists; safe to ignore.
+                        pass
+            # The parent_trace_id index lives outside SCHEMA_SQL so it only runs
+            # after the column is guaranteed to exist (either via fresh CREATE
+            # TABLE or via the v3 -> v4 ALTER TABLE block above).
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_traces_parent_trace_id ON traces(parent_trace_id)"
+            )
             now = _now_iso()
             conn.execute(
                 """
@@ -142,6 +166,8 @@ class Database:
         prompt: str,
         result: AgentResult,
         *,
+        parent_trace_id: str | None = None,
+        agent_profile_name: str | None = None,
         latency_ms: int | None = None,
         status: str = "success",
         error_message: str | None = None,
@@ -159,8 +185,8 @@ class Database:
                 INSERT INTO traces (
                     trace_id, created_at, provider, model, prompt,
                     response_text, tool_uses, usage, latency_ms,
-                    status, error_message
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, error_message, parent_trace_id, agent_profile_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trace_id,
@@ -174,6 +200,8 @@ class Database:
                     latency_ms,
                     status,
                     error_message,
+                    parent_trace_id,
+                    agent_profile_name,
                 ),
             )
         return trace_id
@@ -185,7 +213,7 @@ class Database:
                 """
                 SELECT trace_id, created_at, provider, model, prompt,
                        response_text, tool_uses, usage, latency_ms,
-                       status, error_message
+                       status, error_message, parent_trace_id, agent_profile_name
                 FROM traces
                 ORDER BY id DESC
                 LIMIT ? OFFSET ?
@@ -201,13 +229,29 @@ class Database:
                 """
                 SELECT trace_id, created_at, provider, model, prompt,
                        response_text, tool_uses, usage, latency_ms,
-                       status, error_message
+                       status, error_message, parent_trace_id, agent_profile_name
                 FROM traces
                 WHERE trace_id = ?
                 """,
                 (trace_id,),
             ).fetchone()
             return self._row_to_trace(row) if row is not None else None
+
+    def list_child_traces(self, parent_trace_id: str) -> list[TraceRecord]:
+        """Return all traces whose parent_trace_id matches, oldest first."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT trace_id, created_at, provider, model, prompt,
+                       response_text, tool_uses, usage, latency_ms,
+                       status, error_message, parent_trace_id, agent_profile_name
+                FROM traces
+                WHERE parent_trace_id = ?
+                ORDER BY id ASC
+                """,
+                (parent_trace_id,),
+            )
+            return [self._row_to_trace(row) for row in cursor.fetchall()]
 
     def record_note_write(
         self,
@@ -356,6 +400,8 @@ class Database:
             latency_ms=row["latency_ms"],
             status=row["status"],
             error_message=row["error_message"],
+            parent_trace_id=row["parent_trace_id"],
+            agent_profile_name=row["agent_profile_name"],
         )
 
     @staticmethod
