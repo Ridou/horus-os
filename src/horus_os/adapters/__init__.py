@@ -28,6 +28,7 @@ from horus_os.adapters.base import (
     LifecycleAdapter,
     discover_adapters,
 )
+from horus_os.adapters.discord_adapter import DiscordAdapter
 from horus_os.adapters.webhook import WebhookAdapter
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "AdapterContext",
     "AdapterEntry",
     "AdapterRegistry",
+    "DiscordAdapter",
     "LifecycleAdapter",
     "WebhookAdapter",
     "discover_adapters",

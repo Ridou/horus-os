@@ -27,11 +27,13 @@ dependencies = []
 anthropic = ["anthropic>=0.40"]
 gemini = ["google-genai>=0.3"]
 dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30"]
+discord = ["discord.py>=2.3"]
 all = [
     "anthropic>=0.40",
     "google-genai>=0.3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
+    "discord.py>=2.3",
 ]
 dev = [
     "fastapi>=0.110",
@@ -46,6 +48,7 @@ horus-os = "horus_os.__main__:main"
 
 [project.entry-points."horus_os.adapters"]
 webhook = "horus_os.adapters.webhook:WebhookAdapter"
+discord = "horus_os.adapters.discord_adapter:DiscordAdapter"
 
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"
