@@ -6,7 +6,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from horus_os import AgentResult, Database, ToolUse, TraceRecord
+from horus_os import AgentProfile, AgentResult, Database, ToolUse, TraceRecord
 
 
 def _make_result(
@@ -229,7 +229,9 @@ def test_init_creates_default_agent(tmp_path: Path) -> None:
     db = Database(tmp_path / "horus.sqlite")
     db.init()
     with sqlite3.connect(str(tmp_path / "horus.sqlite")) as conn:
-        row = conn.execute("SELECT name, system_prompt FROM agent_profiles WHERE name='default'").fetchone()
+        row = conn.execute(
+            "SELECT name, system_prompt FROM agent_profiles WHERE name='default'"
+        ).fetchone()
         assert row is not None
         assert row[0] == "default"
         assert row[1] == "You are a helpful assistant."
@@ -293,3 +295,93 @@ def test_schema_v2_database_upgrades_to_v3(tmp_path: Path) -> None:
     record = db.get_trace("abc123")
     assert record is not None
     assert record.prompt == "hello"
+
+
+# ---------------------------------------------------------------------------
+# AgentProfile CRUD tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_profile_returns_none_for_missing(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    assert db.load_profile("nonexistent") is None
+
+
+def test_load_profile_returns_profile(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    profile = db.load_profile("default")
+    assert profile is not None
+    assert isinstance(profile, AgentProfile)
+    assert profile.name == "default"
+    assert profile.system_prompt == "You are a helpful assistant."
+    assert profile.default_model is None
+    assert profile.allowed_tools is None
+    assert profile.memory_scope is None
+
+
+def test_save_profile_creates_new(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    profile = AgentProfile(name="researcher", system_prompt="You research things.")
+    db.save_profile(profile)
+    loaded = db.load_profile("researcher")
+    assert loaded is not None
+    assert loaded.name == "researcher"
+    assert loaded.system_prompt == "You research things."
+
+
+def test_save_profile_updates_preserves_created_at(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    profile = AgentProfile(name="coder", system_prompt="You write code.")
+    db.save_profile(profile)
+    original = db.load_profile("coder")
+    assert original is not None
+
+    updated = AgentProfile(name="coder", system_prompt="You write better code.")
+    db.save_profile(updated)
+    reloaded = db.load_profile("coder")
+    assert reloaded is not None
+    assert reloaded.system_prompt == "You write better code."
+    assert reloaded.created_at == original.created_at
+    assert reloaded.updated_at >= original.updated_at
+
+
+def test_save_profile_round_trips_allowed_tools(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    tools = ["read_file", "write_note"]
+    profile = AgentProfile(name="restricted", system_prompt="Limited.", allowed_tools=tools)
+    db.save_profile(profile)
+    loaded = db.load_profile("restricted")
+    assert loaded is not None
+    assert loaded.allowed_tools == tools
+
+
+def test_list_profiles_order(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.save_profile(AgentProfile(name="zebra", system_prompt="z"))
+    db.save_profile(AgentProfile(name="alpha", system_prompt="a"))
+    profiles = db.list_profiles()
+    names = [p.name for p in profiles]
+    assert names == sorted(names)
+    assert "default" in names
+    assert "alpha" in names
+    assert "zebra" in names
+
+
+def test_delete_profile_returns_true(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.save_profile(AgentProfile(name="temp", system_prompt="temporary"))
+    assert db.delete_profile("temp") is True
+    assert db.load_profile("temp") is None
+
+
+def test_delete_profile_returns_false_for_missing(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    assert db.delete_profile("ghost") is False

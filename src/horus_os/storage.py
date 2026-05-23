@@ -258,6 +258,73 @@ class Database:
             )
             return [self._row_to_write(row) for row in cursor.fetchall()]
 
+    def load_profile(self, name: str) -> AgentProfile | None:
+        """Return one agent profile by name, or None if not found."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM agent_profiles WHERE name = ?", (name,)).fetchone()
+            return self._row_to_profile(row) if row is not None else None
+
+    def save_profile(self, profile: AgentProfile) -> None:
+        """Upsert an agent profile. created_at is preserved on conflict."""
+        now = _now_iso()
+        allowed_tools_json = (
+            json.dumps(profile.allowed_tools) if profile.allowed_tools is not None else None
+        )
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_profiles (
+                    name, system_prompt, default_model, allowed_tools,
+                    memory_scope, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    system_prompt = excluded.system_prompt,
+                    default_model = excluded.default_model,
+                    allowed_tools = excluded.allowed_tools,
+                    memory_scope = excluded.memory_scope,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    profile.name,
+                    profile.system_prompt,
+                    profile.default_model,
+                    allowed_tools_json,
+                    profile.memory_scope,
+                    now,
+                    now,
+                ),
+            )
+
+    def list_profiles(self) -> list[AgentProfile]:
+        """Return all agent profiles ordered by name ascending."""
+        with self._connect() as conn:
+            cursor = conn.execute("SELECT * FROM agent_profiles ORDER BY name ASC")
+            return [self._row_to_profile(row) for row in cursor.fetchall()]
+
+    def delete_profile(self, name: str) -> bool:
+        """Delete an agent profile by name. Returns True if a row was deleted."""
+        with self._connect() as conn:
+            result = conn.execute("DELETE FROM agent_profiles WHERE name = ?", (name,))
+            return result.rowcount > 0
+
+    @staticmethod
+    def _row_to_profile(row: sqlite3.Row) -> AgentProfile:
+        allowed_tools = None
+        if row["allowed_tools"] is not None:
+            try:
+                allowed_tools = json.loads(row["allowed_tools"])
+            except json.JSONDecodeError:
+                allowed_tools = None
+        return AgentProfile(
+            name=row["name"],
+            system_prompt=row["system_prompt"],
+            default_model=row["default_model"],
+            allowed_tools=allowed_tools,
+            memory_scope=row["memory_scope"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
     @staticmethod
     def _row_to_trace(row: sqlite3.Row) -> TraceRecord:
         try:
