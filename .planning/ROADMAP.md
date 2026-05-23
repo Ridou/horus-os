@@ -12,7 +12,7 @@
 
 **Parallelization:** 01 → 02 → (03, 04) → (05, 06) → 07 ∥ 08 → 09 → 10 → 11. Most strict-sequential; chat surfaces 07 (CLI) and 08 (web) can run in parallel after the memory layer lands.
 
-- [ ] **Phase 01: Repo scaffold and CI**, pyproject.toml, src layout, ruff + pytest, GitHub Actions running lint and test on Ubuntu, macOS, Windows.
+- [x] **Phase 01: Repo scaffold and CI**, pyproject.toml, src layout, ruff + pytest, GitHub Actions running lint and test on Ubuntu, macOS, Windows. (completed 2026-05-23)
 - [ ] **Phase 02: Agent runtime core**, Python module that takes a prompt, invokes Anthropic or Gemini with one tool, returns a structured result. Sync and async paths both supported.
 - [ ] **Phase 03: Persistence layer**, SQLite schema for tasks, traces, agent state. Migrations are idempotent. WAL mode.
 - [ ] **Phase 04: Tool registry**, Register a callable as a tool, expose it to the agent, log every invocation. First example tool: read a local file.
@@ -27,7 +27,7 @@
 ## Progress
 
 - Total phases: 11
-- Completed phases: 0
-- Total plans: 0
-- Completed plans: 0
-- Percent: 0
+- Completed phases: 1
+- Total plans: 1
+- Completed plans: 1
+- Percent: 9

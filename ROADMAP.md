@@ -18,7 +18,7 @@
 
 | # | Title | Goal | Status |
 |---|-------|------|--------|
-| 01 | Repo scaffold and CI | pyproject.toml, src layout, ruff + pytest, GitHub Actions running lint and test on Ubuntu, macOS, Windows | planning |
+| 01 | Repo scaffold and CI | pyproject.toml, src layout, ruff + pytest, GitHub Actions running lint and test on Ubuntu, macOS, Windows | shipped 2026-05-23 |
 | 02 | Agent runtime core | Python module that takes a prompt, invokes Anthropic or Gemini with one tool, returns a structured result. Sync and async paths both supported. | planning |
 | 03 | Persistence layer | SQLite schema for tasks, traces, agent state. Migrations are idempotent. WAL mode. | planning |
 | 04 | Tool registry | Register a callable as a tool, expose it to the agent, log every invocation. First example tool: read a local file. | planning |
