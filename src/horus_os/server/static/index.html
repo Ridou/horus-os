@@ -49,6 +49,13 @@
     .response { margin-top: 16px; }
     .status { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
     .empty { text-align: center; padding: 40px; color: var(--text-muted); }
+    .tree-toggle { background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; }
+    .tree-toggle:hover { color: var(--text); border-color: var(--text-muted); }
+    .tree-row td { background: rgba(56, 139, 253, 0.04); padding-left: 24px; }
+    .tree-row table { margin-top: 4px; }
+    .tree-row th { background: transparent; }
+    .stream-tool { display: block; color: var(--text-muted); font-size: 12px; padding: 4px 0; }
+    .stream-error { color: var(--error); }
   </style>
 </head>
 <body>
@@ -59,6 +66,7 @@
   <nav>
     <button class="active" data-tab="chat">Chat</button>
     <button data-tab="traces">Traces</button>
+    <button data-tab="agents">Agents</button>
     <button data-tab="writes">Writes</button>
   </nav>
   <main>
@@ -77,6 +85,14 @@
         <button class="ghost" id="refresh-traces">Refresh</button>
       </div>
       <div id="traces-body"><div class="empty">loading</div></div>
+    </section>
+    <section class="tab" id="agents">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Agent profiles</h2>
+        <span class="grow"></span>
+        <button class="ghost" id="refresh-agents">Refresh</button>
+      </div>
+      <div id="agents-body"><div class="empty">loading</div></div>
     </section>
     <section class="tab" id="writes">
       <div class="row">
@@ -105,6 +121,7 @@
       $$("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
       $$(".tab").forEach((t) => t.classList.toggle("active", t.id === name));
       if (name === "traces") loadTraces();
+      if (name === "agents") loadAgents();
       if (name === "writes") loadWrites();
     }
     $$("nav button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -124,25 +141,76 @@
       if (!prompt) return;
       $("#send").disabled = true;
       $("#chat-status").textContent = "running ...";
-      $("#chat-response").innerHTML = "";
-      const start = performance.now();
+      const responseRoot = $("#chat-response");
+      responseRoot.innerHTML = "";
+      const pre = document.createElement("pre");
+      responseRoot.appendChild(pre);
+      const status = document.createElement("div");
+      status.className = "status";
+      responseRoot.appendChild(status);
+      const startMs = performance.now();
       try {
-        const data = await fetchJson("/api/chat", {
+        const r = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
         });
-        const latency = data.latency_ms ?? Math.round(performance.now() - start);
-        const tools = (data.tool_log || []).map((t) => {
-          const status = t.error ? `error: ${t.error}` : "ok";
-          return `  - ${t.name} (${t.latency_ms}ms): ${status}`;
-        }).join("\n");
-        const meta = `[${data.result.provider}/${data.result.model}, ${latency}ms, ${(data.tool_log || []).length} tool calls, trace ${data.trace_id.slice(0, 8)}]`;
-        const tail = tools ? `\n\n${tools}` : "";
-        $("#chat-response").innerHTML = `<pre>${escapeHtml(data.result.text || "(no text response)")}</pre><div class="status">${escapeHtml(meta)}${escapeHtml(tail)}</div>`;
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          const detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail || body);
+          pre.classList.add("stream-error");
+          pre.textContent = `${r.status} ${detail}`;
+          $("#chat-status").textContent = "";
+          $("#send").disabled = false;
+          return;
+        }
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let traceId = null;
+        let latencyMs = null;
+        let toolCount = 0;
+        let sawError = false;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            let payload;
+            try { payload = JSON.parse(line.slice(6)); } catch (e) { continue; }
+            if (payload.type === "token") {
+              pre.appendChild(document.createTextNode(payload.text));
+            } else if (payload.type === "tool_call") {
+              toolCount += 1;
+              const aside = document.createElement("div");
+              aside.className = "stream-tool";
+              aside.textContent = `[tool-request] ${payload.name}(${JSON.stringify(payload.input)})`;
+              responseRoot.insertBefore(aside, status);
+            } else if (payload.type === "done") {
+              traceId = payload.trace_id;
+              latencyMs = payload.latency_ms;
+            } else if (payload.type === "error") {
+              sawError = true;
+              pre.classList.add("stream-error");
+              pre.appendChild(document.createTextNode(`\n[error] ${payload.message}`));
+              if (payload.trace_id) traceId = payload.trace_id;
+            }
+          }
+        }
+        if (latencyMs === null) latencyMs = Math.round(performance.now() - startMs);
+        const traceSuffix = traceId ? `, trace ${traceId.slice(0, 8)}` : "";
+        const meta = sawError
+          ? `[error after ${latencyMs}ms${traceSuffix}]`
+          : `[streamed, ${latencyMs}ms${traceSuffix}, ${toolCount} tool calls]`;
+        status.textContent = meta;
         $("#chat-status").textContent = "";
       } catch (e) {
-        $("#chat-response").innerHTML = `<pre class="error">${escapeHtml(e.message)}</pre>`;
+        pre.classList.add("stream-error");
+        pre.textContent = e.message || String(e);
         $("#chat-status").textContent = "";
       } finally {
         $("#send").disabled = false;
@@ -162,15 +230,85 @@
           const status = t.status === "success"
             ? '<span class="pill success">success</span>'
             : '<span class="pill error">error</span>';
-          const prompt = t.prompt.length > 80 ? t.prompt.slice(0, 80) + "..." : t.prompt;
-          return `<tr><td class="muted">${escapeHtml(t.created_at)}</td><td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.model)}</td><td>${status}</td><td>${escapeHtml(prompt)}</td></tr>`;
+          const prompt = t.prompt.length > 60 ? t.prompt.slice(0, 60) + "..." : t.prompt;
+          const agent = t.agent_profile_name || "";
+          const expand = t.agent_profile_name
+            ? `<button class="tree-toggle" data-trace="${escapeHtml(t.trace_id)}">expand</button>`
+            : "";
+          return `<tr data-trace-row="${escapeHtml(t.trace_id)}"><td class="muted">${escapeHtml(t.created_at)}</td><td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.model)}</td><td>${status}</td><td>${escapeHtml(agent)}</td><td>${escapeHtml(prompt)}</td><td>${expand}</td></tr>`;
         }).join("");
-        body.innerHTML = `<table><thead><tr><th>created_at</th><th>provider</th><th>model</th><th>status</th><th>prompt</th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.innerHTML = `<table><thead><tr><th>created_at</th><th>provider</th><th>model</th><th>status</th><th>agent</th><th>prompt</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.querySelectorAll(".tree-toggle").forEach((btn) => {
+          btn.addEventListener("click", () => toggleChildren(btn));
+        });
       } catch (e) {
         body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
       }
     }
     $("#refresh-traces").addEventListener("click", loadTraces);
+
+    async function toggleChildren(btn) {
+      const traceId = btn.dataset.trace;
+      const row = btn.closest("tr");
+      const next = row.nextElementSibling;
+      if (next && next.classList.contains("tree-row")) {
+        next.remove();
+        btn.textContent = "expand";
+        return;
+      }
+      btn.textContent = "loading ...";
+      try {
+        const data = await fetchJson(`/api/traces/${encodeURIComponent(traceId)}/children`);
+        const childRows = data.children.map((c) => {
+          const status = c.status === "success"
+            ? '<span class="pill success">success</span>'
+            : '<span class="pill error">error</span>';
+          const prompt = c.prompt.length > 60 ? c.prompt.slice(0, 60) + "..." : c.prompt;
+          return `<tr><td class="muted">${escapeHtml(c.created_at)}</td><td>${escapeHtml(c.provider)}</td><td>${escapeHtml(c.model)}</td><td>${status}</td><td>${escapeHtml(c.agent_profile_name || "")}</td><td>${escapeHtml(prompt)}</td></tr>`;
+        }).join("");
+        const inner = data.children.length
+          ? `<table><thead><tr><th>created_at</th><th>provider</th><th>model</th><th>status</th><th>agent</th><th>prompt</th></tr></thead><tbody>${childRows}</tbody></table>`
+          : '<div class="empty">no children</div>';
+        const tr = document.createElement("tr");
+        tr.className = "tree-row";
+        const td = document.createElement("td");
+        td.colSpan = 7;
+        td.innerHTML = inner;
+        tr.appendChild(td);
+        row.parentNode.insertBefore(tr, row.nextSibling);
+        btn.textContent = "collapse";
+      } catch (e) {
+        btn.textContent = "expand";
+        alert(e.message);
+      }
+    }
+
+    async function loadAgents() {
+      const body = $("#agents-body");
+      body.innerHTML = '<div class="empty">loading</div>';
+      try {
+        const data = await fetchJson("/api/agents");
+        if (!data.agents.length) {
+          body.innerHTML = '<div class="empty">no agent profiles yet</div>';
+          return;
+        }
+        const rows = data.agents.map((a) => {
+          const model = a.default_model || "(default)";
+          const tools = a.allowed_tools === null
+            ? "(all)"
+            : (a.allowed_tools.length ? a.allowed_tools.join(", ") : "(none)");
+          const last = a.last_activity_at || "(never)";
+          const prompt = (a.system_prompt || "").length > 60
+            ? a.system_prompt.slice(0, 60) + "..."
+            : (a.system_prompt || "");
+          return `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(model)}</td><td>${escapeHtml(tools)}</td><td class="muted">${escapeHtml(last)}</td><td class="muted">${escapeHtml(prompt)}</td></tr>`;
+        }).join("");
+        body.innerHTML = `<table><thead><tr><th>name</th><th>default_model</th><th>allowed_tools</th><th>last_activity_at</th><th>system_prompt</th></tr></thead><tbody>${rows}</tbody></table>`;
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+    $("#refresh-agents").addEventListener("click", loadAgents);
 
     async function loadWrites() {
       const body = $("#writes-body");

@@ -19,3 +19,10 @@ def test_root_returns_dashboard_html(tmp_path: Path) -> None:
     assert "/api/chat" in body
     assert "/api/traces" in body
     assert "/api/writes" in body
+    # Phase 16 markers: SSE stream endpoint, agents tab, agents endpoint,
+    # delegate-tree children fetch. We assert markup-level presence so the
+    # build gate fails if the frontend drops a documented endpoint.
+    assert "/api/chat/stream" in body
+    assert "/api/agents" in body
+    assert 'data-tab="agents"' in body
+    assert "/children" in body
