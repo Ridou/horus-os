@@ -59,6 +59,64 @@ markdown notes folder with a full SQLite audit trail.
 
 ## [Unreleased]
 
+Heading into v0.2.0. Phase 21 will replace this section with a
+`[0.2.0] - YYYY-MM-DD` heading and tag the release.
+
+### Added
+
+- **Agent profiles.** `AgentProfile` dataclass plus a new
+  `agent_profiles` table with `Database.load_profile`,
+  `save_profile`, `list_profiles`, and `delete_profile`. A `default`
+  profile is bootstrapped on every `init()` so a fresh database
+  always has at least one row.
+- **Multi-agent runtime.** `delegate_to_agent` tool produced by
+  `make_delegate_tool(db, master_registry, parent_trace_id, budget,
+  provider)`. Sub-agent runs inherit a shared `IterationBudget` so
+  the iteration cap applies across the whole delegation tree.
+  Parallel `delegate_to_agent` calls in a single coordinator turn
+  execute concurrently and merge results back by `tool_use_id`.
+- **Parent and child traces.** `TraceRecord` carries
+  `parent_trace_id` and `agent_profile_name`; `Database.record_trace`
+  accepts them as optional kwargs; `Database.list_child_traces`
+  returns the children of a coordinator trace.
+- **Streaming runtime.** `run_agent_stream(prompt, *, provider,
+  model, max_tokens, system)` async generator that yields token
+  strings and `ToolCallEvent` values. Both Anthropic and Gemini
+  provider streaming paths land via `stream_anthropic_async` and
+  `stream_gemini_async`.
+- **CLI multi-agent surface.** `horus-os agents` group with `list`,
+  `show`, `create`, `edit`, `delete`. `horus-os run --agent <name>`
+  loads a profile and threads its `system_prompt` and
+  `default_model` through the run.
+- **Dashboard v0.2.** A new Agents tab, live SSE token streaming in
+  the chat surface, and a delegate-tree expander on traces that
+  carry an `agent_profile_name`. New server routes: `/api/agents`
+  (list/show/create/edit/delete with `last_activity_at`),
+  `/api/traces/{id}/children`, and `POST /api/chat/stream` with a
+  `type`-discriminated SSE frame shape (`token`, `tool_call`,
+  `done`, `error`).
+- **Adapter contract.** `horus_os.adapters` package exposes the
+  `Adapter` Protocol, `AdapterContext`, `discover_adapters`, and the
+  `ADAPTER_ENTRY_POINT_GROUP` constant. Adapters are discovered via
+  `entry_points(group="horus_os.adapters")` and bound onto FastAPI
+  at `create_app` startup. Per-entry failures are isolated.
+- **Reference adapter.** `WebhookAdapter` mounts
+  `POST /api/adapters/webhook` with HMAC-SHA256 signature
+  validation. Refuses to run when `HORUS_OS_WEBHOOK_SECRET` is
+  unset.
+
+### Changed
+
+- `horus-os run "<prompt>"` now streams tokens to stdout by default.
+  Pass `--no-stream` to restore the v0.1 buffered output.
+  `ToolCallEvent` values surface on stderr as
+  `[tool-request] {name}({input})`.
+- SQLite schema upgraded automatically to version 4 on first
+  startup. The migration is idempotent: v0.1 databases pick up the
+  `agent_profiles` table (v3) and the `parent_trace_id` plus
+  `agent_profile_name` columns on `traces` (v4) without manual
+  intervention. v0.1 trace rows remain readable.
+
 ### Documentation
 
 - `CONTRIBUTING.md` rewritten with dev setup, branch and commit
@@ -66,11 +124,14 @@ markdown notes folder with a full SQLite audit trail.
   that v0.1 has shipped.
 - `SECURITY.md` added with a private-disclosure process via GitHub
   Security Advisories.
-- `ARCHITECTURE.md` replaced its placeholder with the actual shape
-  shipped in v0.1.0: module layout, data flow, storage shape,
-  configuration model.
+- `ARCHITECTURE.md` refreshed for v0.2: multi-agent shape, streaming
+  surface, adapter interface, schema v4, refreshed deferred list.
+- `docs/MIGRATION-v0.1-to-v0.2.md` added with API additions, schema
+  migration, behavior changes, and upgrade code samples.
+- `examples/` added: `multi_agent.py`, `streaming.py`,
+  `custom_adapter.py` plus an index README. All three run offline.
 - GitHub issue templates (bug report, feature request) and pull
   request template added under `.github/`.
 
-See `ROADMAP.md` for the v0.2 working list (multi-agent, web chat
-streaming, adapter ecosystem).
+See `ROADMAP.md` for the rest of the v0.2 work (test surface
+expansion, three-OS install verification, v0.2.0 release).

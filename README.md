@@ -30,8 +30,14 @@ horus-os init
 export ANTHROPIC_API_KEY=sk-ant-...   # and/or GEMINI_API_KEY
 
 # Ask the agent something. Default tools include reading and writing
-# your notes folder, plus reading any file under it.
+# your notes folder, plus reading any file under it. Tokens stream
+# to stdout as they arrive; pass --no-stream for the v0.1 behavior.
 horus-os run "Summarize the notes in my notes directory."
+
+# Drive the agent through a named profile (the `default` profile is
+# bootstrapped on init; create more with `horus-os agents create`).
+horus-os agents list
+horus-os run --agent default "Summarize today's notes."
 
 # Browse traces or open the local dashboard
 horus-os traces
@@ -47,12 +53,27 @@ horus-os serve         # http://127.0.0.1:8765
 - **CLI surface.** `init`, `run`, `traces`, `serve` subcommands. Tested on macOS, Ubuntu, and Windows.
 - **Setup wizard.** `horus-os init --interactive` validates your API keys against the live providers before saving anything.
 
+## What is new in v0.2
+
+The active milestone ships multi-agent orchestration, live streaming
+responses, and the third-party adapter plugin contract. Highlights:
+named agent profiles in SQLite, a `delegate_to_agent` tool, a
+`run_agent_stream` async generator, streaming output on the CLI and
+dashboard, an `Adapter` Protocol with entry-point discovery, and a
+reference HTTP webhook adapter.
+
+- Migration guide: `docs/MIGRATION-v0.1-to-v0.2.md`
+- Runnable examples: `examples/`
+- v0.2 milestone detail: `ROADMAP.md`
+
 ## Documents
 
 - `CHANGELOG.md`, release notes
 - `PROJECT.md`, project intent, core values, what is in and out of scope
-- `ROADMAP.md`, v0.1 milestone and what comes next
+- `ROADMAP.md`, current milestone and what comes next
 - `ARCHITECTURE.md`, technical shape
+- `docs/MIGRATION-v0.1-to-v0.2.md`, upgrade notes for v0.1 users
+- `examples/`, runnable scripts for multi-agent, streaming, and custom adapters
 - `CONTRIBUTING.md`, dev setup, workflow, and code style
 - `SECURITY.md`, how to report vulnerabilities
 - `CODE_OF_CONDUCT.md`, Contributor Covenant 2.1
