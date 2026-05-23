@@ -118,6 +118,70 @@
 | REL-03 | Tag v0.2.0 with CHANGELOG and GitHub Release | active | 21 |
 | REL-04 | Migration notes documented for v0.1 users | active | 18, 21 |
 
+## v0.3 Adapter Ecosystem
+
+### Adapter Runtime (ART)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| ART-01 | Adapter Protocol gains optional `start(ctx)` and `stop()` lifecycle hooks; v0.2 adapters work unchanged | active | 22 |
+| ART-02 | FastAPI lifespan invokes `start` on each discovered adapter at startup and `stop` at shutdown | active | 22 |
+| ART-03 | `GET /api/adapters` returns name, status, last_activity_at, error_count per adapter | active | 22, 27 |
+
+### Discord (DISC)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DISC-01 | Discord bot connects, listens for mentions and DMs, replies via configured agent | active | 23 |
+| DISC-02 | Setup guide documents bot creation, intents, and token env var | active | 23, 28 |
+| DISC-03 | Disconnects trigger exponential-backoff reconnect with configurable cap | active | 23 |
+
+### Slack (SLAK)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SLAK-01 | Slack Events API endpoint handles `app_mention` and DM events | active | 24 |
+| SLAK-02 | Signature verification via signing-secret HMAC-SHA256 over body and timestamp | active | 24 |
+| SLAK-03 | Slash command support routing to an agent profile | active | 24 |
+
+### Email (MAIL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MAIL-01 | Email adapter polls IMAP inbox, runs agent on new messages | active | 25 |
+| MAIL-02 | Replies sent via SMTP preserve `In-Reply-To` and `References` headers | active | 25 |
+| MAIL-03 | Configurable poll interval; sleeps cleanly when no messages | active | 25 |
+
+### Calendar (CAL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| CAL-01 | Calendar adapter exposes `list_calendar_events_today` tool returning structured events | active | 26 |
+| CAL-02 | Optional event creation tool, gated behind `HORUS_OS_CALENDAR_WRITE_ALLOWED=true` | active | 26 |
+
+### Dashboard v0.3 (DASH-3)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DASH-3-01 | `/adapters` dashboard view lists adapters with status, last activity, error count | active | 27 |
+| DASH-3-02 | Enable/disable toggle from dashboard via `POST /api/adapters/{name}/{enable,disable}` | active | 27 |
+
+### Test and CI (continued)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-07 | Discord adapter mocked-SDK tests pass on three-OS matrix | active | 29, 30 |
+| TEST-08 | Slack adapter mocked-SDK tests pass on three-OS matrix | active | 29, 30 |
+| TEST-09 | Email adapter mocked tests pass on three-OS matrix | active | 29, 30 |
+| TEST-10 | Calendar adapter mocked tests pass on three-OS matrix | active | 29, 30 |
+
+### Release (continued)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-05 | Tag v0.3.0 with CHANGELOG and GitHub Release | active | 31 |
+| REL-06 | Migration notes documented for v0.2 users (additive Protocol change) | active | 28, 31 |
+
 ## Coverage summary
 
 | Category | Total | Active | Validated |
@@ -128,12 +192,18 @@
 | MEM | 3 | 3 | 3 |
 | DASH | 3 | 3 | 3 |
 | WIZARD | 4 | 4 | 4 |
-| TEST | 6 | 6 | 3 |
-| REL | 4 | 4 | 2 |
-| MA | 4 | 4 | 0 |
-| STREAM | 3 | 3 | 0 |
-| ADAPT | 3 | 3 | 0 |
-| MIG | 3 | 3 | 0 |
-| **Total** | **44** | **44** | **26** |
+| TEST | 10 | 10 | 6 |
+| REL | 6 | 6 | 4 |
+| MA | 4 | 4 | 4 |
+| STREAM | 3 | 3 | 3 |
+| ADAPT | 3 | 3 | 3 |
+| MIG | 3 | 3 | 3 |
+| ART | 3 | 3 | 0 |
+| DISC | 3 | 3 | 0 |
+| SLAK | 3 | 3 | 0 |
+| MAIL | 3 | 3 | 0 |
+| CAL | 2 | 2 | 0 |
+| DASH-3 | 2 | 2 | 0 |
+| **Total** | **66** | **66** | **44** |
 
-"Validated" means the requirement is covered by a shipped phase. v0.1 requirements (CORE through original TEST/REL) flipped to validated on 2026-05-23. v0.2 requirements stay unvalidated until their phases ship.
+"Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 requirements are validated (shipped 2026-05-23). v0.3 requirements stay unvalidated until their phases ship.

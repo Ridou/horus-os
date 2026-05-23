@@ -8,14 +8,47 @@ Planning detail lives under `.planning/`. Start with
 | Milestone | Phases | State | Tag |
 |-----------|--------|-------|-----|
 | v0.1 Foundation | 01-11 | shipped 2026-05-23 | `v0.1.0` |
-| **v0.2 Multi-Agent + Streaming** | **12-21** | **active** | `v0.2.0` (planned) |
-| v0.3 Adapter ecosystem | TBD | not planned | |
+| v0.2 Multi-Agent + Streaming | 12-21 | shipped 2026-05-23 | `v0.2.0` |
+| **v0.3 Adapter Ecosystem** | **22-31** | **active** | `v0.3.0` (planned) |
 | v0.4 Observability | TBD | not planned | |
 | v0.5 Plugin system | TBD | not planned | |
 
-## Active milestone: v0.2 Multi-Agent + Streaming
+## Active milestone: v0.3 Adapter Ecosystem
 
-**Goal:** Move from "one agent answers questions" to "a personal team of agents that can hand off to each other, with live streaming responses in the CLI and dashboard."
+**Goal:** Take the v0.2 adapter plugin interface from "one reference webhook" to a real ecosystem. Ship four first-class adapters (Discord, Slack, email, calendar) that turn horus-os into a personal command center reachable from the user's existing channels. Add adapter lifecycle hooks for long-running connections, surface adapter health in the dashboard, and document the setup path for each integration.
+
+### Decisions locked in for v0.3
+
+| Decision | Choice |
+|----------|--------|
+| Lifecycle hooks | Adapter Protocol gains optional `start(ctx)` and `stop()` async hooks. FastAPI lifespan integration runs them at startup and shutdown. Existing webhook adapter works unchanged. |
+| Adapters shipped | Discord, Slack, email (IMAP+SMTP), calendar (Google). Each ships with mocked-SDK tests and a setup guide. |
+| Adapter SDKs | Discord and Slack via official Python SDKs (added as optional deps under their adapter's extra). Email via stdlib `imaplib` + `smtplib`. Calendar via `google-api-python-client`. |
+| Auth and secrets | Each adapter reads its credentials from an env var; calendar uses OAuth with token storage in the data dir. |
+| Dashboard | New `/adapters` view shows status (running, stopped, error), last activity, error count. Enable/disable via REST. |
+| License | Apache 2.0 (unchanged) |
+| Three-OS gate | Same hard gate as v0.1 (Phase 10) and v0.2 (Phase 20), re-applied before release. |
+
+### Phases
+
+| # | Title | Goal | Status |
+|---|-------|------|--------|
+| 22 | Adapter lifecycle hooks | Optional `start(ctx)`/`stop()` on Adapter Protocol; FastAPI lifespan integration; `/api/adapters` reports status. | queued |
+| 23 | Discord adapter | Bot listens for mentions/DMs, routes to a configured agent, replies in channel. Setup guide for token + intents. | queued |
+| 24 | Slack adapter | Events API for `app_mention` and DMs; signing-secret HMAC verification; slash command support. | queued |
+| 25 | Email adapter | IMAP poll + SMTP send. Thread-preserving replies. Stdlib only. | queued |
+| 26 | Calendar adapter | Google Calendar "list today's events" tool; optional event creation gated behind a permission flag. | queued |
+| 27 | Dashboard adapter management | `/adapters` view with status, last activity, error count; enable/disable from UI. | queued |
+| 28 | Documentation and examples refresh | ARCHITECTURE update; four adapter examples; v0.2-to-v0.3 migration guide. | queued |
+| 29 | Test surface expansion | Lifecycle tests, mocked-SDK tests per adapter, cross-adapter routing. | queued |
+| 30 | Three-OS install verification (v0.3) | install-smoke green on Ubuntu/macOS/Windows for Python 3.11 + 3.12. | queued |
+| 31 | v0.3.0 release | Tag v0.3.0, CHANGELOG updated, version bumped, GitHub Release with migration notes. | queued |
+
+**Parallelization:** `22 → (23 ∥ 24 ∥ 25 ∥ 26) → 27 → 28 → 29 → 30 → 31`. Phase 22 (lifecycle hooks) gates the four adapter implementations because long-running adapters need start/stop semantics that the v0.2 Protocol does not provide. After 22 lands, the four adapters can ship in parallel.
+
+## Shipped: v0.2 Multi-Agent + Streaming
+
+**Goal (shipped):** Move from "one agent answers questions" to "a personal team of agents that can hand off to each other, with live streaming responses in the CLI and dashboard."
 
 ### Decisions locked in for v0.2
 
@@ -23,27 +56,25 @@ Planning detail lives under `.planning/`. Start with
 |----------|--------|
 | Multi-agent shape | Named agent profiles in SQLite. A coordinator can delegate to sub-agents via the `delegate_to_agent` tool. Parent/child links in the trace table. |
 | Streaming | Provider streaming APIs (Anthropic stream, Gemini stream) via a new `run_agent_stream` async generator. `run_agent` keeps its v0.1 surface for non-streaming callers. |
-| Adapter ecosystem | Plugin contract defined via `importlib.metadata.entry_points("horus_os.adapters")`. One reference adapter (HTTP webhook). Discord/Slack adapters deferred to v0.3. |
+| Adapter ecosystem | Plugin contract defined via `importlib.metadata.entry_points("horus_os.adapters")`. One reference adapter (HTTP webhook). Discord/Slack adapters in v0.3. |
 | Migration | v0.1 SQLite databases upgrade to v0.2 schema idempotently. v0.1 traces remain readable. Downgrade is one-way and documented. |
 | License | Apache 2.0 (unchanged) |
 | Three-OS gate | Same hard gate as v0.1 (Phase 10) re-applied before release. |
 
-### Phases
+### Phases (all shipped 2026-05-23)
 
-| # | Title | Goal | Status |
-|---|-------|------|--------|
-| 12 | Agent profile model and schema migration | `agent_profiles` table with name, system prompt, default model, allowed tools, memory scope. Idempotent forward migration from v0.1. At least one default agent auto-created on `init`. | queued |
-| 13 | Multi-agent orchestration runtime | `delegate_to_agent` tool. Coordinator/sub-agent runtime. Parent/child trace links. Iteration bound applies to the whole tree. | queued |
-| 14 | Streaming response support | `run_agent_stream` async generator. Anthropic and Gemini streaming SDK paths. Backwards-compatible with `run_agent`. | queued |
-| 15 | CLI multi-agent surface | `horus-os agents` (list/show/create/edit/delete). `horus-os run --agent <name>`. Streaming output by default; `--no-stream` falls back. | queued |
-| 16 | Dashboard multi-agent view and streaming chat | Agents list, per-agent activity, delegate-tree visualization per run, live token streaming in the chat surface. | queued |
-| 17 | Adapter plugin interface | Plugin contract via `horus_os.adapters` entry point. One reference adapter: HTTP webhook receiver. Third-party adapters register without forking. | queued |
-| 18 | Documentation and examples refresh | Update ARCHITECTURE.md for the multi-agent shape. Add `examples/multi_agent.py`, `examples/streaming.py`, `examples/custom_adapter.py`. Document the v0.1 to v0.2 migration. | queued |
-| 19 | Test surface expansion | End-to-end multi-agent flows, streaming partial-failure modes, adapter contract tests. Three-OS coverage maintained. | queued |
-| 20 | Three-OS install verification (v0.2) | Same hard gate as Phase 10, re-targeted at the v0.2 feature set. | queued |
-| 21 | v0.2.0 release | Tag v0.2.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes. | queued |
-
-**Parallelization:** `12 → 13 → (14 ∥ 15 ∥ 16 ∥ 17) → 18 → 19 → 20 → 21`. Phase 12 gates everything because it changes storage. After Phase 13 lands the delegation runtime, surfaces and the adapter interface can ship in parallel.
+| # | Title | Goal |
+|---|-------|------|
+| 12 | Agent profile model and schema migration | `agent_profiles` table, idempotent v2->v3 migration, default agent bootstrap |
+| 13 | Multi-agent orchestration runtime | `delegate_to_agent` tool, shared iteration budget, parent/child traces |
+| 14 | Streaming response support | `run_agent_stream` + provider streaming + `ToolCallEvent` |
+| 15 | CLI multi-agent surface | `horus-os agents` subcommand, `run --agent`, streaming by default |
+| 16 | Dashboard multi-agent view and streaming chat | `/agents` view, SSE chat, delegate-tree expander |
+| 17 | Adapter plugin interface | Adapter Protocol, entry-point discovery, HMAC webhook reference adapter |
+| 18 | Documentation and examples refresh | ARCHITECTURE v0.2 refresh, three examples, v0.1-to-v0.2 migration guide |
+| 19 | Test surface expansion | Cross-phase E2E coverage, streaming partial-failure, adapter round-trip |
+| 20 | Three-OS install verification (v0.2) | install-smoke green on Ubuntu, macOS, Windows for Python 3.11 + 3.12 |
+| 21 | v0.2.0 release | v0.2.0 tagged, CHANGELOG rotated, GitHub Release published |
 
 ## Shipped: v0.1 Foundation
 
@@ -77,7 +108,6 @@ Planning detail lives under `.planning/`. Start with
 
 ## Future milestones (placeholders)
 
-- **v0.3 Adapter ecosystem.** Discord, Slack, calendar, email as opt-in integrations on top of the v0.2 plugin interface.
 - **v0.4 Observability.** Cost tracking per agent, per tool. Latency dashboards.
 - **v0.5 Plugin system.** Third-party tools and agents load from a manifest.
 
