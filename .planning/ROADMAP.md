@@ -52,10 +52,10 @@
   2. A v0.1 database upgrades to v0.2 schema on first boot, idempotently, and existing v0.1 traces remain readable
   3. `horus-os init` creates a default agent profile if none exist; subsequent runs do not duplicate it
   4. A CRUD API (`load_profile`, `save_profile`, `list_profiles`, `delete_profile`) exists with full test coverage
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 12-01: Schema, migration, CRUD API, default-agent bootstrap
+- [ ] 12-01-PLAN.md -- AgentProfile type, agent_profiles DDL, CRUD API, default agent bootstrap
 
 ### Phase 13: Multi-agent orchestration runtime
 **Goal**: Coordinator can delegate to sub-agents through a registered tool; parent/child trace links capture the call tree.
