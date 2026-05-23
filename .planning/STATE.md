@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
 status: phase_complete
-stopped_at: Phase 04 shipped, ready for Phase 05 planning
-last_updated: "2026-05-23T06:00:00Z"
-last_activity: 2026-05-23, Phase 04 (tool registry, read_file, execute helper) complete
+stopped_at: Phase 05 shipped, ready for Phase 06 planning
+last_updated: "2026-05-23T06:30:00Z"
+last_activity: 2026-05-23, Phase 05 (memory layer read path) complete
 progress:
   total_phases: 11
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
-  percent: 36
+  completed_phases: 5
+  total_plans: 5
+  completed_plans: 5
+  percent: 45
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 05, Memory layer read path (next up)
+**Current focus:** Phase 06, Memory layer write path (next up)
 
 ## Current Position
 
-Phase: 05 (memory-layer-read-path), READY TO PLAN
+Phase: 06 (memory-layer-write-path), READY TO PLAN
 Plan: 0 of N
-Status: Phase 04 complete, Phase 05 ready to plan
-Last activity: 2026-05-23, Phase 04 shipped (ToolRegistry, read_file_tool with sandbox option, execute_tool_uses helper, 23 new tests, 54 total)
+Status: Phase 05 complete, Phase 06 ready to plan
+Last activity: 2026-05-23, Phase 05 shipped (NotesStore, NoteRef, 3 memory tool factories, 22 new tests, 76 total)
 
 ### v0.1 Foundation Milestone Snapshot
 

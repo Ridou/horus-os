@@ -16,7 +16,7 @@
 - [x] **Phase 02: Agent runtime core**, Python module that takes a prompt, invokes Anthropic or Gemini with one tool, returns a structured result. Sync and async paths both supported. (completed 2026-05-23)
 - [x] **Phase 03: Persistence layer**, SQLite schema for tasks, traces, agent state. Migrations are idempotent. WAL mode. (completed 2026-05-23)
 - [x] **Phase 04: Tool registry**, Register a callable as a tool, expose it to the agent, log every invocation. First example tool: read a local file. (completed 2026-05-23)
-- [ ] **Phase 05: Memory layer, read path**, Agent searches a markdown notes folder and reads files.
+- [x] **Phase 05: Memory layer, read path**, Agent searches a markdown notes folder and reads files. (completed 2026-05-23)
 - [ ] **Phase 06: Memory layer, write path**, Agent appends to the notes folder with a structured trail. Every write is reviewable.
 - [ ] **Phase 07: CLI surface**, `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve`, `traces`.
 - [ ] **Phase 08: Web chat and dashboard**, Next.js app served locally. Hosts a chat surface and a traces explorer.
@@ -27,7 +27,7 @@
 ## Progress
 
 - Total phases: 11
-- Completed phases: 4
-- Total plans: 4
-- Completed plans: 4
-- Percent: 36
+- Completed phases: 5
+- Total plans: 5
+- Completed plans: 5
+- Percent: 45
