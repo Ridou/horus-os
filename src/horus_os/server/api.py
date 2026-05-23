@@ -41,6 +41,8 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     """Return a configured FastAPI instance backed by the given data_dir."""
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
 
     app = FastAPI(
         title="horus-os",
@@ -55,6 +57,14 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         allow_headers=["*"],
         allow_credentials=False,
     )
+
+    static_dir = Path(__file__).parent / "static"
+    index_html = static_dir / "index.html"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/")
+    def index() -> Any:
+        return FileResponse(str(index_html))
 
     def _config() -> Config:
         return Config.load(Path(data_dir).expanduser() if data_dir is not None else None)

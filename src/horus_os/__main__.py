@@ -58,7 +58,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     traces_p.set_defaults(func=run_traces)
 
-    serve_p = sub.add_parser("serve", help="Start the local web dashboard (coming soon)")
+    serve_p = sub.add_parser("serve", help="Start the local web dashboard and JSON API")
+    serve_p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host (default 127.0.0.1).",
+    )
+    serve_p.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Bind port (default 8765).",
+    )
+    serve_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
     serve_p.set_defaults(func=run_serve)
 
     run_p = sub.add_parser("run", help="Run a single agent prompt with the configured tools")

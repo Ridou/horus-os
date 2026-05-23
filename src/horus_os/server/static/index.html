@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>horus-os</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-elev: #161b22;
+      --bg-input: #0d1117;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --error: #f85149;
+      --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.55; }
+    header { border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header .version { color: var(--text-muted); font-size: 12px; }
+    nav { display: flex; gap: 4px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--bg-elev); }
+    nav button { background: transparent; color: var(--text-muted); border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font: inherit; }
+    nav button:hover { color: var(--text); background: rgba(177, 186, 196, 0.12); }
+    nav button.active { color: var(--text); background: rgba(56, 139, 253, 0.15); }
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    textarea, input[type=text] { width: 100%; background: var(--bg-input); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 6px; font: inherit; }
+    textarea { min-height: 80px; resize: vertical; }
+    textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #0d1117; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600; }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+    button.ghost:hover { color: var(--text); border-color: var(--text-muted); }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .grow { flex: 1; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+    th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td.muted { color: var(--text-muted); }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+    .pill.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+    .pill.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
+    pre { background: var(--bg-elev); border: 1px solid var(--border); padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    .response { margin-top: 16px; }
+    .status { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
+    .empty { text-align: center; padding: 40px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>horus-os</h1>
+    <span class="version" id="version">connecting</span>
+  </header>
+  <nav>
+    <button class="active" data-tab="chat">Chat</button>
+    <button data-tab="traces">Traces</button>
+    <button data-tab="writes">Writes</button>
+  </nav>
+  <main>
+    <section class="tab active" id="chat">
+      <textarea id="prompt" placeholder="Ask the agent. The configured tools include read_file, list_notes, search_notes, read_note, create_note, append_note."></textarea>
+      <div class="row" style="margin-top: 8px;">
+        <button class="primary" id="send">Send</button>
+        <span class="status" id="chat-status"></span>
+      </div>
+      <div class="response" id="chat-response"></div>
+    </section>
+    <section class="tab" id="traces">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Recent traces</h2>
+        <span class="grow"></span>
+        <button class="ghost" id="refresh-traces">Refresh</button>
+      </div>
+      <div id="traces-body"><div class="empty">loading</div></div>
+    </section>
+    <section class="tab" id="writes">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Note writes (audit trail)</h2>
+        <span class="grow"></span>
+        <button class="ghost" id="refresh-writes">Refresh</button>
+      </div>
+      <div id="writes-body"><div class="empty">loading</div></div>
+    </section>
+  </main>
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    async function fetchJson(url, opts = {}) {
+      const r = await fetch(url, opts);
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail || body);
+        throw new Error(`${r.status} ${detail}`);
+      }
+      return body;
+    }
+
+    function setTab(name) {
+      $$("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+      $$(".tab").forEach((t) => t.classList.toggle("active", t.id === name));
+      if (name === "traces") loadTraces();
+      if (name === "writes") loadWrites();
+    }
+    $$("nav button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+    async function bootstrap() {
+      try {
+        const h = await fetchJson("/api/health");
+        $("#version").textContent = `v${h.version}`;
+      } catch (e) {
+        $("#version").textContent = "offline";
+      }
+    }
+    bootstrap();
+
+    $("#send").addEventListener("click", async () => {
+      const prompt = $("#prompt").value.trim();
+      if (!prompt) return;
+      $("#send").disabled = true;
+      $("#chat-status").textContent = "running ...";
+      $("#chat-response").innerHTML = "";
+      const start = performance.now();
+      try {
+        const data = await fetchJson("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const latency = data.latency_ms ?? Math.round(performance.now() - start);
+        const tools = (data.tool_log || []).map((t) => {
+          const status = t.error ? `error: ${t.error}` : "ok";
+          return `  - ${t.name} (${t.latency_ms}ms): ${status}`;
+        }).join("\n");
+        const meta = `[${data.result.provider}/${data.result.model}, ${latency}ms, ${(data.tool_log || []).length} tool calls, trace ${data.trace_id.slice(0, 8)}]`;
+        const tail = tools ? `\n\n${tools}` : "";
+        $("#chat-response").innerHTML = `<pre>${escapeHtml(data.result.text || "(no text response)")}</pre><div class="status">${escapeHtml(meta)}${escapeHtml(tail)}</div>`;
+        $("#chat-status").textContent = "";
+      } catch (e) {
+        $("#chat-response").innerHTML = `<pre class="error">${escapeHtml(e.message)}</pre>`;
+        $("#chat-status").textContent = "";
+      } finally {
+        $("#send").disabled = false;
+      }
+    });
+
+    async function loadTraces() {
+      const body = $("#traces-body");
+      body.innerHTML = '<div class="empty">loading</div>';
+      try {
+        const data = await fetchJson("/api/traces?limit=50");
+        if (!data.traces.length) {
+          body.innerHTML = '<div class="empty">no traces yet</div>';
+          return;
+        }
+        const rows = data.traces.map((t) => {
+          const status = t.status === "success"
+            ? '<span class="pill success">success</span>'
+            : '<span class="pill error">error</span>';
+          const prompt = t.prompt.length > 80 ? t.prompt.slice(0, 80) + "..." : t.prompt;
+          return `<tr><td class="muted">${escapeHtml(t.created_at)}</td><td>${escapeHtml(t.provider)}</td><td>${escapeHtml(t.model)}</td><td>${status}</td><td>${escapeHtml(prompt)}</td></tr>`;
+        }).join("");
+        body.innerHTML = `<table><thead><tr><th>created_at</th><th>provider</th><th>model</th><th>status</th><th>prompt</th></tr></thead><tbody>${rows}</tbody></table>`;
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+    $("#refresh-traces").addEventListener("click", loadTraces);
+
+    async function loadWrites() {
+      const body = $("#writes-body");
+      body.innerHTML = '<div class="empty">loading</div>';
+      try {
+        const data = await fetchJson("/api/writes?limit=50");
+        if (!data.writes.length) {
+          body.innerHTML = '<div class="empty">no writes yet</div>';
+          return;
+        }
+        const rows = data.writes.map((w) => `<tr><td class="muted">${escapeHtml(w.created_at)}</td><td>${escapeHtml(w.operation)}</td><td>${escapeHtml(w.rel_path)}</td><td>${w.bytes_after - w.bytes_before} bytes</td></tr>`).join("");
+        body.innerHTML = `<table><thead><tr><th>created_at</th><th>operation</th><th>path</th><th>delta</th></tr></thead><tbody>${rows}</tbody></table>`;
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+    $("#refresh-writes").addEventListener("click", loadWrites);
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      })[c]);
+    }
+  </script>
+</body>
+</html>
