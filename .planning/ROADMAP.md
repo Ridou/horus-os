@@ -18,7 +18,7 @@
 - [x] **Phase 04: Tool registry**, Register a callable as a tool, expose it to the agent, log every invocation. First example tool: read a local file. (completed 2026-05-23)
 - [x] **Phase 05: Memory layer, read path**, Agent searches a markdown notes folder and reads files. (completed 2026-05-23)
 - [x] **Phase 06: Memory layer, write path**, Agent appends to the notes folder with a structured trail. Every write is reviewable. (completed 2026-05-23)
-- [ ] **Phase 07: CLI surface**, `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve`, `traces`.
+- [~] **Phase 07: CLI surface**, `horus-os run "<prompt>"` runs an agent against the local stack. Output is structured. Also: `init`, `serve`, `traces`. (07-00 shipped 2026-05-23, 07-01 multi-turn loop + run pending)
 - [ ] **Phase 08: Web chat and dashboard**, Next.js app served locally. Hosts a chat surface and a traces explorer.
 - [ ] **Phase 09: Setup wizard with API key onboarding**, `horus-os init` walks a new user through configuration. Direct links to Anthropic console and Google AI Studio. Validates keys with a live ping before saving. Idempotent and resumable.
 - [ ] **Phase 10: Three-OS install verification**, Fresh-VM install on macOS, Ubuntu 22.04, Windows 11.
@@ -28,6 +28,6 @@
 
 - Total phases: 11
 - Completed phases: 6
-- Total plans: 6
-- Completed plans: 6
-- Percent: 55
+- Total plans: 7
+- Completed plans: 7
+- Percent: 55  (07-00 shipped, 07-01 pending so phase 07 still in flight)

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
-status: phase_complete
-stopped_at: Phase 06 shipped, ready for Phase 07 planning
-last_updated: "2026-05-23T07:00:00Z"
-last_activity: 2026-05-23, Phase 06 (memory layer write path with audit trail) complete
+status: phase_in_progress
+stopped_at: Phase 07-00 shipped, 07-01 (multi-turn loop + run) pending
+last_updated: "2026-05-23T07:45:00Z"
+last_activity: 2026-05-23, Phase 07-00 (CLI scaffold + init + traces + serve stub) complete
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 7
+  completed_plans: 7
   percent: 55
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 07, CLI surface (next up)
+**Current focus:** Phase 07-01, multi-turn loop + run subcommand (next up)
 
 ## Current Position
 
-Phase: 07 (cli-surface), READY TO PLAN
-Plan: 0 of N
-Status: Phase 06 complete, Phase 07 ready to plan
-Last activity: 2026-05-23, Phase 06 shipped (create_note, append_note, NoteWrite audit trail, schema v2 migration, 21 new tests, 97 total). v0.1 milestone is 55 percent complete.
+Phase: 07 (cli-surface), IN PROGRESS
+Plan: 07-01 of 2
+Status: 07-00 complete, 07-01 ready to plan
+Last activity: 2026-05-23, Phase 07-00 shipped (Config dataclass, init/traces/serve subcommands via argparse, 22 new tests, 120 total). v0.1 milestone is 55% complete.
 
 ### v0.1 Foundation Milestone Snapshot
 
