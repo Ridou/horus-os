@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from horus_os import __version__
-from horus_os.cli import run_init, run_run, run_serve, run_traces
+from horus_os.cli import run_agents, run_init, run_run, run_serve, run_traces
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,6 +116,84 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not persist a trace row for this run.",
     )
     run_p.set_defaults(func=run_run)
+
+    agents_p = sub.add_parser("agents", help="Manage agent profiles")
+    agents_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    agents_p.set_defaults(func=run_agents)
+
+    agents_sub = agents_p.add_subparsers(dest="agents_command", metavar="<operation>")
+
+    list_p = agents_sub.add_parser("list", help="List all agent profiles")
+    list_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    list_p.set_defaults(func=run_agents, agents_command="list")
+
+    show_p = agents_sub.add_parser("show", help="Show one agent profile in detail")
+    show_p.add_argument("name", help="Profile name")
+    show_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    show_p.set_defaults(func=run_agents, agents_command="show")
+
+    create_p = agents_sub.add_parser("create", help="Create a new agent profile")
+    create_p.add_argument("--name", required=True)
+    create_p.add_argument("--system-prompt", dest="system_prompt", required=True)
+    create_p.add_argument("--model", default=None)
+    create_p.add_argument(
+        "--allowed-tools",
+        dest="allowed_tools",
+        default=None,
+        help="Comma-separated tool names, or 'all' for unrestricted (default).",
+    )
+    create_p.add_argument("--memory-scope", dest="memory_scope", default=None)
+    create_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    create_p.set_defaults(func=run_agents, agents_command="create")
+
+    edit_p = agents_sub.add_parser("edit", help="Edit an existing agent profile")
+    edit_p.add_argument("name", help="Profile name to edit")
+    edit_p.add_argument("--system-prompt", dest="system_prompt", default=None)
+    edit_p.add_argument("--model", default=None)
+    edit_p.add_argument(
+        "--allowed-tools",
+        dest="allowed_tools",
+        default=None,
+        help="Comma-separated tool names, or 'all' to clear restrictions.",
+    )
+    edit_p.add_argument("--memory-scope", dest="memory_scope", default=None)
+    edit_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    edit_p.set_defaults(func=run_agents, agents_command="edit")
+
+    delete_p = agents_sub.add_parser("delete", help="Delete an agent profile")
+    delete_p.add_argument("name", help="Profile name to delete")
+    delete_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    delete_p.set_defaults(func=run_agents, agents_command="delete")
 
     return parser
 
