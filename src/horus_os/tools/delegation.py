@@ -1,18 +1,24 @@
 """Delegation primitives for multi-agent orchestration.
 
 This module hosts the shared `IterationBudget` (a lock-protected counter
-that spans a whole delegation tree) and the `_filter_registry` helper that
-narrows a master `ToolRegistry` to a sub-agent's `allowed_tools`.
-
-The `make_delegate_tool` factory (which wires the `delegate_to_agent`
-tool into the runtime) is added in Plan 13-02.
+that spans a whole delegation tree), the `_filter_registry` helper that
+narrows a master `ToolRegistry` to a sub-agent's `allowed_tools`, and
+the `make_delegate_tool` factory that produces a `delegate_to_agent`
+tool bound to a database, a master registry, a parent trace, and a
+shared budget.
 """
 
 from __future__ import annotations
 
 import threading
+import time
+from typing import TYPE_CHECKING
 
 from horus_os.tools.registry import ToolRegistry
+from horus_os.types import Tool
+
+if TYPE_CHECKING:
+    from horus_os.storage import Database
 
 
 class IterationBudget:
@@ -67,3 +73,80 @@ def _filter_registry(
         if tool is not None:
             filtered.register(tool)
     return filtered
+
+
+def make_delegate_tool(
+    *,
+    db: Database,
+    master_registry: ToolRegistry,
+    parent_trace_id: str,
+    budget: IterationBudget,
+    provider: str = "anthropic",
+) -> Tool:
+    """Build a `delegate_to_agent` Tool bound to a delegation context.
+
+    The returned tool's handler:
+      1. Looks up the named sub-agent profile in `db`.
+      2. Returns an error string if the profile is missing (consistent
+         with `execute_tool_uses` exception capture).
+      3. Filters `master_registry` to the profile's `allowed_tools`.
+      4. Calls `run_agent_loop` with the shared `budget` and the
+         profile's `system_prompt`.
+      5. Records the sub-agent trace with `parent_trace_id` and the
+         profile name so the dashboard can reconstruct the tree.
+      6. Returns the sub-agent's final text response.
+
+    The closure captures `db`, `master_registry`, `parent_trace_id`,
+    `budget`, and `provider` so the tool input itself stays a simple
+    JSON payload of `agent_name` and `task` strings.
+    """
+    # Local imports break the agent <-> delegation import cycle at module
+    # load time. agent.run_agent_loop imports IterationBudget from this
+    # module, so we defer the reverse direction to call time.
+    from horus_os.agent import run_agent_loop
+
+    def _delegate(agent_name: str, task: str) -> str:
+        profile = db.load_profile(agent_name)
+        if profile is None:
+            return f"Error: agent profile {agent_name!r} not found"
+        sub_registry = _filter_registry(master_registry, profile.allowed_tools)
+        start = time.perf_counter()
+        result = run_agent_loop(
+            task,
+            registry=sub_registry,
+            provider=provider,
+            model=profile.default_model,
+            budget=budget,
+            system_prompt=profile.system_prompt,
+        )
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        db.record_trace(
+            task,
+            result,
+            parent_trace_id=parent_trace_id,
+            agent_profile_name=profile.name,
+            latency_ms=latency_ms,
+        )
+        return result.text
+
+    return Tool(
+        name="delegate_to_agent",
+        description=(
+            "Delegate a subtask to a named sub-agent. Returns the sub-agent's final text response."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "description": "Name of the agent profile to delegate to.",
+                },
+                "task": {
+                    "type": "string",
+                    "description": "The task or question to send to the sub-agent.",
+                },
+            },
+            "required": ["agent_name", "task"],
+        },
+        handler=_delegate,
+    )

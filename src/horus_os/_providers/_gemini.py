@@ -136,7 +136,7 @@ async def call_gemini_async(
 class Conversation:
     """Multi-turn Gemini conversation. Holds contents in the native SDK shape."""
 
-    def __init__(self, *, model: str | None = None) -> None:
+    def __init__(self, *, model: str | None = None, system_prompt: str | None = None) -> None:
         from google import genai
 
         api_key = _read_api_key()
@@ -144,6 +144,7 @@ class Conversation:
         self._model = model or DEFAULT_MODEL
         self._contents: list[Any] = []
         self._last_model_content: Any = None
+        self._system_prompt = system_prompt or ""
 
     @property
     def model(self) -> str:
@@ -184,6 +185,11 @@ class Conversation:
                 )
             self._contents.append(genai_types.Content(role="user", parts=parts))
 
+        # Gemini's GenerateContentConfig accepts system_instruction. We pass
+        # it on every send() so the system prompt is applied to every turn,
+        # not only the first prompt. _build_config consumes it from kwargs.
+        if self._system_prompt and "system_instruction" not in kwargs:
+            kwargs["system_instruction"] = self._system_prompt
         config = _build_config(tools, kwargs)
         request: dict[str, Any] = {"model": self._model, "contents": self._contents}
         if config is not None:

@@ -118,13 +118,14 @@ async def call_anthropic_async(
 class Conversation:
     """Multi-turn Anthropic conversation. Holds message history in the native SDK shape."""
 
-    def __init__(self, *, model: str | None = None) -> None:
+    def __init__(self, *, model: str | None = None, system_prompt: str | None = None) -> None:
         from anthropic import Anthropic
 
         self._client = Anthropic()
         self._model = model or DEFAULT_MODEL
         self._messages: list[dict[str, Any]] = []
         self._last_assistant_content: list[Any] = []
+        self._system_prompt = system_prompt or ""
 
     @property
     def model(self) -> str:
@@ -167,6 +168,10 @@ class Conversation:
             "max_tokens": max_tokens,
             "messages": self._messages,
         }
+        # Anthropic requires `system` on every messages.create call, so it
+        # must be sent on every send() turn (not just the first prompt).
+        if self._system_prompt:
+            request["system"] = self._system_prompt
         anthropic_tools = _tools_to_anthropic(tools)
         if anthropic_tools is not None:
             request["tools"] = anthropic_tools

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 from horus_os._providers import _anthropic, _gemini
+from horus_os.tools.delegation import IterationBudget
 from horus_os.tools.loop import execute_tool_uses
 from horus_os.tools.registry import ToolRegistry
 from horus_os.types import AgentResult, Tool, ToolResult
@@ -29,10 +30,15 @@ def _check_provider(provider: str) -> None:
         )
 
 
-def _new_conversation(provider: str, model: str | None) -> Any:
+def _new_conversation(
+    provider: str,
+    model: str | None,
+    *,
+    system_prompt: str | None = None,
+) -> Any:
     if provider == "anthropic":
-        return _anthropic.Conversation(model=model)
-    return _gemini.Conversation(model=model)
+        return _anthropic.Conversation(model=model, system_prompt=system_prompt)
+    return _gemini.Conversation(model=model, system_prompt=system_prompt)
 
 
 def run_agent(
@@ -72,27 +78,39 @@ def run_agent_loop(
     provider: str = "anthropic",
     model: str | None = None,
     max_iterations: int = 10,
+    budget: IterationBudget | None = None,
+    system_prompt: str | None = None,
     on_tool_result: Callable[[ToolResult], None] | None = None,
 ) -> AgentResult:
     """Run the multi-turn tool-use loop.
 
     Sends `prompt`, executes any tool_uses the model returns through
     `registry`, sends the tool_results back, and repeats until the
-    model returns a text-only response or `max_iterations` is reached.
+    model returns a text-only response or the iteration budget is
+    exhausted.
+
+    `budget` is an optional `IterationBudget` shared across a delegation
+    tree. When None a fresh budget of `max_iterations` is created so
+    existing single-agent callers behave unchanged. When provided,
+    `max_iterations` is ignored.
+
+    `system_prompt` is forwarded to the provider's Conversation and
+    applied on every turn.
 
     `on_tool_result` (if provided) is called with each ToolResult as
     it is captured. Logger exceptions are swallowed by
     `execute_tool_uses`.
     """
     _check_provider(provider)
-    if max_iterations < 1:
+    if budget is None and max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
-    conversation = _new_conversation(provider, model)
+    _budget = budget if budget is not None else IterationBudget(max_iterations)
+    conversation = _new_conversation(provider, model, system_prompt=system_prompt)
     tools = registry.list()
     result = conversation.send(prompt=prompt, tools=tools)
-    iteration = 0
-    while result.tool_uses and iteration < max_iterations:
+    while result.tool_uses:
+        if not _budget.consume():
+            break
         outcomes = execute_tool_uses(registry, result, on_log=on_tool_result)
-        iteration += 1
         result = conversation.send(tool_results=outcomes, tools=tools)
     return result
