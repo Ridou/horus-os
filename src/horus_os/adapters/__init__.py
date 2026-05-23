@@ -20,10 +20,12 @@ from horus_os.adapters.base import (
     AdapterContext,
     discover_adapters,
 )
+from horus_os.adapters.webhook import WebhookAdapter
 
 __all__ = [
     "ADAPTER_ENTRY_POINT_GROUP",
     "Adapter",
     "AdapterContext",
+    "WebhookAdapter",
     "discover_adapters",
 ]

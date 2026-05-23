@@ -44,6 +44,9 @@ dev = [
 [project.scripts]
 horus-os = "horus_os.__main__:main"
 
+[project.entry-points."horus_os.adapters"]
+webhook = "horus_os.adapters.webhook:WebhookAdapter"
+
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"
 Issues = "https://github.com/Ridou/horus-os/issues"
