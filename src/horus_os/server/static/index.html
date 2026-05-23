@@ -45,6 +45,7 @@
     .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
     .pill.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
     .pill.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
+    .pill.muted { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
     pre { background: var(--bg-elev); border: 1px solid var(--border); padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; margin: 0; }
     .response { margin-top: 16px; }
     .status { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
@@ -68,6 +69,7 @@
     <button data-tab="traces">Traces</button>
     <button data-tab="agents">Agents</button>
     <button data-tab="writes">Writes</button>
+    <button data-tab="adapters">Adapters</button>
   </nav>
   <main>
     <section class="tab active" id="chat">
@@ -102,10 +104,21 @@
       </div>
       <div id="writes-body"><div class="empty">loading</div></div>
     </section>
+    <section class="tab" id="adapters">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Adapter status</h2>
+        <span class="grow"></span>
+        <button class="ghost" id="refresh-adapters">Refresh</button>
+      </div>
+      <div id="adapters-body"><div class="empty">loading</div></div>
+    </section>
   </main>
   <script>
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
+
+    // Phase 27: poll interval for the Adapters tab; cleared on tab switch.
+    let adaptersPoll = null;
 
     async function fetchJson(url, opts = {}) {
       const r = await fetch(url, opts);
@@ -120,9 +133,18 @@
     function setTab(name) {
       $$("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
       $$(".tab").forEach((t) => t.classList.toggle("active", t.id === name));
+      // Clear any previous adapters poll; restart only if the new tab needs it.
+      if (adaptersPoll) {
+        clearInterval(adaptersPoll);
+        adaptersPoll = null;
+      }
       if (name === "traces") loadTraces();
       if (name === "agents") loadAgents();
       if (name === "writes") loadWrites();
+      if (name === "adapters") {
+        loadAdapters();
+        adaptersPoll = setInterval(loadAdapters, 5000);
+      }
     }
     $$("nav button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -326,6 +348,52 @@
       }
     }
     $("#refresh-writes").addEventListener("click", loadWrites);
+
+    async function loadAdapters() {
+      const body = $("#adapters-body");
+      try {
+        const data = await fetchJson("/api/adapters");
+        if (!data.adapters.length) {
+          body.innerHTML = '<div class="empty">no adapters discovered</div>';
+          return;
+        }
+        const rows = data.adapters.map((a) => {
+          let pillClass = "muted";
+          if (a.status === "running") pillClass = "success";
+          else if (a.status === "error") pillClass = "error";
+          const pill = `<span class="pill ${pillClass}">${escapeHtml(a.status)}</span>`;
+          const last = a.last_activity_at || "(never)";
+          const errMsgShort = a.error_message
+            ? escapeHtml(a.error_message.length > 80 ? a.error_message.slice(0, 80) + "..." : a.error_message)
+            : "";
+          let toggle;
+          if (!a.supports_toggle) {
+            toggle = `<button class="ghost" disabled title="adapter has no start/stop hooks">n/a</button>`;
+          } else if (a.status === "running") {
+            toggle = `<button class="ghost" data-action="disable" data-name="${escapeHtml(a.name)}">Disable</button>`;
+          } else {
+            toggle = `<button class="ghost" data-action="enable" data-name="${escapeHtml(a.name)}">Enable</button>`;
+          }
+          return `<tr><td>${escapeHtml(a.name)}</td><td>${pill}</td><td class="muted">${escapeHtml(last)}</td><td>${a.error_count}</td><td class="muted" title="${escapeHtml(a.error_message || "")}">${errMsgShort}</td><td>${toggle}</td></tr>`;
+        }).join("");
+        body.innerHTML = `<table><thead><tr><th>name</th><th>status</th><th>last_activity_at</th><th>errors</th><th>error_message</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.querySelectorAll("button[data-action]").forEach((btn) => {
+          btn.addEventListener("click", () => toggleAdapter(btn.dataset.name, btn.dataset.action));
+        });
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+    $("#refresh-adapters").addEventListener("click", loadAdapters);
+
+    async function toggleAdapter(name, action) {
+      try {
+        await fetchJson(`/api/adapters/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+        loadAdapters();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({
