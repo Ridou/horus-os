@@ -30,7 +30,7 @@
 
 **Parallelization:** 12 → 13 → (14 ∥ 15 ∥ 16 ∥ 17) → 18 → 19 → 20 → 21. Phase 12 (agent profile schema + migration) gates everything because it changes the storage layer. After 13 (runtime support for delegation) lands, surfaces and adapters can ship in parallel.
 
-- [ ] **Phase 12: Agent profile model and schema migration**, `agent_profiles` table with name, system prompt, default model, allowed tools, memory scope. Idempotent forward migration from v0.1 schema. CRUD API. At least one default agent auto-created on `init`.
+- [x] **Phase 12: Agent profile model and schema migration**, `agent_profiles` table with name, system prompt, default model, allowed tools, memory scope. Idempotent forward migration from v0.1 schema. CRUD API. At least one default agent auto-created on `init`. (completed 2026-05-23)
 - [ ] **Phase 13: Multi-agent orchestration runtime**, `delegate_to_agent` tool. Parent and child trace linkage. A coordinator can invoke one or more sub-agents synchronously or in parallel. Iteration bound applies to the whole tree.
 - [ ] **Phase 14: Streaming response support**, `run_agent_stream` async generator. Anthropic and Gemini streaming SDK paths. `run_agent` and `run_agent_loop` continue to work unchanged for non-streaming callers.
 - [ ] **Phase 15: CLI multi-agent surface**, `horus-os agents` subcommand (list, show, create, edit, delete). `horus-os run --agent <name>`. Streaming output to terminal by default; `--no-stream` falls back to the v0.1 behavior.
@@ -55,7 +55,7 @@
 **Plans**: 1 plan
 
 Plans:
-- [ ] 12-01-PLAN.md -- AgentProfile type, agent_profiles DDL, CRUD API, default agent bootstrap
+- [x] 12-01-PLAN.md -- AgentProfile type, agent_profiles DDL, CRUD API, default agent bootstrap
 
 ### Phase 13: Multi-agent orchestration runtime
 **Goal**: Coordinator can delegate to sub-agents through a registered tool; parent/child trace links capture the call tree.
@@ -191,7 +191,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 01-11 | v0.1 | 13/13 | Complete | 2026-05-23 |
-| 12. Agent profile model and schema migration | v0.2 | 0/1 | Not started | - |
+| 12. Agent profile model and schema migration | v0.2 | 1/1 | Complete    | 2026-05-23 |
 | 13. Multi-agent orchestration runtime | v0.2 | 0/1 | Not started | - |
 | 14. Streaming response support | v0.2 | 0/1 | Not started | - |
 | 15. CLI multi-agent surface | v0.2 | 0/1 | Not started | - |
