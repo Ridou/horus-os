@@ -1,0 +1,133 @@
+"""Configuration for a horus-os installation.
+
+A single TOML file at `<data_dir>/config.toml` holds the installation's
+runtime settings. The Config dataclass loads it on startup, applies the
+HORUS_OS_DATA_DIR environment override, and falls back to platform
+defaults when no explicit data_dir is supplied.
+
+The schema is intentionally small for v0.1. Future phases will add
+sections for transport (web port), agent defaults, and tool sandbox
+configuration. Adding a field is additive; readers that miss a field
+get the default from the dataclass.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+import tomllib
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Any
+
+CONFIG_FILENAME = "config.toml"
+DEFAULT_NOTES_SUBDIR = "notes"
+DEFAULT_DB_FILENAME = "horus.sqlite"
+
+
+@dataclass
+class Config:
+    """Runtime settings for one horus-os installation."""
+
+    data_dir: Path
+    db_path: Path
+    notes_dir: Path
+    default_provider: str = "anthropic"
+    anthropic_model: str = "claude-sonnet-4-6"
+    gemini_model: str = "gemini-2.5-flash"
+
+    @classmethod
+    def default_data_dir(cls) -> Path:
+        """Return the platform-appropriate default data directory."""
+        env_override = os.environ.get("HORUS_OS_DATA_DIR")
+        if env_override:
+            return Path(env_override).expanduser()
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "horus-os"
+        if sys.platform == "win32":
+            appdata = os.environ.get("APPDATA")
+            base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+            return base / "horus-os"
+        xdg = os.environ.get("XDG_DATA_HOME")
+        base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+        return base / "horus-os"
+
+    @classmethod
+    def with_defaults(cls, data_dir: Path | None = None) -> Config:
+        """Build a Config with default paths under `data_dir`."""
+        resolved = (data_dir or cls.default_data_dir()).expanduser()
+        return cls(
+            data_dir=resolved,
+            db_path=resolved / DEFAULT_DB_FILENAME,
+            notes_dir=resolved / DEFAULT_NOTES_SUBDIR,
+        )
+
+    @classmethod
+    def load(cls, data_dir: Path | None = None) -> Config:
+        """Load config from `data_dir/config.toml` or return defaults."""
+        base = cls.with_defaults(data_dir)
+        config_path = base.data_dir / CONFIG_FILENAME
+        if not config_path.exists():
+            return base
+        try:
+            with config_path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            return base
+        return _apply_toml(base, data)
+
+    def save(self) -> None:
+        """Persist this config to `data_dir/config.toml` atomically."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        config_path = self.data_dir / CONFIG_FILENAME
+        text = _dump_toml(self)
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=".config.toml.", suffix=".tmp", dir=str(self.data_dir)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.replace(tmp_name, config_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except FileNotFoundError:
+                pass
+            raise
+
+
+def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
+    providers = data.get("providers", {}) or {}
+    storage = data.get("storage", {}) or {}
+    notes = data.get("notes", {}) or {}
+    overrides: dict[str, Any] = {}
+    if "db_path" in storage:
+        overrides["db_path"] = Path(storage["db_path"]).expanduser()
+    if "notes_dir" in notes:
+        overrides["notes_dir"] = Path(notes["notes_dir"]).expanduser()
+    if "default" in providers:
+        overrides["default_provider"] = str(providers["default"])
+    if "anthropic_model" in providers:
+        overrides["anthropic_model"] = str(providers["anthropic_model"])
+    if "gemini_model" in providers:
+        overrides["gemini_model"] = str(providers["gemini_model"])
+    return replace(base, **overrides)
+
+
+def _dump_toml(config: Config) -> str:
+    return (
+        "# horus-os configuration\n"
+        "# Edit by hand or via `horus-os init --force`.\n"
+        "\n"
+        "[providers]\n"
+        f'default = "{config.default_provider}"\n'
+        f'anthropic_model = "{config.anthropic_model}"\n'
+        f'gemini_model = "{config.gemini_model}"\n'
+        "\n"
+        "[storage]\n"
+        f'db_path = "{config.db_path.as_posix()}"\n'
+        "\n"
+        "[notes]\n"
+        f'notes_dir = "{config.notes_dir.as_posix()}"\n'
+    )
