@@ -53,8 +53,16 @@ horus-os serve         # http://127.0.0.1:8765
 - `PROJECT.md`, project intent, core values, what is in and out of scope
 - `ROADMAP.md`, v0.1 milestone and what comes next
 - `ARCHITECTURE.md`, technical shape
-- `CONTRIBUTING.md`, how to engage
+- `CONTRIBUTING.md`, dev setup, workflow, and code style
+- `SECURITY.md`, how to report vulnerabilities
 - `CODE_OF_CONDUCT.md`, Contributor Covenant 2.1
+
+## Contributing
+
+Issues and pull requests are welcome. Start with `CONTRIBUTING.md` for
+dev setup and the workflow, and `PROJECT.md` for scope. New
+contributors should look for the `good first issue` and `help wanted`
+labels on the [issues page](https://github.com/Ridou/horus-os/issues).
 
 ## License
 

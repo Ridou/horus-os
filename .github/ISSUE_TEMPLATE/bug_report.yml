@@ -1,0 +1,96 @@
+name: Bug report
+description: Report a defect in horus-os.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out the
+        sections below so the issue can be reproduced and triaged
+        quickly.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear, factual description of the defect.
+      placeholder: "Running `horus-os init --interactive` fails on Windows when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reproduce the bug, including any commands.
+      placeholder: |
+        1. pip install -e '.[all]'
+        2. horus-os init --interactive
+        3. Enter API key when prompted
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened. Include exact error messages or stack traces.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: horus-os version
+      description: Output of `pip show horus-os | grep Version`, or commit SHA.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux (Ubuntu, Debian, Fedora, etc.)
+        - Windows
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`.
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Trace output, dashboard logs, or terminal output. Redact API keys.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I redacted any API keys, personal information, or private paths from the report.
+          required: true

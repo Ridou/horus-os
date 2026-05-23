@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussion or design question
+    url: https://github.com/Ridou/horus-os/discussions
+    about: For open-ended questions, design conversations, or roadmap input. Use Discussions instead of an issue.
+  - name: Security vulnerability
+    url: https://github.com/Ridou/horus-os/security/advisories/new
+    about: Report security issues privately through GitHub Security Advisories. See SECURITY.md.

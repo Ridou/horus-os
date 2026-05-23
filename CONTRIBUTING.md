@@ -1,20 +1,157 @@
-# Contributing
+# Contributing to horus-os
 
-`horus-os` is in pre-alpha. The project welcomes feedback and ideas, but is not yet open to outside pull requests at scale.
+Thanks for your interest. `horus-os` is open to outside contributions
+as of v0.1.0. This guide covers how to set up your environment, what
+the project will and will not accept, and how to ship a change end to
+end.
 
-## How to engage right now
+If anything here is wrong, unclear, or out of date, open an issue.
 
-1. Read `PROJECT.md` to confirm scope alignment.
-2. Read `ROADMAP.md` to see what is being worked on.
-3. Open an issue if you spot a design flaw, missing requirement, or out-of-scope assumption.
+## Scope check
 
-## Ground rules
+Before opening a substantial PR, read:
 
-1. No personal information about any contributor or maintainer in committed text.
-2. Apache 2.0 license applies to every contribution.
-3. Discussion happens in issues, not by direct message.
-4. Architectural decisions land in `ARCHITECTURE.md`. Roadmap decisions land in `ROADMAP.md`. No long-lived branches that fork project direction without a roadmap update.
+1. `PROJECT.md`, the project intent and out-of-scope list.
+2. `ROADMAP.md`, the current milestone and phases.
+3. `ARCHITECTURE.md`, the technical shape.
 
-## When the project opens to PRs
+Changes that align with an open phase or a clearly stated roadmap item
+get reviewed fast. Changes that expand scope or fork project direction
+need a roadmap update first. Open an issue and propose the scope change
+before writing the code.
 
-The pre-alpha gate lifts once v0.1 ships. At that point this file gets a full contributor workflow: branch naming, commit style, sign-off requirements, review SLA.
+## Dev setup
+
+```
+git clone https://github.com/Ridou/horus-os.git
+cd horus-os
+python -m venv .venv
+source .venv/bin/activate         # Windows: .venv\Scripts\activate
+pip install -e '.[dev]'
+```
+
+That installs the package in editable mode, plus pytest, ruff, and the
+optional FastAPI surface used by the dashboard tests.
+
+To exercise the full provider stack locally:
+
+```
+pip install -e '.[all]'
+export ANTHROPIC_API_KEY=sk-ant-...     # optional
+export GEMINI_API_KEY=...               # optional
+```
+
+The test suite does not require live API keys. Provider tests use
+recorded responses and adapters.
+
+## Workflow
+
+1. **Pick or open an issue.** New contributors should look for the
+   `good first issue` and `help wanted` labels.
+2. **Branch from `main`.** Branch names use the pattern
+   `<type>/<short-slug>`, for example `feat/streaming-responses` or
+   `fix/wizard-windows-paths`. Long-lived forks of project direction
+   are not accepted without a roadmap update first.
+3. **Make your change.** Keep PRs focused. One concern per branch.
+4. **Add at least one regression test** when you can. The test
+   directory mirrors the source layout under `tests/`.
+5. **Run the local checks** before pushing:
+   ```
+   ruff check .
+   ruff format --check .
+   pytest
+   ```
+6. **Open a PR.** Fill out the template. Link the issue you are
+   closing.
+7. **CI must be green.** The matrix runs Ubuntu, macOS, and Windows
+   on Python 3.11 and 3.12. The `install-smoke` job verifies a fresh
+   `pip install` works on every supported OS. PRs that break the
+   matrix are not merged.
+
+## Code style
+
+- **Linter and formatter:** ruff. Configuration is in `pyproject.toml`.
+- **Line length:** 100, enforced by `ruff format`.
+- **Imports:** ruff handles ordering via the `I` rule set.
+- **Type hints:** use them on every new public function. Internal
+  helpers can skip them if obvious.
+- **Paths:** always `pathlib.Path`, never raw string concatenation.
+  Cross-OS regressions are caught by CI on Windows.
+- **No em-dashes** in committed prose. Use commas, periods, or
+  hyphens. This applies to code comments, docs, commit messages, and
+  user-visible strings.
+
+## Commit style
+
+Conventional commits, present tense, with an optional phase prefix
+when the change belongs to a tracked phase:
+
+```
+feat(02): agent runtime supports async tool execution
+fix(07): cli init handles a pre-existing config file
+docs: refresh architecture diagram
+test(05): cover memory read with unicode filenames
+```
+
+Prefixes in use: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`,
+`build`, `ci`, `perf`.
+
+## What does not get merged
+
+- **Personal information** in committed text. Names, emails, phone
+  numbers, IP addresses, host names, vault paths, API keys, account
+  identifiers. Use placeholder values like `your-api-key`,
+  `your-project-name`, or `~/.config/horus-os/`.
+- **AI provider abstractions** that hide the SDK from the caller. The
+  Anthropic and Google SDKs are first-class. Wrappers that obscure
+  cost, latency, or capabilities are rejected.
+- **SaaS-only features.** Optional cloud integrations are fine when
+  opt-in. Required cloud dependencies are not.
+- **Em-dashes.** See above. CI does not catch this; reviewers do.
+
+## License and attribution
+
+Apache 2.0 applies to every contribution. By opening a PR you confirm
+you have the right to license the change under Apache 2.0.
+
+New files do not require a per-file license header for v0.x. The
+top-level `LICENSE` covers the whole repository.
+
+## How to add a new provider
+
+1. Open an issue and propose the provider. Confirm it fits
+   `PROJECT.md` scope.
+2. Add the SDK as an optional dependency group in `pyproject.toml`
+   (`[<provider>]` and the `[all]` aggregate).
+3. Implement under `src/horus_os/_providers/_<provider>.py` matching
+   the existing Anthropic and Gemini surface (sync + async, plus a
+   `Conversation` class).
+4. Register the provider in the agent runtime dispatch table.
+5. Add provider-specific tests under `tests/_providers/`.
+
+## How to add a new tool
+
+1. Implement a factory in `src/horus_os/tools/builtin.py` (built-in)
+   or in your own module if external.
+2. The factory returns a `Tool` registered through `ToolRegistry`.
+3. Every tool invocation must be loggable. Side effects on disk must
+   land in the writes audit table when relevant.
+4. Add tests under `tests/tools/`.
+
+## How to add a CLI subcommand
+
+1. Create `src/horus_os/cli/<name>_cmd.py` with a `run()` function.
+2. Wire it into the argparse tree in `src/horus_os/cli/__init__.py`.
+3. Tests go under `tests/cli/`. Use the `CliRunner` fixture pattern
+   from existing tests.
+
+## Where to discuss
+
+- **Bugs and concrete proposals:** GitHub issues.
+- **Design questions and longer-form discussion:** GitHub Discussions
+  (enabled on the repo).
+- **Security reports:** see `SECURITY.md`.
+
+Pull requests are not the right place to negotiate scope. If a PR
+reveals a scope question, the review will pause until an issue
+captures the decision.

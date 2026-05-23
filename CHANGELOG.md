@@ -59,5 +59,18 @@ markdown notes folder with a full SQLite audit trail.
 
 ## [Unreleased]
 
+### Documentation
+
+- `CONTRIBUTING.md` rewritten with dev setup, branch and commit
+  conventions, code style, and contributor onboarding guidance now
+  that v0.1 has shipped.
+- `SECURITY.md` added with a private-disclosure process via GitHub
+  Security Advisories.
+- `ARCHITECTURE.md` replaced its placeholder with the actual shape
+  shipped in v0.1.0: module layout, data flow, storage shape,
+  configuration model.
+- GitHub issue templates (bug report, feature request) and pull
+  request template added under `.github/`.
+
 See `ROADMAP.md` for the v0.2 working list (multi-agent, web chat
 streaming, adapter ecosystem).
