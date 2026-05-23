@@ -74,13 +74,66 @@ def test_get_trace_returns_one(tmp_path: Path) -> None:
     )
     response = _client(tmp_path).get(f"/api/traces/{trace_id}")
     assert response.status_code == 200
-    assert response.json()["trace_id"] == trace_id
+    payload = response.json()
+    assert payload["trace_id"] == trace_id
+    # v0.1-shaped row: both multi-agent fields surface as null.
+    assert payload["parent_trace_id"] is None
+    assert payload["agent_profile_name"] is None
+
+
+def test_get_trace_includes_multi_agent_fields(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    trace_id = db.record_trace(
+        "hi",
+        AgentResult(text="ok", provider="anthropic", model="claude-sonnet-4-6"),
+        parent_trace_id="abc",
+        agent_profile_name="terse",
+    )
+    response = _client(tmp_path).get(f"/api/traces/{trace_id}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parent_trace_id"] == "abc"
+    assert payload["agent_profile_name"] == "terse"
 
 
 def test_get_trace_404(tmp_path: Path) -> None:
     _init_db(tmp_path)
     response = _client(tmp_path).get("/api/traces/00000000000000000000000000000000")
     assert response.status_code == 404
+
+
+def test_get_trace_children_returns_oldest_first(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    parent_id = db.record_trace("parent", AgentResult(text="p", provider="anthropic", model="m"))
+    child_one = db.record_trace(
+        "child one",
+        AgentResult(text="c1", provider="anthropic", model="m"),
+        parent_trace_id=parent_id,
+    )
+    child_two = db.record_trace(
+        "child two",
+        AgentResult(text="c2", provider="anthropic", model="m"),
+        parent_trace_id=parent_id,
+    )
+    response = _client(tmp_path).get(f"/api/traces/{parent_id}/children")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["children"]) == 2
+    assert payload["children"][0]["trace_id"] == child_one
+    assert payload["children"][1]["trace_id"] == child_two
+
+
+def test_get_trace_children_returns_empty_list(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    parent_id = db.record_trace("parent", AgentResult(text="p", provider="anthropic", model="m"))
+    response = _client(tmp_path).get(f"/api/traces/{parent_id}/children")
+    assert response.status_code == 200
+    assert response.json() == {"children": []}
+
+
+def test_get_trace_children_503_when_db_missing(tmp_path: Path) -> None:
+    response = _client(tmp_path).get("/api/traces/anything/children")
+    assert response.status_code == 503
 
 
 def test_writes_endpoint_returns_empty(tmp_path: Path) -> None:
