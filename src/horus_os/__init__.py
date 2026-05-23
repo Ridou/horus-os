@@ -1,6 +1,6 @@
 """horus-os: an open-source, self-hosted autonomous AI command center."""
 
-from horus_os.agent import run_agent, run_agent_async
+from horus_os.agent import run_agent, run_agent_async, run_agent_loop
 from horus_os.config import Config
 from horus_os.memory import (
     NotesStore,
@@ -44,5 +44,6 @@ __all__ = [
     "read_note_tool",
     "run_agent",
     "run_agent_async",
+    "run_agent_loop",
     "search_notes_tool",
 ]

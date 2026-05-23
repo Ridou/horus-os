@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from horus_os.types import AgentResult, Tool, ToolUse
+from horus_os.types import AgentResult, Tool, ToolResult, ToolUse
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -131,3 +131,65 @@ async def call_gemini_async(
     request.update(kwargs)
     response = await client.aio.models.generate_content(**request)
     return _parse_gemini_response(response, provider="gemini", model=chosen_model)
+
+
+class Conversation:
+    """Multi-turn Gemini conversation. Holds contents in the native SDK shape."""
+
+    def __init__(self, *, model: str | None = None) -> None:
+        from google import genai
+
+        api_key = _read_api_key()
+        self._client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        self._model = model or DEFAULT_MODEL
+        self._contents: list[Any] = []
+        self._last_model_content: Any = None
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def send(
+        self,
+        *,
+        prompt: str | None = None,
+        tool_results: list[ToolResult] | None = None,
+        tools: list[Tool] | None = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        from google.genai import types as genai_types
+
+        if prompt is None and tool_results is None:
+            raise ValueError("Conversation.send requires either prompt or tool_results")
+        if prompt is not None and tool_results is not None:
+            raise ValueError("Conversation.send accepts prompt or tool_results, not both")
+
+        if prompt is not None:
+            self._contents.append(
+                genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])
+            )
+        else:
+            assert tool_results is not None
+            if self._last_model_content is not None:
+                self._contents.append(self._last_model_content)
+            parts: list[Any] = []
+            for r in tool_results:
+                payload = {"content": str(r.output)} if r.error is None else {"error": r.error}
+                parts.append(
+                    genai_types.Part(
+                        function_response=genai_types.FunctionResponse(
+                            name=r.name, response=payload
+                        )
+                    )
+                )
+            self._contents.append(genai_types.Content(role="user", parts=parts))
+
+        config = _build_config(tools, kwargs)
+        request: dict[str, Any] = {"model": self._model, "contents": self._contents}
+        if config is not None:
+            request["config"] = config
+        response = self._client.models.generate_content(**request)
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            self._last_model_content = candidates[0].content
+        return _parse_gemini_response(response, provider="gemini", model=self._model)

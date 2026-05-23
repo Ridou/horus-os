@@ -1,0 +1,137 @@
+"""`horus-os run <prompt>` subcommand."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import time
+from typing import TextIO
+
+from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop
+from horus_os.config import Config
+from horus_os.memory import NotesStore
+from horus_os.memory.tools import (
+    append_note_tool,
+    create_note_tool,
+    list_notes_tool,
+    read_note_tool,
+    search_notes_tool,
+)
+from horus_os.storage import Database
+from horus_os.tools import ToolRegistry, read_file_tool
+from horus_os.types import AgentResult, ToolResult
+
+ENV_KEY_FOR = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+
+
+def run_run(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
+    prompt: str = args.prompt
+    config = Config.load(getattr(args, "data_dir", None))
+    provider: str = getattr(args, "provider", None) or config.default_provider
+    if provider not in SUPPORTED_PROVIDERS:
+        stderr.write(
+            f"Unknown provider {provider!r}. Supported providers: {', '.join(SUPPORTED_PROVIDERS)}\n"
+        )
+        return 2
+
+    if not _api_key_for(provider):
+        stderr.write(
+            f"No API key found for {provider}. Set {ENV_KEY_FOR[provider]} in your environment.\n"
+        )
+        if provider == "gemini":
+            stderr.write("GOOGLE_API_KEY is accepted as a fallback.\n")
+        return 2
+
+    if not config.db_path.exists():
+        stderr.write(f"No database at {config.db_path}. Run `horus-os init` first.\n")
+        return 1
+
+    model = getattr(args, "model", None) or _model_for(config, provider)
+    max_iterations: int = getattr(args, "max_iterations", 10)
+    record: bool = not getattr(args, "no_record", False)
+
+    db = Database(config.db_path)
+    notes_store = NotesStore(config.notes_dir, on_write=lambda w: _record_note_write(db, w))
+    registry = _build_default_registry(config, notes_store)
+
+    tool_log: list[ToolResult] = []
+    start = time.perf_counter()
+    try:
+        result = run_agent_loop(
+            prompt,
+            registry=registry,
+            provider=provider,
+            model=model,
+            max_iterations=max_iterations,
+            on_tool_result=tool_log.append,
+        )
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        if record:
+            db.record_trace(prompt, result, latency_ms=latency_ms)
+        _print_result(stdout, result, latency_ms, tool_log)
+        return 0
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        if record:
+            db.record_trace(
+                prompt,
+                AgentResult(text="", tool_uses=[], provider=provider, model=model, usage={}),
+                latency_ms=latency_ms,
+                status="error",
+                error_message=f"{type(exc).__name__}: {exc}",
+            )
+        stderr.write(f"Agent run failed: {type(exc).__name__}: {exc}\n")
+        return 1
+
+
+def _api_key_for(provider: str) -> str | None:
+    if provider == "anthropic":
+        return os.environ.get("ANTHROPIC_API_KEY")
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
+
+def _model_for(config: Config, provider: str) -> str:
+    if provider == "anthropic":
+        return config.anthropic_model
+    return config.gemini_model
+
+
+def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(read_file_tool(base_dir=config.notes_dir))
+    registry.register(list_notes_tool(notes_store))
+    registry.register(search_notes_tool(notes_store))
+    registry.register(read_note_tool(notes_store))
+    registry.register(create_note_tool(notes_store))
+    registry.register(append_note_tool(notes_store))
+    return registry
+
+
+def _record_note_write(db: Database, write) -> None:
+    db.record_note_write(
+        operation=write.operation,
+        rel_path=write.rel_path,
+        bytes_before=write.bytes_before,
+        bytes_after=write.bytes_after,
+        content=write.content,
+    )
+
+
+def _print_result(
+    stdout: TextIO,
+    result: AgentResult,
+    latency_ms: int,
+    tool_log: list[ToolResult],
+) -> None:
+    stdout.write(result.text.rstrip() + "\n")
+    stdout.write("\n")
+    stdout.write(
+        f"[{result.provider}/{result.model}, {latency_ms}ms, {len(tool_log)} tool calls]\n"
+    )
+    if tool_log:
+        for r in tool_log:
+            status = "ok" if r.error is None else r.error
+            stdout.write(f"  - {r.name} ({r.latency_ms}ms): {status}\n")

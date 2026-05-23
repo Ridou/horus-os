@@ -10,7 +10,8 @@ and assert on captured text.
 """
 
 from horus_os.cli.init_cmd import run_init
+from horus_os.cli.run_cmd import run_run
 from horus_os.cli.serve_cmd import run_serve
 from horus_os.cli.traces_cmd import run_traces
 
-__all__ = ["run_init", "run_serve", "run_traces"]
+__all__ = ["run_init", "run_run", "run_serve", "run_traces"]
