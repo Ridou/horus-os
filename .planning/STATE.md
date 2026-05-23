@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: foundation
 status: phase_complete
-stopped_at: Phase 05 shipped, ready for Phase 06 planning
-last_updated: "2026-05-23T06:30:00Z"
-last_activity: 2026-05-23, Phase 05 (memory layer read path) complete
+stopped_at: Phase 06 shipped, ready for Phase 07 planning
+last_updated: "2026-05-23T07:00:00Z"
+last_activity: 2026-05-23, Phase 06 (memory layer write path with audit trail) complete
 progress:
   total_phases: 11
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
-  percent: 45
+  completed_phases: 6
+  total_plans: 6
+  completed_plans: 6
+  percent: 55
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 06, Memory layer write path (next up)
+**Current focus:** Phase 07, CLI surface (next up)
 
 ## Current Position
 
-Phase: 06 (memory-layer-write-path), READY TO PLAN
+Phase: 07 (cli-surface), READY TO PLAN
 Plan: 0 of N
-Status: Phase 05 complete, Phase 06 ready to plan
-Last activity: 2026-05-23, Phase 05 shipped (NotesStore, NoteRef, 3 memory tool factories, 22 new tests, 76 total)
+Status: Phase 06 complete, Phase 07 ready to plan
+Last activity: 2026-05-23, Phase 06 shipped (create_note, append_note, NoteWrite audit trail, schema v2 migration, 21 new tests, 97 total). v0.1 milestone is 55 percent complete.
 
 ### v0.1 Foundation Milestone Snapshot
 
