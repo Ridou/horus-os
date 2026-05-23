@@ -1,5 +1,6 @@
 """horus-os: an open-source, self-hosted autonomous AI command center."""
 
+from horus_os.adapters import Adapter, AdapterContext, discover_adapters
 from horus_os.agent import run_agent, run_agent_async, run_agent_loop, run_agent_stream
 from horus_os.config import Config
 from horus_os.memory import (
@@ -34,6 +35,8 @@ def create_app(data_dir=None):
 
 
 __all__ = [
+    "Adapter",
+    "AdapterContext",
     "AgentProfile",
     "AgentResult",
     "Config",
@@ -51,6 +54,7 @@ __all__ = [
     "append_note_tool",
     "create_app",
     "create_note_tool",
+    "discover_adapters",
     "execute_tool_uses",
     "list_notes_tool",
     "read_file_tool",

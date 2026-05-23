@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from horus_os import __version__
+from horus_os.adapters.base import AdapterContext, discover_adapters
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
 from horus_os.memory import NotesStore
@@ -354,6 +355,21 @@ def create_app(data_dir: str | Path | None = None) -> Any:
             yield _sse({"type": "done", "trace_id": trace_id, "latency_ms": latency_ms})
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
+
+    # Discover and bind any third-party adapters declared via the
+    # `horus_os.adapters` entry point group. Discovery is a one-time
+    # walk at app construction; adapters mount their own routes on
+    # `app`. An individual adapter failure must not break the core
+    # dashboard, so both the discovery list and each bind call are
+    # treated defensively.
+    _adapters = discover_adapters()
+    _resolved_data_dir = Path(data_dir).expanduser() if data_dir is not None else _config().data_dir
+    _adapter_context = AdapterContext(config=_config(), data_dir=_resolved_data_dir)
+    for _adapter in _adapters:
+        try:
+            _adapter.bind(app, _adapter_context)
+        except Exception:
+            continue
 
     return app
 
