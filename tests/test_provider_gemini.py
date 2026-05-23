@@ -9,12 +9,12 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 from horus_os._providers import _gemini
-from horus_os.types import Tool
+from horus_os.types import Tool, ToolCallEvent
 
 
 class _Part:
@@ -193,3 +193,147 @@ def test_async_call_returns_agent_result(fake_gemini_module: types.ModuleType) -
         "candidates_token_count": 2,
         "total_token_count": 3,
     }
+
+
+class _StreamChunk:
+    """A fake of one item yielded by `generate_content_stream`."""
+
+    def __init__(
+        self,
+        text: str | None = None,
+        candidates: list[_Candidate] | None = None,
+    ) -> None:
+        self.text = text
+        self.candidates = candidates or []
+
+
+class _FakeStreamingAsyncModels:
+    last_request: dict[str, Any] | None = None
+    next_chunks: ClassVar[list[_StreamChunk]] = []
+
+    async def generate_content(self, **kwargs: Any) -> _Response:
+        _FakeStreamingAsyncModels.last_request = kwargs
+        return _Response(candidates=[])
+
+    def generate_content_stream(self, **kwargs: Any) -> Any:
+        _FakeStreamingAsyncModels.last_request = kwargs
+
+        async def _gen() -> Any:
+            for chunk in _FakeStreamingAsyncModels.next_chunks:
+                yield chunk
+
+        return _gen()
+
+
+class _FakeStreamingAioNamespace:
+    def __init__(self) -> None:
+        self.models = _FakeStreamingAsyncModels()
+
+
+class _FakeStreamingClient:
+    last_init_kwargs: dict[str, Any] | None = None
+
+    def __init__(self, **kwargs: Any) -> None:
+        _FakeStreamingClient.last_init_kwargs = kwargs
+        self.models = _FakeModels()
+        self.aio = _FakeStreamingAioNamespace()
+
+
+@pytest.fixture
+def fake_streaming_gemini_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
+    """Install a fake `google.genai` module that supports streaming."""
+    google_module = types.ModuleType("google")
+    genai_module = types.ModuleType("google.genai")
+    types_module = types.ModuleType("google.genai.types")
+    types_module.Tool = _FakeTool  # type: ignore[attr-defined]
+    types_module.GenerateContentConfig = _FakeGenerateContentConfig  # type: ignore[attr-defined]
+    genai_module.Client = _FakeStreamingClient  # type: ignore[attr-defined]
+    genai_module.types = types_module  # type: ignore[attr-defined]
+    google_module.genai = genai_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", google_module)
+    monkeypatch.setitem(sys.modules, "google.genai", genai_module)
+    monkeypatch.setitem(sys.modules, "google.genai.types", types_module)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    _FakeStreamingAsyncModels.last_request = None
+    _FakeStreamingAsyncModels.next_chunks = []
+    _FakeStreamingClient.last_init_kwargs = None
+    return genai_module
+
+
+async def _collect(gen: Any) -> list[Any]:
+    return [item async for item in gen]
+
+
+def test_stream_gemini_async_yields_tokens(
+    fake_streaming_gemini_module: types.ModuleType,
+) -> None:
+    _FakeStreamingAsyncModels.next_chunks = [
+        _StreamChunk(text="Hola"),
+        _StreamChunk(text=" mundo"),
+    ]
+    items = asyncio.run(_collect(_gemini.stream_gemini_async("hi", model="gemini-2.5-flash")))
+    assert items == ["Hola", " mundo"]
+
+
+def test_stream_gemini_async_skips_none_text(
+    fake_streaming_gemini_module: types.ModuleType,
+) -> None:
+    _FakeStreamingAsyncModels.next_chunks = [
+        _StreamChunk(text=None),  # heartbeat chunk with no text
+        _StreamChunk(text="ok"),
+        _StreamChunk(text=None),  # trailing usage-only chunk
+    ]
+    items = asyncio.run(_collect(_gemini.stream_gemini_async("hi", model="gemini-2.5-flash")))
+    assert items == ["ok"]
+
+
+def test_stream_gemini_async_yields_tool_call_event(
+    fake_streaming_gemini_module: types.ModuleType,
+) -> None:
+    function_call_part = _Part(
+        text=None,
+        function_call=_Part(name="echo", args={"text": "hi"}),
+    )
+    text_part = _Part(text="calling", function_call=None)
+    _FakeStreamingAsyncModels.next_chunks = [
+        _StreamChunk(text="calling"),
+        _StreamChunk(
+            text=None,
+            candidates=[
+                _Candidate(content=_Content(parts=[text_part, function_call_part])),
+            ],
+        ),
+    ]
+    items = asyncio.run(_collect(_gemini.stream_gemini_async("hi", model="gemini-2.5-flash")))
+    assert items[0] == "calling"
+    assert len(items) == 2
+    event = items[1]
+    assert isinstance(event, ToolCallEvent)
+    assert event.name == "echo"
+    assert event.input == {"text": "hi"}
+
+
+def test_stream_gemini_async_system_in_config(
+    fake_streaming_gemini_module: types.ModuleType,
+) -> None:
+    _FakeStreamingAsyncModels.next_chunks = [_StreamChunk(text="ok")]
+    asyncio.run(
+        _collect(
+            _gemini.stream_gemini_async("hi", model="gemini-2.5-flash", system="you are helpful")
+        )
+    )
+    request = _FakeStreamingAsyncModels.last_request
+    assert request is not None
+    config = request["config"]
+    assert getattr(config, "system_instruction", None) == "you are helpful"
+
+
+def test_stream_gemini_async_omits_config_when_no_system(
+    fake_streaming_gemini_module: types.ModuleType,
+) -> None:
+    _FakeStreamingAsyncModels.next_chunks = [_StreamChunk(text="ok")]
+    asyncio.run(_collect(_gemini.stream_gemini_async("hi", model="gemini-2.5-flash")))
+    request = _FakeStreamingAsyncModels.last_request
+    assert request is not None
+    assert "config" not in request

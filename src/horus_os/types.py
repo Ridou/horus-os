@@ -32,6 +32,20 @@ class ToolUse:
 
 
 @dataclass
+class ToolCallEvent:
+    """Synthetic event emitted by `run_agent_stream` when the model requests a tool call.
+
+    Unlike `ToolUse`, this is not a record of a turn's parsed response. It is a
+    notification surfaced mid-stream so consumers (CLI, dashboard) can observe
+    that the model asked for a tool without `run_agent_stream` itself dispatching
+    it. Tool execution remains the responsibility of `run_agent_loop`.
+    """
+
+    name: str
+    input: dict[str, Any]
+
+
+@dataclass
 class ToolResult:
     """The outcome of running a single tool_use through a registry handler."""
 

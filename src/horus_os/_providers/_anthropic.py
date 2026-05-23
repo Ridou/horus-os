@@ -6,9 +6,10 @@ the package loads cleanly without the SDK installed.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Any
 
-from horus_os.types import AgentResult, Tool, ToolResult, ToolUse
+from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult, ToolUse
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 1024
@@ -113,6 +114,42 @@ async def call_anthropic_async(
     request.update(kwargs)
     response = await client.messages.create(**request)
     return _parse_anthropic_response(response, provider="anthropic", model=chosen_model)
+
+
+async def stream_anthropic_async(
+    prompt: str,
+    *,
+    model: str,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    system: str | None = None,
+) -> AsyncGenerator[str | ToolCallEvent, None]:
+    """Stream incremental text tokens from Anthropic, then any tool-call events.
+
+    Yields each text delta as a `str`. After the text stream completes, the
+    final message is inspected and any `tool_use` blocks are emitted as
+    `ToolCallEvent` values so consumers can observe them. This function does
+    not execute tools, by design. See `run_agent_loop` for tool dispatch.
+    """
+    from anthropic import AsyncAnthropic
+
+    client = AsyncAnthropic()
+    request: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        request["system"] = system
+    async with client.messages.stream(**request) as stream:
+        async for text in stream.text_stream:
+            yield text
+        final_msg = await stream.get_final_message()
+        for block in getattr(final_msg, "content", []) or []:
+            if getattr(block, "type", None) == "tool_use":
+                yield ToolCallEvent(
+                    name=getattr(block, "name", ""),
+                    input=dict(getattr(block, "input", {}) or {}),
+                )
 
 
 class Conversation:

@@ -7,9 +7,10 @@ the package loads cleanly without the SDK installed.
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncGenerator
 from typing import Any
 
-from horus_os.types import AgentResult, Tool, ToolResult, ToolUse
+from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult, ToolUse
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -131,6 +132,47 @@ async def call_gemini_async(
     request.update(kwargs)
     response = await client.aio.models.generate_content(**request)
     return _parse_gemini_response(response, provider="gemini", model=chosen_model)
+
+
+async def stream_gemini_async(
+    prompt: str,
+    *,
+    model: str,
+    system: str | None = None,
+) -> AsyncGenerator[str | ToolCallEvent, None]:
+    """Stream incremental text tokens from Gemini, then any tool-call events.
+
+    Yields each non-empty `chunk.text` as a `str`. Function-call parts seen
+    during iteration are buffered and yielded as `ToolCallEvent` values after
+    the text stream completes, matching the Anthropic streaming surface. This
+    function does not execute tools, by design.
+    """
+    from google import genai
+
+    api_key = _read_api_key()
+    client = genai.Client(api_key=api_key) if api_key else genai.Client()
+    request: dict[str, Any] = {"model": model, "contents": prompt}
+    if system:
+        from google.genai import types as genai_types
+
+        request["config"] = genai_types.GenerateContentConfig(system_instruction=system)
+    tool_events: list[ToolCallEvent] = []
+    async for chunk in client.aio.models.generate_content_stream(**request):
+        if chunk.text:
+            yield chunk.text
+        for candidate in getattr(chunk, "candidates", None) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                fc = getattr(part, "function_call", None)
+                if fc is not None:
+                    tool_events.append(
+                        ToolCallEvent(
+                            name=getattr(fc, "name", "") or "",
+                            input=dict(getattr(fc, "args", {}) or {}),
+                        )
+                    )
+    for event in tool_events:
+        yield event
 
 
 class Conversation:
