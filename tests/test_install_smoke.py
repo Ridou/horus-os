@@ -61,3 +61,7 @@ def test_install_smoke_runs(tmp_path: Path) -> None:
     assert "agents delete smoke_test" in proc.stdout, proc.stdout
     # Public-surface import smoke ran.
     assert "public surface imports and discover_adapters()" in proc.stdout, proc.stdout
+    # v0.3 surface markers (Phase 30): per-module adapter imports and
+    # the TestClient pass against /api/adapters + the toggle 404 path.
+    assert "per-module adapter imports (lazy SDK pattern)" in proc.stdout, proc.stdout
+    assert "GET /api/adapters shape + toggle 404 path" in proc.stdout, proc.stdout

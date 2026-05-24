@@ -5,10 +5,15 @@ in a fresh environment with all extras. It exercises every CLI surface
 that does not require live API keys and asserts the exit codes plus a
 few substrings of the output.
 
-Phase 10 added the v0.1 checks. Phase 20 extends the script with the
+Phase 10 added the v0.1 checks. Phase 20 extended the script with the
 v0.2 surface: agents subcommand CRUD, on-disk schema v4, the buffered
 run path with a profile, public-surface imports, and the adapter
-discovery hook. All checks run offline; CI has no API keys.
+discovery hook. Phase 30 extends it again with the v0.3 surface:
+LifecycleAdapter + AdapterRegistry + AdapterEntry imports, the four
+bundled adapter classes (Discord, Slack, Email, Calendar), each
+adapter module's lazy-import path, and a TestClient pass against
+GET /api/adapters plus the toggle 404 path. All checks run offline;
+CI has no API keys or adapter tokens.
 
 Run locally:
 
@@ -36,12 +41,68 @@ DEFAULT_PROFILE_NAME = "default"
 
 PUBLIC_SURFACE_IMPORT_SNIPPET = (
     "from horus_os import ("
-    "Adapter, AdapterContext, ToolCallEvent, "
+    "Adapter, AdapterContext, AdapterEntry, AdapterRegistry, "
+    "LifecycleAdapter, ToolCallEvent, "
     "discover_adapters, run_agent_stream"
+    ")\n"
+    "from horus_os.adapters import ("
+    "CalendarAdapter, DiscordAdapter, EmailAdapter, "
+    "SlackAdapter, WebhookAdapter"
     ")\n"
     "adapters = discover_adapters()\n"
     "assert isinstance(adapters, list), repr(adapters)\n"
+    "assert len(adapters) >= 1, 'discover_adapters returned no entries'\n"
     "print('IMPORT_OK count=' + str(len(adapters)))\n"
+)
+
+# Phase 30: each of the four bundled adapter modules uses a lazy SDK
+# import so the module imports cleanly even when its optional extra
+# is not installed. CI installs `.[all]` so SDKs are present, but the
+# direct-module smoke catches a regression where a top-level
+# `import discord` (or sibling) slips in.
+PER_MODULE_IMPORT_SNIPPET = (
+    "from horus_os.adapters.discord_adapter import DiscordAdapter\n"
+    "from horus_os.adapters.slack_adapter import SlackAdapter\n"
+    "from horus_os.adapters.email_adapter import EmailAdapter\n"
+    "from horus_os.adapters.calendar_adapter import CalendarAdapter\n"
+    "from horus_os.adapters.webhook import WebhookAdapter\n"
+    "assert DiscordAdapter.__name__ == 'DiscordAdapter'\n"
+    "assert SlackAdapter.__name__ == 'SlackAdapter'\n"
+    "assert EmailAdapter.__name__ == 'EmailAdapter'\n"
+    "assert CalendarAdapter.__name__ == 'CalendarAdapter'\n"
+    "assert WebhookAdapter.__name__ == 'WebhookAdapter'\n"
+    "print('PER_MODULE_IMPORT_OK')\n"
+)
+
+# Phase 30: TestClient pass against create_app(tmp). The smoke driver
+# stays hermetic by running this in a subprocess so FastAPI is loaded
+# in the child only. The data dir is passed as argv[1] so the snippet
+# reuses the smoke driver's tmp_dir (which already has a database).
+# Each adapter entry must carry the six Phase 27 keys. The toggle
+# route 404 path confirms the route is mounted end-to-end without
+# requiring real lifecycle hooks (which would need real tokens).
+API_TESTCLIENT_SNIPPET = (
+    "import sys\n"
+    "from fastapi.testclient import TestClient\n"
+    "from horus_os.server import create_app\n"
+    "data_dir = sys.argv[1]\n"
+    "required_keys = {\n"
+    "    'name', 'status', 'last_activity_at',\n"
+    "    'error_count', 'error_message', 'supports_toggle',\n"
+    "}\n"
+    "with TestClient(create_app(data_dir=data_dir)) as client:\n"
+    "    resp = client.get('/api/adapters')\n"
+    "    assert resp.status_code == 200, (resp.status_code, resp.text)\n"
+    "    body = resp.json()\n"
+    "    assert 'adapters' in body, body\n"
+    "    entries = body['adapters']\n"
+    "    assert isinstance(entries, list), repr(entries)\n"
+    "    for entry in entries:\n"
+    "        missing = required_keys - set(entry.keys())\n"
+    "        assert not missing, (missing, entry)\n"
+    "    bogus = client.post('/api/adapters/does_not_exist_xyz/disable')\n"
+    "    assert bogus.status_code == 404, (bogus.status_code, bogus.text)\n"
+    "print('API_TESTCLIENT_OK adapters=' + str(len(entries)))\n"
 )
 
 
@@ -60,12 +121,20 @@ def run(args: list[str], *, env: dict[str, str] | None = None) -> subprocess.Com
     )
 
 
-def run_python(snippet: str) -> subprocess.CompletedProcess:
-    """Invoke `python -c <snippet>` in the same env that ran pip install."""
+def run_python(snippet: str, *, extra_args: list[str] | None = None) -> subprocess.CompletedProcess:
+    """Invoke `python -c <snippet>` in the same env that ran pip install.
+
+    Optional ``extra_args`` are appended after the snippet so the child
+    sees them as ``sys.argv[1:]``. Useful for handing the smoke tmp_dir
+    to a TestClient snippet without baking the path into the source.
+    """
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    argv = [sys.executable, "-c", snippet]
+    if extra_args:
+        argv.extend(extra_args)
     return subprocess.run(
-        [sys.executable, "-c", snippet],
+        argv,
         check=False,
         capture_output=True,
         text=True,
@@ -315,12 +384,40 @@ def main() -> int:
         )
 
         # 13. Public-surface imports + discover_adapters() runs
+        # Phase 30 extends the snippet to also import LifecycleAdapter,
+        # AdapterRegistry, AdapterEntry, and the four bundled adapter
+        # classes (Discord, Slack, Email, Calendar, plus WebhookAdapter).
         py = run_python(PUBLIC_SURFACE_IMPORT_SNIPPET)
         expect(
             "public surface imports and discover_adapters()",
             py,
             code=0,
             in_stdout=["IMPORT_OK count="],
+        )
+
+        # ------------------------------------------------------------------
+        # v0.3 surface (Phase 30).
+        # ------------------------------------------------------------------
+
+        # 14. Each bundled adapter module imports directly (lazy SDK pattern)
+        per_mod = run_python(PER_MODULE_IMPORT_SNIPPET)
+        expect(
+            "per-module adapter imports (lazy SDK pattern)",
+            per_mod,
+            code=0,
+            in_stdout=["PER_MODULE_IMPORT_OK"],
+        )
+
+        # 15. TestClient pass against create_app: GET /api/adapters shape
+        #     + POST /api/adapters/<bogus>/disable -> 404. Runs in a
+        #     subprocess so FastAPI loads in the child only and the
+        #     smoke driver stays hermetic.
+        api = run_python(API_TESTCLIENT_SNIPPET, extra_args=[str(tmp_dir)])
+        expect(
+            "GET /api/adapters shape + toggle 404 path",
+            api,
+            code=0,
+            in_stdout=["API_TESTCLIENT_OK adapters="],
         )
 
         print("\nAll install-smoke checks passed.")
