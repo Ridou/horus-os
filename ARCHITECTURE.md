@@ -1,9 +1,10 @@
 # Architecture
 
 This document describes the actual shape of `horus-os` on the `main`
-branch heading into v0.2.0. For project intent and what is out of
+branch heading into v0.3.0. For project intent and what is out of
 scope, see `PROJECT.md`. For the v0.1 to v0.2 upgrade path, see
-`docs/MIGRATION-v0.1-to-v0.2.md`.
+`docs/MIGRATION-v0.1-to-v0.2.md`. For the v0.2 to v0.3 upgrade path,
+see `docs/MIGRATION-v0.2-to-v0.3.md`.
 
 ## Top-level shape
 
@@ -65,9 +66,16 @@ scope, see `PROJECT.md`. For the v0.1 to v0.2 upgrade path, see
 
                 +----------------------------+
                 |  Adapters                  |
-                |  Adapter Protocol +        |
-                |  entry-point discovery     |
+                |  Adapter + LifecycleAdapter|
+                |  Protocols +               |
+                |  entry-point discovery +   |
+                |  AdapterRegistry +         |
+                |  FastAPI lifespan          |
                 |  WebhookAdapter (ref)      |
+                |  DiscordAdapter            |
+                |  SlackAdapter              |
+                |  EmailAdapter              |
+                |  CalendarAdapter (tools)   |
                 +----------------------------+
 ```
 
@@ -76,7 +84,11 @@ served by the same FastAPI app that powers the CLI's `serve`
 subcommand. There is no separate frontend build; the dashboard is
 single-page vanilla JS shipped as a package data file. Adapters are
 mounted at app startup via `discover_adapters()` and bind their own
-routes onto the FastAPI instance.
+routes onto the FastAPI instance. Long-running adapters additionally
+implement the optional `LifecycleAdapter` Protocol and get
+`start`/`stop` hooks tied to the FastAPI app lifespan; their status
+is queryable at `GET /api/adapters` and toggleable via
+`POST /api/adapters/{name}/{enable,disable}`.
 
 ## Module layout
 
@@ -96,13 +108,17 @@ routes onto the FastAPI instance.
 | `storage.py` | `Database`, `TraceRecord`, `NoteWrite`, `AgentProfile` CRUD. SQLite with WAL mode and idempotent migrations through v4. |
 | `server/api.py` | FastAPI app. JSON API, SSE chat stream, and the static dashboard. Calls `discover_adapters()` at app startup and binds each one. |
 | `cli/` | Argparse subcommands: `init`, `run`, `serve`, `traces`, `agents`. The `init` subcommand supports `--interactive` for the setup wizard; `run` streams by default with `--no-stream` for the v0.1 behavior. |
-| `adapters/base.py` | `Adapter` Protocol, `AdapterContext`, `discover_adapters`, `ADAPTER_ENTRY_POINT_GROUP`. |
+| `adapters/base.py` | `Adapter` Protocol, optional `LifecycleAdapter` Protocol (async `start`/`stop`), `AdapterContext` (with `registry` and optional `tool_registry`), `AdapterEntry`, `AdapterRegistry`, three `ADAPTER_STATUS_*` constants, `discover_adapters`, `ADAPTER_ENTRY_POINT_GROUP`. |
 | `adapters/webhook.py` | Reference `WebhookAdapter`: HMAC-SHA256 signed HTTP webhook receiver mounted at `/api/adapters/webhook`. |
+| `adapters/discord_adapter.py` | `DiscordAdapter` (v0.3). Lazy `discord.py` import, gateway mention/DM handler, chunked replies, lifecycle hooks. |
+| `adapters/slack_adapter.py` | `SlackAdapter` (v0.3). Lazy `slack-sdk` import, Events API + slash commands, HMAC-SHA256 signed inbound webhook. |
+| `adapters/email_adapter.py` | `EmailAdapter` (v0.3). Stdlib-only IMAP poll plus SMTP reply with RFC 5322 threading headers. |
+| `adapters/calendar_adapter.py` | `CalendarAdapter` (v0.3). Lazy Google API import, registers `list_calendar_events_today` (always) and `create_calendar_event` (gated on `HORUS_OS_CALENDAR_WRITE_ALLOWED`) onto `context.tool_registry`. |
 | `config.py` | Config file location, load, and save. Honors `HORUS_OS_HOME` for the data directory. |
 | `types.py` | Shared dataclasses and type aliases: `Tool`, `ToolUse`, `ToolResult`, `ToolCallEvent`, `AgentResult`, `AgentProfile`, `NoteRef`, `NoteWrite`. |
 
 `tests/` mirrors `src/horus_os/` one to one. Every public surface is
-covered. The suite is at 302 passing tests heading into Phase 18.
+covered. The suite is at 437 passing tests heading into Phase 28.
 
 ## Data flow: a single agent run
 
@@ -224,6 +240,107 @@ discovery is driven by Python's `importlib.metadata.entry_points`.
   against an optional named profile, records a trace row, and
   returns the trace id with the final text.
 
+## Adapter ecosystem
+
+v0.3 expands the adapter contract into a small ecosystem: an
+optional lifecycle Protocol, a per-app registry that tracks live
+status, FastAPI lifespan integration, four shipped adapters, and
+operator-facing toggle routes plus a Dashboard tab.
+
+### LifecycleAdapter
+
+A sibling `runtime_checkable` Protocol from `adapters/base.py`. An
+adapter that needs to launch a long-running task (a gateway
+socket, an IMAP poll loop, a scheduled tick) implements it
+alongside the base `Adapter` Protocol:
+
+```
+class MyAdapter:
+    name = "my_adapter"
+
+    def bind(self, app, context): ...
+    async def start(self, context): ...
+    async def stop(self): ...
+```
+
+Runtime dispatch in the FastAPI lifespan uses `hasattr` rather
+than `isinstance(adapter, LifecycleAdapter)`, so adapters that
+implement only one of the two hooks still work. The Protocol is
+exported for type hints and for the documentation it provides at
+the call site.
+
+### AdapterRegistry
+
+`AdapterRegistry` is attached to `app.state.adapter_registry` at
+`create_app` time. Each adapter discovered through entry points
+gets a registered `AdapterEntry` row carrying `name`, `status`
+(`running`, `stopped`, or `error`), `last_activity_at` (UTC
+iso8601 string), `error_count`, and `error_message`. Adapters
+mutate the row through narrow methods (`mark_running`,
+`mark_stopped`, `mark_error`, `touch`) and read it back through
+`get(name)` or `entries()`.
+
+`GET /api/adapters` returns every entry as a JSON list. Each
+object includes `name`, `status`, `last_activity_at`,
+`error_count`, `error_message`, and `supports_toggle` (true when
+the adapter implements both `start` and `stop`).
+
+### FastAPI lifespan integration
+
+`create_app` registers an async lifespan handler that, at
+startup, calls `await adapter.start(context)` on every discovered
+adapter that exposes a `start` coroutine. At shutdown the lifespan
+walks the adapter list in reverse order and awaits `stop()` on
+each one. Exceptions raised by hook calls are caught, logged into
+the registry as `mark_error`, and do not propagate; one broken
+adapter cannot block startup or shutdown of the others.
+
+### AdapterContext.tool_registry
+
+`AdapterContext` gained a second additive field in Phase 26:
+`tool_registry: ToolRegistry | None`. Tool-providing adapters
+(the Calendar adapter today) register agent-callable tools onto
+it during `bind`. The field defaults to None so v0.2 callers and
+older third-party adapters keep working byte-identical; the
+Calendar adapter checks for None and surfaces a clear error via
+the registry rather than raising. `create_app` (Phase 27) wires a
+fresh `ToolRegistry` through every context and also exposes the
+same instance as `app.state.tool_registry` for downstream code to
+inspect.
+
+### Shipped adapters at a glance
+
+| Adapter | Transport | Lifecycle | Tools | Optional extra | Setup |
+|---------|-----------|-----------|-------|----------------|-------|
+| `discord` | Discord gateway (`discord.py`) | start + stop | none | `[discord]` | `docs/adapters/DISCORD.md` |
+| `slack` | HTTP Events API + slash commands (`slack-sdk`) | bind only | none | `[slack]` | `docs/adapters/SLACK.md` |
+| `email` | IMAP poll + SMTP reply (stdlib) | start + stop | none | none (stdlib) | `docs/adapters/EMAIL.md` |
+| `calendar` | Google Calendar API (`google-api-python-client`) | bind only | `list_calendar_events_today`, optional `create_calendar_event` | `[calendar]` | `docs/adapters/CALENDAR.md` |
+
+Every shipped adapter is opt-in. Each lazily imports its SDK
+inside `start` or `bind` so the package imports cleanly when the
+optional extra is not installed. Each declares its entry point in
+`pyproject.toml` under `[project.entry-points."horus_os.adapters"]`
+so `discover_adapters` finds it automatically after install.
+
+### Toggle routes and Dashboard Adapters tab
+
+Two toggle routes operate on lifecycle adapters:
+
+- `POST /api/adapters/{name}/disable` awaits `adapter.stop()` and
+  flips the registry entry to `stopped`. 404 on unknown name, 400
+  when the adapter has no `stop` hook, 500 with `mark_error` on
+  hook exception.
+- `POST /api/adapters/{name}/enable` awaits `adapter.start(context)`
+  and flips the registry entry to `running`. Same error semantics.
+
+The Dashboard's Adapters tab polls `GET /api/adapters` every five
+seconds and renders one row per adapter with a color-coded status
+pill (green running, gray stopped, red error), the last activity
+timestamp, error count, the most recent error message, and a
+per-adapter Enable / Disable / n/a button driven by
+`supports_toggle`.
+
 ## Storage shape
 
 SQLite, single file, WAL mode, 5000ms busy timeout. Schema is
@@ -294,25 +411,38 @@ new provider."
    entry point. The core never needs to learn about them at build
    time, and a broken adapter cannot break the core dashboard.
 
-## What is not in v0.2
+## What is not in v0.3
 
-- **Vector search.** Notes search is keyword-based. A vector store is
-  on the v0.3+ list.
+- **Vector search.** Notes search is keyword-based. A vector store
+  remains on the post-v0.3 list.
 - **Authentication on the dashboard.** Bind to `127.0.0.1` only.
-- **Retry, rate-limit handling, cost tracking.** Deferred to the v0.4
-  observability milestone.
+- **Retry, rate-limit handling, cost tracking.** Deferred to the
+  v0.4 observability milestone.
 - **In-stream tool dispatch.** `run_agent_stream` surfaces tool
   requests as events; it does not execute them. Callers that need
   tool execution use `run_agent_loop`.
-- **Discord, Slack, calendar, email adapters.** Reserved for the v0.3
-  adapter ecosystem; only the reference HTTP webhook ships in v0.2.
-- **Replay protection on the webhook adapter.** A signed request stays
-  valid until the secret rotates. A timestamp plus nonce sliding
-  window is a candidate for a future revision.
-- **Profile editing in the dashboard.** The Agents tab is read-only;
-  CRUD stays on the CLI and JSON API.
+- **Replay protection on the webhook adapter.** A signed request
+  stays valid until the secret rotates. A timestamp plus nonce
+  sliding window is a candidate for a future revision.
+- **Profile editing in the dashboard.** The Agents tab is
+  read-only; CRUD stays on the CLI and JSON API.
 - **Provider-per-profile.** A sub-agent inherits the coordinator's
-  provider. Mixing Anthropic and Gemini in one delegation tree is on
-  the v0.3 list.
+  provider. Mixing Anthropic and Gemini in one delegation tree is
+  on the post-v0.3 list.
+- **Socket Mode for Slack.** The Slack adapter ships with the
+  HTTP Events API path only. Socket Mode (over a WebSocket) is a
+  future option for operators behind NAT.
+- **OAuth CLI for Calendar.** The one-time OAuth bootstrap that
+  produces `calendar-token.json` is documented in
+  `docs/adapters/CALENDAR.md` but not yet wrapped as a
+  `horus-os calendar oauth` subcommand.
+- **Write-tool merge into the chat path.** Tools registered by
+  adapters (Calendar today) land on `app.state.tool_registry`.
+  Merging that registry into `/api/chat` so the dashboard agent
+  picks up adapter-provided tools out of the box is a follow-up.
+- **Soft-disable middleware for bind-only adapters.** Toggle
+  routes operate on lifecycle adapters today; bind-only adapters
+  (Slack, Calendar) show `supports_toggle: false` and require a
+  process restart to remove their routes.
 
 See `ROADMAP.md` for what is planned next.
