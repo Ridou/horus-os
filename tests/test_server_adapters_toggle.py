@@ -299,3 +299,72 @@ def test_app_state_adapters_lists_discovered_adapters(
     app = create_app(data_dir=tmp_path)
     names = [a.name for a in app.state.adapters]
     assert adapter.name in names
+
+
+# -- Phase 29: disable+enable+touch cycle via /api/adapters --------------------
+
+
+class _TouchyLifecycleAdapter:
+    """A lifecycle adapter that exposes a bound route which calls touch.
+
+    Phase 29 gap B: confirm that after a disable+enable round-trip,
+    a subsequent request that calls `registry.touch` still advances
+    `last_activity_at` as surfaced through GET /api/adapters. This
+    closes the seam between the toggle routes (Phase 27) and the
+    touch mechanism (Phase 22) which were each tested in isolation.
+    """
+
+    name = "touchy"
+
+    def __init__(self) -> None:
+        self.start_calls = 0
+        self.stop_calls = 0
+        self._context: AdapterContext | None = None
+
+    def bind(self, app: Any, context: AdapterContext) -> None:
+        self._context = context
+
+        @app.post(f"/api/adapters/{self.name}/ping")
+        def _ping() -> dict[str, str]:
+            if self._context is not None:
+                self._context.registry.touch(self.name)
+            return {"ok": "true"}
+
+    async def start(self, context: AdapterContext) -> None:
+        self.start_calls += 1
+        self._context = context
+
+    async def stop(self) -> None:
+        self.stop_calls += 1
+
+
+def test_disable_enable_then_touch_advances_last_activity_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_db(tmp_path)
+    adapter = _TouchyLifecycleAdapter()
+    _stub_entry_points(monkeypatch, [_FakeEntryPoint(adapter.name, lambda: adapter)])
+    app = create_app(data_dir=tmp_path)
+    with TestClient(app) as client:
+        # First touch establishes a baseline last_activity_at.
+        assert client.post(f"/api/adapters/{adapter.name}/ping").status_code == 200
+        first = next(
+            e for e in client.get("/api/adapters").json()["adapters"] if e["name"] == adapter.name
+        )
+        baseline_ts = first["last_activity_at"]
+        assert baseline_ts is not None
+
+        # Disable then re-enable: the operator-triggered outage path.
+        assert client.post(f"/api/adapters/{adapter.name}/disable").status_code == 200
+        assert client.post(f"/api/adapters/{adapter.name}/enable").status_code == 200
+
+        # New touch from the same route must register and surface a
+        # last_activity_at strictly greater than the baseline so the
+        # dashboard does not show stale activity after a restart.
+        assert client.post(f"/api/adapters/{adapter.name}/ping").status_code == 200
+        after = next(
+            e for e in client.get("/api/adapters").json()["adapters"] if e["name"] == adapter.name
+        )
+        assert after["status"] == ADAPTER_STATUS_RUNNING
+        assert after["last_activity_at"] is not None
+        assert after["last_activity_at"] >= baseline_ts
