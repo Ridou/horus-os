@@ -55,7 +55,7 @@ horus-os serve         # http://127.0.0.1:8765
 
 ## What is new in v0.2
 
-The active milestone ships multi-agent orchestration, live streaming
+The v0.2 milestone shipped multi-agent orchestration, live streaming
 responses, and the third-party adapter plugin contract. Highlights:
 named agent profiles in SQLite, a `delegate_to_agent` tool, a
 `run_agent_stream` async generator, streaming output on the CLI and
@@ -66,6 +66,23 @@ reference HTTP webhook adapter.
 - Runnable examples: `examples/`
 - v0.2 milestone detail: `ROADMAP.md`
 
+## What is new in v0.3
+
+The active milestone expands the adapter contract into an ecosystem:
+an optional lifecycle Protocol with async start/stop hooks, a
+per-app status registry, four first-party shipped adapters (Discord,
+Slack, Email, Calendar), runtime enable/disable routes, and a new
+Dashboard Adapters tab. Purely additive; v0.2 callers and v0.2
+third-party adapters keep working byte-identical.
+
+- Migration guide: `docs/MIGRATION-v0.2-to-v0.3.md`
+- Adapter setup guides: `docs/adapters/DISCORD.md`,
+  `docs/adapters/SLACK.md`, `docs/adapters/EMAIL.md`,
+  `docs/adapters/CALENDAR.md`
+- Runnable examples: `examples/discord_adapter.py`,
+  `examples/slack_adapter.py`, `examples/email_adapter.py`,
+  `examples/calendar_adapter.py`
+
 ## Documents
 
 - `CHANGELOG.md`, release notes
@@ -73,7 +90,9 @@ reference HTTP webhook adapter.
 - `ROADMAP.md`, current milestone and what comes next
 - `ARCHITECTURE.md`, technical shape
 - `docs/MIGRATION-v0.1-to-v0.2.md`, upgrade notes for v0.1 users
-- `examples/`, runnable scripts for multi-agent, streaming, and custom adapters
+- `docs/MIGRATION-v0.2-to-v0.3.md`, upgrade notes for v0.2 users
+- `docs/adapters/`, per-adapter setup guides (Discord, Slack, Email, Calendar)
+- `examples/`, runnable scripts for multi-agent, streaming, and the shipped adapters
 - `CONTRIBUTING.md`, dev setup, workflow, and code style
 - `SECURITY.md`, how to report vulnerabilities
 - `CODE_OF_CONDUCT.md`, Contributor Covenant 2.1

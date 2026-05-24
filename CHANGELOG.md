@@ -8,7 +8,110 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **LifecycleAdapter Protocol** (`horus_os.LifecycleAdapter`).
+  Optional `runtime_checkable` sibling Protocol with async
+  `start(context)` and `stop()` hooks. Long-running adapters
+  implement it alongside `Adapter` and get tied into the
+  FastAPI app lifespan automatically.
+- **AdapterRegistry + AdapterEntry** (`horus_os.AdapterEntry`,
+  `horus_os.AdapterRegistry`). Per-app status tracker attached
+  to `app.state.adapter_registry`. Tracks `name`, `status`,
+  `last_activity_at`, `error_count`, `error_message`. Adapters
+  mutate via `mark_running`, `mark_stopped`, `mark_error`,
+  `touch`. Three status constants exported:
+  `ADAPTER_STATUS_RUNNING`, `ADAPTER_STATUS_STOPPED`,
+  `ADAPTER_STATUS_ERROR`.
+- **AdapterContext additions** (`AdapterContext.registry`,
+  `AdapterContext.tool_registry`). Both additive with safe
+  defaults (default factory `AdapterRegistry` and `None`
+  respectively), so v0.2 `AdapterContext(config=, data_dir=)`
+  calls keep working.
+- **`GET /api/adapters`** route. Returns one JSON object per
+  discovered adapter with `name`, `status`, `last_activity_at`,
+  `error_count`, `error_message`, and `supports_toggle`.
+- **FastAPI lifespan integration.** `create_app` registers a
+  lifespan that calls `await adapter.start(context)` at startup
+  and `await adapter.stop()` at shutdown for every adapter with
+  the matching hook. Errors are captured into the registry and
+  isolated from sibling adapters.
+- **DiscordAdapter** + new `[discord]` optional extra
+  (`discord.py>=2.3`) + new `horus_os.adapters:discord` entry
+  point. Connects to the Discord gateway, handles app mentions
+  in guild channels and DMs, chunked replies to honor Discord's
+  2000-char limit.
+- **SlackAdapter** + new `[slack]` optional extra
+  (`slack-sdk>=3.27`) + new `horus_os.adapters:slack` entry
+  point. Mounts `POST /api/adapters/slack/events` and
+  `POST /api/adapters/slack/commands`, verifies HMAC-SHA256
+  signatures over `v0:{timestamp}:{body}` with a 300s replay
+  window, routes `app_mention` and DM `message` events through
+  `run_agent`.
+- **EmailAdapter** (stdlib only) + new
+  `horus_os.adapters:email` entry point. IMAP poll loop, SMTP
+  reply with full RFC 5322 threading (`In-Reply-To`,
+  `References`, `Message-ID`, `Date`). Poison-message safety:
+  `\Seen` is set even on agent failure so a crashing message
+  cannot loop forever.
+- **CalendarAdapter** + new `[calendar]` optional extra
+  (`google-api-python-client>=2.110`,
+  `google-auth-oauthlib>=1.2`) + new `horus_os.adapters:calendar`
+  entry point. First tool-providing adapter: registers
+  `list_calendar_events_today` (always) and
+  `create_calendar_event` (gated on
+  `HORUS_OS_CALENDAR_WRITE_ALLOWED=true`) onto
+  `AdapterContext.tool_registry`.
+- **POST /api/adapters/{name}/enable** and
+  **POST /api/adapters/{name}/disable** toggle routes. Drive
+  `await adapter.start(context)` / `await adapter.stop()` on
+  lifecycle adapters. 404 unknown, 400 missing hook, 500 on
+  hook exception with the registry capturing the error.
+- **`supports_toggle` field on `/api/adapters` entries.** Derived
+  from `hasattr(adapter, "start") and hasattr(adapter, "stop")`.
+- **Dashboard Adapters tab.** Fifth nav tab in the local
+  dashboard. Renders one row per adapter with a color-coded
+  status pill (green running, gray stopped, red error),
+  `last_activity_at`, `error_count`, truncated `error_message`,
+  and a per-adapter Enable / Disable / n/a button driven by
+  `supports_toggle`. Polls `GET /api/adapters` every five
+  seconds.
+
 ### Changed
+
+- `AdapterContext` gained two additive fields (`registry`,
+  `tool_registry`) with safe defaults. v0.2 callers and v0.2
+  third-party adapters remain byte-identical.
+- `WebhookAdapter` now calls `context.registry.touch(name)`
+  after each successful request so it shows up in the new
+  Dashboard Adapters tab with a live `last_activity_at`.
+- `create_app` now constructs a master `ToolRegistry`, passes it
+  through `AdapterContext.tool_registry`, and exposes both
+  `app.state.tool_registry` and `app.state.adapters` for
+  downstream code to introspect.
+
+### Documentation
+
+- `ARCHITECTURE.md` refreshed for v0.3: new Adapter ecosystem
+  section covering LifecycleAdapter, AdapterRegistry, the
+  lifespan integration, `tool_registry`, the four shipped
+  adapters, toggle routes, and the Dashboard Adapters tab.
+  Module layout updated; the deferred list renamed to "What is
+  not in v0.3" with the shipped items removed and the new v0.3-era
+  items (Socket Mode, OAuth CLI, write-tool merge into chat,
+  soft-disable middleware) added.
+- Four runnable, offline adapter examples added under
+  `examples/`: `discord_adapter.py`, `slack_adapter.py`,
+  `email_adapter.py`, `calendar_adapter.py`. Each uses the
+  same `sys.modules` injection pattern the adapter tests use,
+  runs without the optional SDK installed, and prints the
+  dispatch and registry state.
+- `docs/MIGRATION-v0.2-to-v0.3.md` added: additive Protocol
+  changes, full env-var list, new optional dependency groups,
+  no-schema-migration note, upgrade code samples.
+- Four per-adapter setup guides under `docs/adapters/`:
+  `DISCORD.md`, `SLACK.md`, `EMAIL.md`, `CALENDAR.md`.
+- README updated with a "What is new in v0.3" section and
+  Documents entries for the migration guide and the adapter
+  setup guides.
 
 ## [0.1.0] - 2026-05-23
 
