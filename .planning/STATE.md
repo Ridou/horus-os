@@ -1,19 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: adapter-ecosystem
-status: milestone_complete
-stopped_at: v0.3 milestone shipped, all 31 phases complete
-last_updated: "2026-05-24T05:25:00Z"
-last_activity: 2026-05-24, v0.3.0 released. Tag pushed, GitHub Release published, milestone closed.
+milestone: v0.4
+milestone_name: observability
+status: planning
+last_updated: "2026-05-24T06:13:07.929Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 31
-  completed_phases: 31
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
-  active_milestone_phases: 10
-  active_milestone_completed: 10
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -23,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.3 Adapter Ecosystem shipped. Project is in a clean checkpoint state. Next milestone is undefined.
+**Current focus:** v0.4 Observability milestone in planning — defining requirements and roadmap. Cost, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI.
 
 ## Current Position
 
-Milestone: v0.3 Adapter Ecosystem, COMPLETE
-Next phase: none queued; awaiting next-milestone planning
-Status: milestone_complete
-Last activity: 2026-05-24, v0.3.0 released. All 10 v0.3 phases shipped. Tag v0.3.0 pushed to origin, GitHub Release published with migration-guide link, CI fully green across all twelve install-smoke matrix jobs.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-24 — Milestone v0.4 started
 
 ## Prior Milestones
 
