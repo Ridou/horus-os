@@ -3,15 +3,26 @@
 [![CI](https://github.com/Ridou/horus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/Ridou/horus-os/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](CHANGELOG.md)
 
 An open-source, self-hosted autonomous AI command center.
 
 `horus-os` lets one person run a personal team of AI agents from a single workstation. Agents take instructions through a CLI or a local web chat, execute tasks against a persistent knowledge base, and surface results in a local dashboard. The whole stack runs on the user's own hardware. AI calls are billed to the user's own API keys.
 
-## Status
+## Project status
 
-Alpha, v0.1.0 (2026-05-23). See `CHANGELOG.md` for what's in this release and `ROADMAP.md` for what's next.
+**Public, but not currently accepting outside contributions.**
+
+`horus-os` was open-sourced out of a working private command center the maintainer has been building for personal use. The repo is public for transparency and to share the design openly, but the project is in a **solo development phase** right now. Pull requests from outside the maintainer will not be merged at this time, and "I'd like to claim this issue" comments will not be assigned. This is to keep moving fast through the early milestones and to avoid pulling in code before a real contributor-vetting and automated-review pipeline is in place.
+
+When that changes, this section will say so. Until then:
+
+- **You can:** read the code, file issues to report bugs or suggest features, open Discussions for design questions, watch / star to follow along.
+- **Please don't:** open PRs against this repo, comment "working on it" on issues, or assume an issue is yours because nobody else has commented.
+
+If you are interested in collaborating once the project opens up, the most useful thing you can do today is run `horus-os` locally and write up what worked and what didn't in a GitHub Discussion. Real use feedback is the most valuable input at this stage.
+
+Current version: **v0.3.0** (2026-05-24). See `CHANGELOG.md` for the diff and `ROADMAP.md` for what's next (v0.4 Observability in planning).
 
 ## Quickstart
 
@@ -99,10 +110,11 @@ third-party adapters keep working byte-identical.
 
 ## Contributing
 
-Issues and pull requests are welcome. Start with `CONTRIBUTING.md` for
-dev setup and the workflow, and `PROJECT.md` for scope. New
-contributors should look for the `good first issue` and `help wanted`
-labels on the [issues page](https://github.com/Ridou/horus-os/issues).
+See the **Project status** section near the top of this README. Short
+version: not accepting outside PRs right now. Issues and Discussions
+are open; pull requests will be closed unsolicited until the project
+opens for contributions. `CONTRIBUTING.md` documents the standards
+that will apply once it does.
 
 ## License
 

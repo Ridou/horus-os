@@ -1,15 +1,71 @@
 # Contributing to horus-os
 
-Thanks for your interest. `horus-os` is open to outside contributions
-as of v0.1.0. This guide covers how to set up your environment, what
-the project will and will not accept, and how to ship a change end to
-end.
+## Status: not currently accepting outside contributions
 
-If anything here is wrong, unclear, or out of date, open an issue.
+`horus-os` is in a solo development phase as of v0.3.0. The project
+was open-sourced out of a working private command center, and the
+maintainer is still moving fast through the early milestones (v0.4
+Observability is in planning right now). Outside pull requests will
+not be merged at this time, and "I want to claim this issue"
+comments will not be assigned.
+
+This guide stays public so the standards are clear in advance, and so
+contributors can mirror them locally if they want to. **Treat
+everything below as the contract that will apply once the project
+opens for contributions, not as an invitation to open a PR today.**
+
+What you can do today:
+- **File issues** for real bugs you hit running `horus-os` locally.
+- **Open Discussions** for design questions or scope proposals.
+- **Star or watch** the repo to follow along.
+- **Run the project for real** and write up your experience. That
+  feedback is the most valuable input at this stage.
+
+What is not currently accepted:
+- Pull requests from forks. They will be acknowledged and closed.
+- Issue claims ("on it", "working on this", "assign to me"). The
+  maintainer keeps the issue queue and assigns work to themselves.
+- Scope-expansion proposals via PR. Use Discussions instead.
+
+The maintainer will update this banner when an automated
+contributor-vetting and PR-review pipeline (covered briefly under
+"Future contribution flow" below and tracked in
+`.planning/seeds/`) is in place. Most likely milestone for that is
+**v0.6 or later**; not promised, not scheduled.
+
+If anything in this guide is wrong, unclear, or out of date, open an
+issue.
+
+## Future contribution flow (not active yet)
+
+When the project opens up, every incoming PR will go through:
+
+1. **Author vetting.** Maintainer checks GitHub account history and
+   prior public work. First-time contributors get a small intro task
+   (typo fix, doc tweak) before any code review on substantive
+   changes.
+2. **Automated review.** The maintainer's private security agent
+   ("private") will clone the PR into a sandbox and run static
+   analysis, secret scanning, dependency-provenance checks, and a
+   test-behavior diff against `main`. Verdict posts to the
+   maintainer's private channel before any human review.
+3. **Sandboxed CI.** Forked-PR CI runs with restricted tokens. No
+   repository secrets are exposed to fork builds.
+4. **Maintainer review.** Human review only after the above gates
+   pass. No auto-merge.
+5. **Graduated trust.** Repeated quality contributions move a
+   contributor from "unknown" to "intro-task-passed" to
+   "reviewed-PR-merged" to "trusted". Trust level affects which
+   labels and review depth apply.
+
+The rest of this document covers the workflow, code style, and
+standards. Everything below is still accurate for code already in
+the repo and for the maintainer's own development.
 
 ## Scope check
 
-Before opening a substantial PR, read:
+Before opening a substantial PR (once the project is open for
+contributions), read:
 
 1. `PROJECT.md`, the project intent and out-of-scope list.
 2. `ROADMAP.md`, the current milestone and phases.
