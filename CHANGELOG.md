@@ -8,6 +8,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+### Changed
+
+## [0.3.0] - 2026-05-24
+
+Third alpha. Takes the v0.2 adapter plugin interface from "one
+reference webhook" to a real ecosystem: four first-class adapters
+(Discord, Slack, Email, Calendar) on top of new lifecycle hooks
+(`start`/`stop`) and an adapter registry surfaced through both a JSON
+API and a Dashboard Adapters tab. Calendar is the first
+tool-providing adapter, registering `list_calendar_events_today` and
+the write-gated `create_calendar_event` onto a master
+`ToolRegistry` that adapters now share via `AdapterContext`.
+
+See `docs/MIGRATION-v0.2-to-v0.3.md` for upgrade notes from v0.2.
+
+### Added
+
 - **LifecycleAdapter Protocol** (`horus_os.LifecycleAdapter`).
   Optional `runtime_checkable` sibling Protocol with async
   `start(context)` and `stop()` hooks. Long-running adapters
