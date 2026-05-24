@@ -4,7 +4,7 @@
 
 - [x] **v0.1 Foundation** (Phases 01-11), shipped 2026-05-23 as v0.1.0. CLI + web chat, Anthropic + Gemini, one agent, six tools, full memory layer, 3-OS install gate, first public release.
 - [x] **v0.2 Multi-Agent + Streaming** (Phases 12-21), shipped 2026-05-23 as v0.2.0. Named agent profiles, coordinator-to-sub-agent delegation, provider streaming on both CLI and dashboard, adapter plugin interface.
-- [ ] **v0.3 Adapter Ecosystem** (Phases 22-31), active. Discord, Slack, email, and calendar adapters on top of the v0.2 plugin contract, plus adapter lifecycle hooks and dashboard adapter management.
+- [x] **v0.3 Adapter Ecosystem** (Phases 22-31), shipped 2026-05-24 as v0.3.0. Discord, Slack, email, and calendar adapters on top of the v0.2 plugin contract, plus adapter lifecycle hooks and dashboard adapter management.
 
 ## Phases
 
@@ -47,16 +47,16 @@
 
 **Parallelization:** 22 → (23 ∥ 24 ∥ 25 ∥ 26) → 27 → 28 → 29 → 30 → 31. Phase 22 (lifecycle hooks) gates the four adapter implementations because Discord/Slack need persistent connections that the current bind-only Protocol does not support. After 22 lands, the four adapters can ship in parallel.
 
-- [ ] **Phase 22: Adapter lifecycle hooks**, optional `start(ctx)` and `stop()` methods on the Adapter Protocol; FastAPI lifespan integration so long-running adapters get a background task slot; adapter status (running, stopped, error) queryable via `/api/adapters`.
-- [ ] **Phase 23: Discord adapter**, Discord bot listens for mentions and direct messages, routes to a configured agent profile, replies in-channel; setup guide for bot creation and token; backoff reconnect on disconnect.
-- [ ] **Phase 24: Slack adapter**, Slack Events API endpoint handles `app_mention` and DMs, signature verification via signing secret, slash command support, routes to an agent profile.
-- [ ] **Phase 25: Email adapter**, IMAP poll + SMTP send. Polls inbox on a configurable interval, runs an agent on new messages, replies via SMTP. No new heavy deps (stdlib `imaplib` + `smtplib`).
-- [ ] **Phase 26: Calendar adapter**, Google Calendar adapter exposes "list today's events" as a tool agents can call; optional event creation gated behind a permission flag; documented OAuth flow with `google-api-python-client`.
-- [ ] **Phase 27: Dashboard adapter management**, `/adapters` dashboard view shows configured adapters with status (running, stopped, last activity, error count); enable and disable from dashboard; per-adapter health indicator.
-- [ ] **Phase 28: Documentation and examples refresh**, Update ARCHITECTURE.md for v0.3, add `examples/discord_adapter.py`, `examples/slack_adapter.py`, `examples/email_adapter.py`, `examples/calendar_adapter.py`, write the v0.2 to v0.3 migration guide.
-- [ ] **Phase 29: Test surface expansion**, Adapter lifecycle tests, mocked-SDK tests for each of the four adapters, cross-adapter routing test, error-path coverage.
-- [ ] **Phase 30: Three-OS install verification (v0.3)**, Same hard gate as Phase 10 and Phase 20, re-targeted at the v0.3 feature set.
-- [ ] **Phase 31: v0.3.0 release**, Tag v0.3.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes.
+- [x] **Phase 22: Adapter lifecycle hooks** (completed 2026-05-23), optional `start(ctx)` and `stop()` methods on the Adapter Protocol; FastAPI lifespan integration so long-running adapters get a background task slot; adapter status (running, stopped, error) queryable via `/api/adapters`.
+- [x] **Phase 23: Discord adapter** (completed 2026-05-24), Discord bot listens for mentions and direct messages, routes to a configured agent profile, replies in-channel; setup guide for bot creation and token; backoff reconnect on disconnect.
+- [x] **Phase 24: Slack adapter** (completed 2026-05-24), Slack Events API endpoint handles `app_mention` and DMs, signature verification via signing secret, slash command support, routes to an agent profile.
+- [x] **Phase 25: Email adapter** (completed 2026-05-24), IMAP poll + SMTP send. Polls inbox on a configurable interval, runs an agent on new messages, replies via SMTP. No new heavy deps (stdlib `imaplib` + `smtplib`).
+- [x] **Phase 26: Calendar adapter** (completed 2026-05-24), Google Calendar adapter exposes "list today's events" as a tool agents can call; optional event creation gated behind a permission flag; documented OAuth flow with `google-api-python-client`.
+- [x] **Phase 27: Dashboard adapter management** (completed 2026-05-24), `/adapters` dashboard view shows configured adapters with status (running, stopped, last activity, error count); enable and disable from dashboard; per-adapter health indicator.
+- [x] **Phase 28: Documentation and examples refresh** (completed 2026-05-24), Update ARCHITECTURE.md for v0.3, add `examples/discord_adapter.py`, `examples/slack_adapter.py`, `examples/email_adapter.py`, `examples/calendar_adapter.py`, write the v0.2 to v0.3 migration guide.
+- [x] **Phase 29: Test surface expansion** (completed 2026-05-24), Adapter lifecycle tests, mocked-SDK tests for each of the four adapters, cross-adapter routing test, error-path coverage.
+- [x] **Phase 30: Three-OS install verification (v0.3)** (completed 2026-05-24), Same hard gate as Phase 10 and Phase 20, re-targeted at the v0.3 feature set.
+- [x] **Phase 31: v0.3.0 release** (completed 2026-05-24), Tag v0.3.0 on origin, CHANGELOG updated, version bumped, GitHub Release published with migration notes.
 
 ## Phase Details
 
@@ -208,13 +208,13 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 01-11 | v0.1 | 13/13 | Complete | 2026-05-23 |
 | 12-21 | v0.2 | 11/11 | Complete | 2026-05-23 |
-| 22. Adapter lifecycle hooks | v0.3 | 0/1 | Not started | - |
-| 23. Discord adapter | v0.3 | 0/1 | Not started | - |
-| 24. Slack adapter | v0.3 | 0/1 | Not started | - |
-| 25. Email adapter | v0.3 | 0/1 | Not started | - |
-| 26. Calendar adapter | v0.3 | 0/1 | Not started | - |
-| 27. Dashboard adapter management | v0.3 | 0/1 | Not started | - |
-| 28. Documentation and examples refresh | v0.3 | 0/1 | Not started | - |
-| 29. Test surface expansion | v0.3 | 0/1 | Not started | - |
-| 30. Three-OS install verification (v0.3) | v0.3 | 0/1 | Not started | - |
-| 31. v0.3.0 release | v0.3 | 0/1 | Not started | - |
+| 22. Adapter lifecycle hooks | v0.3 | 1/1 | Complete | 2026-05-23 |
+| 23. Discord adapter | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 24. Slack adapter | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 25. Email adapter | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 26. Calendar adapter | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 27. Dashboard adapter management | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 28. Documentation and examples refresh | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 29. Test surface expansion | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 30. Three-OS install verification (v0.3) | v0.3 | 1/1 | Complete | 2026-05-24 |
+| 31. v0.3.0 release | v0.3 | 1/1 | Complete | 2026-05-24 |
