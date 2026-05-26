@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 __all__ = [
     "agent_totals",
     "cost_by_agent",
+    "cost_by_model",
     "latency_p50_p95",
     "parse_window",
     "tool_reliability",
@@ -289,6 +290,85 @@ def cost_by_agent(db: Database, window: str) -> list[dict[str, Any]]:
                     ),
                     "run_count": int(row["run_count"]),
                     "uncosted_runs": int(row["uncosted_runs"]),
+                }
+            )
+    return rows
+
+
+def cost_by_model(db: Database, window: str) -> list[dict[str, Any]]:
+    """Per-model cost breakdown over the window.
+
+    Returns one dict per model with at least one llm_call in the
+    window. The dict carries:
+
+        model                              : str    (llm_calls.model)
+        provider                           : str    (llm_calls.provider)
+        total_cost_usd                     : float  (SUM of non-NULL
+                                                     llm_calls.cost_usd,
+                                                     rounded to 6dp in Python;
+                                                     0.0 when SUM is NULL,
+                                                     matching cost_by_agent's
+                                                     contract; uncosted_calls
+                                                     surfaces NULL count
+                                                     separately per Pitfall 11)
+        total_input_tokens                 : int    (SUM llm_calls.input_tokens)
+        total_output_tokens                : int    (SUM llm_calls.output_tokens)
+        total_cache_read_input_tokens      : int
+        total_cache_creation_input_tokens  : int
+        call_count                         : int    (COUNT(*) on llm_calls)
+        uncosted_calls                     : int    (rows where cost_usd IS
+                                                     NULL; Pitfall 5 unknown-
+                                                     model rows plus any future
+                                                     NULL-cost row)
+
+    Rounding happens in Python (`round(value, 6)`) rather than via SQLite
+    `ROUND` because SQLite's banker rounding is platform-variable; Python
+    is stable across the 3-OS CI matrix (mirrors cost_by_agent line 282).
+
+    Ordering: by `total_cost_usd` DESC; ties by `model` ASC for
+    deterministic test output. Models with zero in-window calls are
+    excluded (not returned with all-zero rows).
+    """
+    threshold = parse_window(window)
+    sql = """
+        WITH windowed_calls AS (
+            SELECT model, provider, cost_usd, input_tokens, output_tokens,
+                   cache_read_input_tokens, cache_creation_input_tokens
+            FROM llm_calls
+            WHERE created_at >= ?
+        )
+        SELECT model,
+               provider,
+               COUNT(*) AS call_count,
+               SUM(input_tokens)                AS total_input_tokens,
+               SUM(output_tokens)               AS total_output_tokens,
+               SUM(cache_read_input_tokens)     AS total_cache_read_input_tokens,
+               SUM(cache_creation_input_tokens) AS total_cache_creation_input_tokens,
+               SUM(cost_usd)                    AS total_cost_usd,
+               SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END) AS uncosted_calls
+        FROM windowed_calls
+        GROUP BY model, provider
+        ORDER BY COALESCE(SUM(cost_usd), 0) DESC, model ASC
+    """
+    rows: list[dict[str, Any]] = []
+    with db._connect() as conn:
+        for row in conn.execute(sql, (threshold,)).fetchall():
+            total_cost = row["total_cost_usd"]
+            rows.append(
+                {
+                    "model": row["model"],
+                    "provider": row["provider"],
+                    "total_cost_usd": (
+                        round(float(total_cost), 6) if total_cost is not None else 0.0
+                    ),
+                    "total_input_tokens": int(row["total_input_tokens"] or 0),
+                    "total_output_tokens": int(row["total_output_tokens"] or 0),
+                    "total_cache_read_input_tokens": int(row["total_cache_read_input_tokens"] or 0),
+                    "total_cache_creation_input_tokens": int(
+                        row["total_cache_creation_input_tokens"] or 0
+                    ),
+                    "call_count": int(row["call_count"]),
+                    "uncosted_calls": int(row["uncosted_calls"]),
                 }
             )
     return rows

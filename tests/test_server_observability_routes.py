@@ -282,3 +282,38 @@ def test_llm_calls_route_400_on_invalid_window(tmp_path: Path) -> None:
 def test_llm_calls_route_503_when_db_missing(tmp_path: Path) -> None:
     response = _client(tmp_path).get("/api/observability/llm-calls?since=7d")
     assert response.status_code == 503
+
+
+# /api/observability/cost-by-model -----------------------------------------
+
+
+def test_route_cost_by_model_empty_db_returns_empty_models(tmp_path: Path) -> None:
+    _init_db(tmp_path)
+    response = _client(tmp_path).get("/api/observability/cost-by-model?since=7d")
+    assert response.status_code == 200
+    assert response.json() == {"models": []}
+
+
+def test_route_cost_by_model_valid_window_returns_seeded_rows(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    _insert_llm_call(db)
+    response = _client(tmp_path).get("/api/observability/cost-by-model?since=7d")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["models"]) == 1
+    row = body["models"][0]
+    assert row["model"] == "claude-sonnet-4-6"
+    assert row["provider"] == "anthropic"
+    assert row["call_count"] == 1
+
+
+def test_route_cost_by_model_invalid_window_returns_400(tmp_path: Path) -> None:
+    _init_db(tmp_path)
+    response = _client(tmp_path).get("/api/observability/cost-by-model?since=garbage")
+    assert response.status_code == 400
+    assert "invalid window" in response.json()["detail"]
+
+
+def test_route_cost_by_model_missing_db_returns_503(tmp_path: Path) -> None:
+    response = _client(tmp_path).get("/api/observability/cost-by-model?since=7d")
+    assert response.status_code == 503

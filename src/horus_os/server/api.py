@@ -47,6 +47,7 @@ from horus_os.observability.bus import LLMCallEvent, RunEndEvent
 from horus_os.observability.queries import (
     agent_totals,
     cost_by_agent,
+    cost_by_model,
     latency_p50_p95,
     parse_window,
     tool_reliability,
@@ -334,6 +335,17 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         return {"agents": rows}
+
+    @app.get("/api/observability/cost-by-model")
+    def observability_cost_by_model(since: str = "7d") -> dict[str, Any]:
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        try:
+            rows = cost_by_model(Database(cfg.db_path), since)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return {"models": rows}
 
     @app.get("/api/observability/latency")
     def observability_latency(since: str = "7d") -> dict[str, Any]:

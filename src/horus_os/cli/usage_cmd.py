@@ -22,6 +22,7 @@ from typing import Any, TextIO
 from horus_os.config import Config
 from horus_os.observability.queries import (
     cost_by_agent,
+    cost_by_model,
     parse_window,
     tool_reliability,
 )
@@ -63,7 +64,7 @@ def run_usage(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> in
     elif by == "tool":
         rows = tool_reliability(db, since)
     elif by == "model":
-        rows = _cost_by_model_dispatch(db, since)
+        rows = cost_by_model(db, since)
     else:  # pragma: no cover - argparse choices prevent this
         stderr.write(f"unknown --by value: {by!r}\n")
         return 1
@@ -78,11 +79,6 @@ def run_usage(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> in
         stderr.write(f"unknown --format value: {fmt!r}\n")
         return 1
     return 0
-
-
-def _cost_by_model_dispatch(db: Database, since: str) -> list[dict[str, Any]]:
-    """Placeholder dispatch for `--by model`; real impl lands in Task 4."""
-    raise NotImplementedError("--by model lands in Task 4 of plan 37-01")
 
 
 def _round_row(row: dict[str, Any]) -> dict[str, Any]:

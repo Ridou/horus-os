@@ -179,10 +179,12 @@ def test_usage_dispatch_tool_format_table_succeeds(tmp_path: Path) -> None:
     assert err == ""
 
 
-def test_usage_dispatch_model_hits_query_stub(tmp_path: Path) -> None:
+def test_usage_dispatch_model_format_table_succeeds(tmp_path: Path) -> None:
+    """Dispatch routes --by model --format table to cost_by_model live."""
     _init_db(tmp_path)
-    with pytest.raises(NotImplementedError, match="--by model lands in Task 4"):
-        _call_run_usage(tmp_path, by="model", fmt="table")
+    code, _out, err = _call_run_usage(tmp_path, by="model", fmt="table")
+    assert code == 0
+    assert err == ""
 
 
 def test_usage_subparser_registered_with_choices() -> None:
@@ -411,3 +413,93 @@ def test_all_three_formats_emit_same_numeric_cost_for_canonical_row(
     assert json_cost == pytest.approx(0.006150, abs=1e-9)
     assert csv_cost == pytest.approx(0.006150, abs=1e-9)
     assert table_cost == pytest.approx(0.006150, abs=1e-9)
+
+
+# ---------- Task 4: --by model + byte-for-byte route parity ----------
+
+
+def test_usage_by_model_json_canonical_renders_six_decimals(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="model", fmt="json")
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["by"] == "model"
+    assert payload["rows"][0]["model"] == "claude-sonnet-4-6"
+    assert payload["rows"][0]["total_cost_usd"] == 0.006150
+    # Anti-canary substrings absent from the JSON output.
+    assert "0.006149" not in out
+    assert "0.006150000000" not in out
+
+
+def test_usage_by_model_csv_matches_json_costs(tmp_path: Path) -> None:
+    """USAGE-04 cross-format parity for the --by model slice."""
+    import csv as _csv
+
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="model", fmt="csv")
+    assert code == 0
+    row = next(iter(_csv.DictReader(io.StringIO(out))))
+    assert float(row["total_cost_usd"]) == pytest.approx(0.006150, abs=1e-9)
+
+
+def test_usage_by_model_table_renders(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="model", fmt="table")
+    assert code == 0
+    assert "claude-sonnet-4-6" in out
+    assert "0.00615" in out
+
+
+def test_usage_by_model_byte_for_byte_parity_with_route(tmp_path: Path) -> None:
+    """USAGE-03 contract: CLI `--by model` rows equal route models element-by-element.
+
+    CLI emits `{"by": "model", "since": "7d", "rows": [...]}` and the
+    route emits `{"models": [...]}`; envelope keys differ by design
+    (CLI uses uniform "rows" across all --by modes; route uses the
+    noun matching its name). The inner row data is byte-for-byte
+    identical because both call the same cost_by_model(db, "7d") with
+    the same window arg over the same DB.
+    """
+    from fastapi.testclient import TestClient
+
+    from horus_os import create_app
+
+    db = _init_db(tmp_path)
+    # Seed a multi-row DB across two models.
+    _seed_canonical_run(db, agent="default")
+    with sqlite3.connect(str(db.path)) as conn:
+        conn.execute(
+            "INSERT INTO llm_calls "
+            "(call_id, trace_id, iteration_idx, created_at, provider, model, "
+            "input_tokens, output_tokens, cache_creation_input_tokens, "
+            "cache_read_input_tokens, cost_usd, latency_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                uuid.uuid4().hex,
+                uuid.uuid4().hex,
+                0,
+                _now_iso(),
+                "gemini",
+                "gemini-2.5-pro",
+                400,
+                100,
+                0,
+                0,
+                0.001234,
+                75,
+            ),
+        )
+
+    code, cli_out, _err = _call_run_usage(tmp_path, by="model", fmt="json", since="7d")
+    assert code == 0
+    cli_payload = json.loads(cli_out)
+
+    client = TestClient(create_app(data_dir=tmp_path))
+    response = client.get("/api/observability/cost-by-model?since=7d")
+    assert response.status_code == 200
+    route_payload = response.json()
+
+    assert cli_payload["rows"] == route_payload["models"]

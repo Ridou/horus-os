@@ -26,6 +26,7 @@ from horus_os.observability.pricing import ModelPricing, PricingTable
 from horus_os.observability.queries import (
     agent_totals,
     cost_by_agent,
+    cost_by_model,
     latency_p50_p95,
     parse_window,
     tool_reliability,
@@ -72,6 +73,7 @@ __all__ = [
     "ToolCallEvent",
     "agent_totals",
     "cost_by_agent",
+    "cost_by_model",
     "get_observation_bus",
     "latency_p50_p95",
     "parse_window",
