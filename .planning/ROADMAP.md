@@ -72,7 +72,7 @@
 - [x] **Phase 32: Schema migration, persistence skeleton, v0.3 baseline** - Schema v4→v5 additive migration, ObservationBus + SQLitePersister written but not yet wired into the runner, v0.3 capture-overhead baseline artifact committed. (completed 2026-05-26)
 - [x] **Phase 33: Capture at the runner + SSE branch** - Wrap each `Conversation.send` and `_execute_one` with bus publishes; fix the SSE branch in `server/api.py:_event_stream` so streamed runs never silently record $0; capture-overhead CI benchmark. (completed 2026-05-26)
 - [x] **Phase 34: Pricing table and cost annotation** - Bundle `pricing.json`, ship `PricingTable` + `CostAnnotator`; user override path; `pricing_missing=1, cost_usd=NULL` for unknown models. (completed 2026-05-26)
-- [ ] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards.
+- [x] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards. (completed 2026-05-26)
 - [ ] **Phase 36: Observability dashboard tab** - New `/observability` tab (cost-by-agent, latency p50/p95, tool reliability) with window selector, small-sample handling, pricing-staleness banner, and graceful pre-v0.4 trace rendering.
 - [ ] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented.
 - [ ] **Phase 38: OpenTelemetry adapter** - Opt-in `OtelAdapter` behind a `[otel]` extra; lifecycle adapter pattern; default-deny content capture; bounded shutdown; three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke).
@@ -279,7 +279,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 35-01-PLAN.md: queries.py (parse_window + agent_totals + cost_by_agent + latency_p50_p95 + tool_reliability), four new /api/observability routes, /api/agents extension with rollup columns (DASH-4-04 backend half)
+- [x] 35-01-PLAN.md: queries.py (parse_window + agent_totals + cost_by_agent + latency_p50_p95 + tool_reliability), four new /api/observability routes, /api/agents extension with rollup columns (DASH-4-04 backend half)
 
 ### Phase 36: Observability dashboard tab
 **Goal**: New `/observability` tab with three panels (cost-by-agent, latency p50/p95, tool reliability) plus the small UI tweak that extends the existing `/agents` tab with the cost and latency columns sourced from Phase 35's `/api/agents` extension. Same vanilla-JS pattern as the v0.3 Adapters tab. Render NULLs honestly so pre-v0.4 runs never look like $0.
@@ -362,7 +362,7 @@ Plans:
 | 32. Schema migration, persistence skeleton, v0.3 baseline | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 33. Capture at the runner + SSE branch | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 34. Pricing table and cost annotation | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 35. Query module and read APIs | v0.4 | 0/1 | Not started | - |
+| 35. Query module and read APIs | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 36. Observability dashboard tab | v0.4 | 0/1 | Not started | - |
 | 37. `horus-os usage` CLI subcommand | v0.4 | 0/1 | Not started | - |
 | 38. OpenTelemetry adapter | v0.4 | 0/1 | Not started | - |

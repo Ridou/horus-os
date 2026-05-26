@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: observability
 status: in_progress
-last_updated: "2026-05-26T04:04:14.279Z"
-last_activity: 2026-05-26, Phase 34 shipped (3 of 8 v0.4 phases complete)
+last_updated: "2026-05-26T04:47:09.578Z"
+last_activity: 2026-05-26, Phase 35 shipped (4 of 8 v0.4 phases complete)
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 3
-  percent: 37
+  completed_plans: 4
+  percent: 50
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.4 Observability milestone in progress. Phase 34 (pricing table and cost annotation) shipped 2026-05-26. Next: Phase 35 (query module and read APIs).
+**Current focus:** v0.4 Observability milestone — HALF SHIPPED (4 of 8). Phase 35 (query module + read APIs) shipped 2026-05-26. Next: Phase 36 (observability dashboard tab) || Phase 37 (horus-os usage CLI), both consume Phase 35's queries.py.
 
 ## Current Position
 
-Phase: 34 COMPLETE; Phase 35 not yet planned
-Plan: 1 of 1 in Phase 34
-Status: Ready for `/gsd-plan-phase 35`
-Last activity: 2026-05-26, Phase 34 shipped. Bundled pricing.json (1132 bytes in wheel) + PricingTable + CostAnnotator subscribing to ObservationBus BEFORE SQLitePersister. Cache-aware math (4 rates per model: input/output/cache_read/cache_write). Unknown models persist with cost_usd IS NULL (never 0; Pitfall 5). User override via HORUS_OS_PRICING_PATH env + cfg.pricing_path TOML. 10 atomic commits (TDD RED/GREEN pairs + Pitfall 5 isolation + SUMMARY), 32 new tests (520 total passing).
+Phase: 35 COMPLETE; Phase 36 not yet planned (autonomous chain continues)
+Plan: 1 of 1 in Phase 35
+Status: Ready for `/gsd-plan-phase 36`
+Last activity: 2026-05-26, Phase 35 shipped. queries.py with 4 pure functions (agent_totals, cost_by_agent, latency_p50_p95 via NTILE, tool_reliability) consumed by 4 new /api/observability/* GET routes + /api/agents extension. 14 commits, 65 new tests (585 total passing). Pitfalls 7/9/10/11 named regression tests all green.
 
 ## Prior Milestones
 
