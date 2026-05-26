@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: observability
 status: in_progress
-last_updated: "2026-05-26T05:16:49.640Z"
-last_activity: 2026-05-26, Phase 36 shipped (5 of 8 v0.4 phases complete)
+last_updated: "2026-05-26T05:55:14.619Z"
+last_activity: 2026-05-26, Phase 37 shipped (6 of 8 v0.4 phases complete)
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 8
-  completed_plans: 5
-  percent: 62
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.4 Observability milestone — 5 of 8 shipped (62%). Phase 36 (/observability dashboard tab) shipped 2026-05-26. Next: Phase 37 (horus-os usage CLI — consumes the same Phase 35 queries.py substrate the dashboard does).
+**Current focus:** v0.4 Observability milestone — 6 of 8 shipped (75%). Phase 37 (horus-os usage CLI) shipped 2026-05-26. Next: Phase 38 (OpenTelemetry adapter — highest risk; opt-in [otel] extra, default-deny content, bounded shutdown, TEST-13/14/15 non-negotiable tests).
 
 ## Current Position
 
-Phase: 36 COMPLETE; Phase 37 not yet planned (autonomous chain continues)
-Plan: 1 of 1 in Phase 36
-Status: Ready for `/gsd-plan-phase 37`
-Last activity: 2026-05-26, Phase 36 shipped. /observability tab with 3 panels + window selector + small-sample render + staleness banner + pre-v0.4 NULL handling. /agents tab extended with rollup columns + uncosted_runs tile. New pricing-status route. Vanilla JS, zero new deps. 9 commits, 22 new tests (607 total passing). Pitfalls 5/10/11 all addressed.
+Phase: 37 COMPLETE; Phase 38 not yet planned (autonomous chain continues)
+Plan: 1 of 1 in Phase 37
+Status: Ready for `/gsd-plan-phase 38`
+Last activity: 2026-05-26, Phase 37 shipped. `horus-os usage --since 7d --format json|csv|table --by model|tool|agent` CLI subcommand. Stdlib only. Additive cost_by_model query in queries.py (existing 4 functions unmodified). New /api/observability/cost-by-model route for byte-for-byte CLI/dashboard parity. JSON schema pinned by fixture test. Float-precision anti-canary tests pass. 5 commits, 37 new tests (644 total passing). docs/CLI.md created.
 
 ## Prior Milestones
 

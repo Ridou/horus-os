@@ -74,7 +74,7 @@
 - [x] **Phase 34: Pricing table and cost annotation** - Bundle `pricing.json`, ship `PricingTable` + `CostAnnotator`; user override path; `pricing_missing=1, cost_usd=NULL` for unknown models. (completed 2026-05-26)
 - [x] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards. (completed 2026-05-26)
 - [x] **Phase 36: Observability dashboard tab** - New `/observability` tab (cost-by-agent, latency p50/p95, tool reliability) with window selector, small-sample handling, pricing-staleness banner, and graceful pre-v0.4 trace rendering. (completed 2026-05-26)
-- [ ] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented.
+- [x] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented. (completed 2026-05-26)
 - [ ] **Phase 38: OpenTelemetry adapter** - Opt-in `OtelAdapter` behind a `[otel]` extra; lifecycle adapter pattern; default-deny content capture; bounded shutdown; three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke).
 - [ ] **Phase 39: Three-OS gate, release, migration doc** - `docs/MIGRATION-v0.3-to-v0.4.md`, `docs/OBSERVABILITY.md`, `docs/OTEL.md` (with explicit Threat model section), `scripts/release_gate.py` (pricing freshness + two-variant install-smoke), 3-OS CI green, v0.4.0 tag and GitHub Release.
 
@@ -309,7 +309,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 37-01-PLAN.md: usage subparser, three formatters (JSON/CSV/table) with float-precision rounding, additive cost_by_model query + matching /api/observability/cost-by-model route for --by model byte-for-byte parity, JSON schema pin, docs/CLI.md entry
+- [x] 37-01-PLAN.md: usage subparser, three formatters (JSON/CSV/table) with float-precision rounding, additive cost_by_model query + matching /api/observability/cost-by-model route for --by model byte-for-byte parity, JSON schema pin, docs/CLI.md entry
 
 ### Phase 38: OpenTelemetry adapter
 **Goal**: Highest-risk phase, lands LAST among the feature phases. Ship `OtelAdapter` as a v0.3-style `LifecycleAdapter` behind a `[otel]` extra. Lazy imports so a bare `pip install horus-os` never sees `opentelemetry-*`. Default-deny content capture: prompt and completion bodies are NEVER attached to spans by default; opt-in via `HORUS_OS_OTEL_CAPTURE_CONTENT=true` plus a redactor allowlist. `BatchSpanProcessor` always, never `SimpleSpanProcessor` in production. Bounded `force_flush(2000)` then `shutdown()` so Ctrl-C never blocks for 60 seconds (Pitfalls 6, 7, 12).
@@ -364,6 +364,6 @@ Plans:
 | 34. Pricing table and cost annotation | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 35. Query module and read APIs | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 36. Observability dashboard tab | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 37. `horus-os usage` CLI subcommand | v0.4 | 0/1 | Not started | - |
+| 37. `horus-os usage` CLI subcommand | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 38. OpenTelemetry adapter | v0.4 | 0/1 | Not started | - |
 | 39. Three-OS gate, release, migration doc | v0.4 | 0/1 | Not started | - |
