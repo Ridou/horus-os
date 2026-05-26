@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: planning
-last_updated: "2026-05-26T10:20:30.401Z"
-last_activity: 2026-05-26
+status: Phase 42 complete; proceeding to Phase 43
+last_updated: "2026-05-26T12:30:00.000Z"
+last_activity: 2026-05-26 — Phase 42 shipped (discovery + loading + failure isolation, 33 new tests, 793 total passing)
 progress:
-  total_phases: 11
-  completed_phases: 0
-  total_plans:
-  completed_plans: 0
-  percent: 0
+  total_phases: 32
+  completed_phases: 24
+  total_plans: 24
+  completed_plans: 24
+  percent: 75
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.5 Plugin System milestone — roadmap landed 2026-05-26 with 11 phases (40-50) covering all 39 v0.5 requirements at 100% coverage. Next step: `/gsd-plan-phase 40` to expand the v0.5 baseline artifact phase into a plan.
+**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42 shipped. Next phase: 43 (PermissionGate + CapabilityGuard real enforcement; bounded asyncio.wait_for(start, timeout=2.0); plugin disable short-circuit).
 
 ## Current Position
 
-Phase: 40: v0.5 baseline
+Phase: 43: PermissionGate + CapabilityGuard enforcement
 Plan: —
-Status: Defining plan
-Last activity: 2026-05-26 — Roadmap for v0.5 Plugin System landed (Phases 40-50)
+Status: Ready for `/gsd-plan-phase 43`
+Last activity: 2026-05-26 — Phase 42 shipped (discovery + loading + failure isolation)
 
 ## Prior Milestones
 
@@ -43,6 +43,7 @@ Last activity: 2026-05-26 — Roadmap for v0.5 Plugin System landed (Phases 40-5
   40 → 41 → 42 → 43 → (44 ∥ 45) → 46 → 47 → 48 → 49 → 50
 
 **Six load-bearing constraints carried across phases:**
+
 1. `plugins/api.py` is the SINGLE public API surface (Phase 41 defines, Phase 48 lints)
 2. Manifest hash drives re-prompt (`grant_hash = sha256(capabilities_set)`, Phase 43)
 3. Bounded `asyncio.wait_for(start, timeout=2.0)` matching v0.4 Phase 38 OtelAdapter shape (Phase 43)
@@ -52,6 +53,6 @@ Last activity: 2026-05-26 — Roadmap for v0.5 Plugin System landed (Phases 40-5
 
 ## Last Activity
 
-2026-05-26, v0.5 roadmap landed. 11 phases (40-50) defined with 5 success criteria each, 100% requirement coverage (39/39 v0.5 requirements mapped, zero orphans, zero duplicates). All six load-bearing constraints embedded in the success criteria as verifiable artifacts: literal `timeout=2.0` in Phase 43, literal three-step `pip download → validate → pip install` sequence in Phase 44, literal sentence "plugins execute in the horus-os Python process" in Phase 47's threat model, literal `manifest_version: int` requirement in Phase 41. Phase 44 ∥ Phase 45 is the only legitimate parallelism (mirrors v0.4's 36 ∥ 37). REQUIREMENTS.md traceability section added with 39-row v0.5 mapping table.
+2026-05-26, Phase 42 shipped. Discovery + loading + failure isolation substrate landed: `discover_plugins()` (entry_points + filesystem walk with structured DiscoveryError side-channel), `PluginLoader` with rollback-on-error, `PluginRegistry` mirroring AdapterRegistry shape and persisting to Phase 41 plugins + plugin_status tables, `CapabilityGuard` stub (Phase 43 swap site), FastAPI lifespan integration (`app.state.plugin_registry`), and ruff banned-api lint rule for `pkg_resources`. Six requirements complete: DISCOVERY-01, DISCOVERY-02, ISOLATE-01, ISOLATE-04, TEST-18, TEST-19. 33 new tests; suite total 793 passed (760 baseline + 33). Cold-start median 0.056ms vs 100ms threshold. Two commits: a481b0b (modules + ruff ban) and a444045 (lifespan + broken-plugin fixtures).
 
-Prior: 2026-05-26 Phase 34 shipped (pricing table); 2026-05-26 Phase 38 shipped (OtelAdapter); 2026-05-26 Phase 39 shipped (release gate + docs trio + v0.4.0 tag).
+Prior: 2026-05-26 Phase 41 shipped (manifest schema + public API + persistence migration; 39 new tests, 760 total); 2026-05-26 v0.5 roadmap landed (11 phases 40-50, 100% requirement coverage).

@@ -291,8 +291,8 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| DISCOVERY-01 | Server discovers plugins via `importlib.metadata.entry_points(group="horus_os.plugins")` (canonical path for pip-installed plugins); `pkg_resources` is lint-banned | active | 42 |
-| DISCOVERY-02 | Server discovers dev plugins via filesystem walk of `~/.horus-os/plugins/<name>/` (each contains a `horus-plugin.toml` + Python package); loaded via `importlib.util.spec_from_file_location` | active | 42 |
+| DISCOVERY-01 | Server discovers plugins via `importlib.metadata.entry_points(group="horus_os.plugins")` (canonical path for pip-installed plugins); `pkg_resources` is lint-banned | complete | 42 |
+| DISCOVERY-02 | Server discovers dev plugins via filesystem walk of `~/.horus-os/plugins/<name>/` (each contains a `horus-plugin.toml` + Python package); loaded via `importlib.util.spec_from_file_location` | complete | 42 |
 
 ### Installer flow (INSTALL)
 
@@ -318,10 +318,10 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| ISOLATE-01 | Plugin import failure, manifest validation failure, or `start()` exception NEVER crashes horus-os; failed plugin appears in `/api/plugins` with `status="error"` and structured `error_phase` (discover/validate/permission/load/start), lifespan continues | active | 42, 43 |
+| ISOLATE-01 | Plugin import failure, manifest validation failure, or `start()` exception NEVER crashes horus-os; failed plugin appears in `/api/plugins` with `status="error"` and structured `error_phase` (discover/validate/permission/load/start), lifespan continues | complete (42); start variants pending 43 | 42, 43 |
 | ISOLATE-02 | Plugin `start()` and `stop()` wrapped in `asyncio.wait_for(..., timeout=2.0)` matching v0.4 Phase 38 OtelAdapter shape; timeout or exception → `status="error", error_phase="start"`, lifespan continues | active | 43 |
 | ISOLATE-03 | Per-plugin enable/disable persisted in `plugins.enabled` column; disabled plugins skip discovery (no half-loaded state); `--disable-all-plugins` CLI flag as escape hatch | active | 43 |
-| ISOLATE-04 | Plugin runtime exceptions inside tool invocations absorbed by existing `ObservationBus.publish` exception-swallow at `observability/bus.py:174-181`; per-plugin error rate surfaced in `/api/plugins/{name}.health` and `/observability` | active | 42 |
+| ISOLATE-04 | Plugin runtime exceptions inside tool invocations absorbed by existing `ObservationBus.publish` exception-swallow at `observability/bus.py:174-181`; per-plugin error rate surfaced in `/api/plugins/{name}.health` and `/observability` | complete | 42 |
 
 ### Plugins dashboard tab (DASH-5)
 
@@ -363,8 +363,8 @@
 |----|-------------|--------|-------|
 | TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | active | 46 |
 | TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | active | 46 |
-| TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | active | 42 |
-| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | active | 42, 43 |
+| TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
+| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete (42); start variants pending 43 | 42, 43 |
 | TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | active | 49 |
 | TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff custom rule | active | 48 |
 
@@ -431,16 +431,16 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | MANIFEST-05 | 41 | Complete |
 | OBSERVE-01 | 41 | Complete |
 | MIG-05 | 41 | Complete |
-| DISCOVERY-01 | 42 | Pending |
-| DISCOVERY-02 | 42 | Pending |
-| ISOLATE-04 | 42 | Pending |
-| TEST-18 | 42 | Pending |
-| TEST-19 | 42 | Pending |
+| DISCOVERY-01 | 42 | Complete |
+| DISCOVERY-02 | 42 | Complete |
+| ISOLATE-04 | 42 | Complete |
+| TEST-18 | 42 | Complete |
+| TEST-19 | 42 | Complete |
 | PERMISSION-01 | 43 | Pending |
 | PERMISSION-02 | 43 | Pending |
 | PERMISSION-03 | 43 | Pending |
 | PERMISSION-04 | 43 | Pending |
-| ISOLATE-01 | 43 | Pending |
+| ISOLATE-01 | 43 | Partial (substrate complete in 42; start() variants pending 43) |
 | ISOLATE-02 | 43 | Pending |
 | ISOLATE-03 | 43 | Pending |
 | INSTALL-01 | 44 | Pending |
