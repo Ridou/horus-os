@@ -231,13 +231,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the platform default data directory.",
     )
     plugins_p.set_defaults(func=run_plugins)
-    plugins_sub = plugins_p.add_subparsers(
-        dest="plugins_command", metavar="<operation>"
-    )
+    plugins_sub = plugins_p.add_subparsers(dest="plugins_command", metavar="<operation>")
 
-    pi_install = plugins_sub.add_parser(
-        "install", help="Install a plugin from a pip spec"
-    )
+    pi_install = plugins_sub.add_parser("install", help="Install a plugin from a pip spec")
     pi_install.add_argument(
         "spec",
         help="A pip-installable spec: PyPI name, ./path, or git+https URL",
@@ -272,9 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pi_install.set_defaults(func=run_plugins, plugins_command="install")
 
-    pi_uninstall = plugins_sub.add_parser(
-        "uninstall", help="Uninstall an installed plugin"
-    )
+    pi_uninstall = plugins_sub.add_parser("uninstall", help="Uninstall an installed plugin")
     pi_uninstall.add_argument("name", help="Plugin name (e.g. 'horus-example-foo')")
     pi_uninstall.add_argument(
         "--yes",
@@ -291,9 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pi_uninstall.set_defaults(func=run_plugins, plugins_command="uninstall")
 
-    pi_list = plugins_sub.add_parser(
-        "list", help="List installed plugins (table or --json)"
-    )
+    pi_list = plugins_sub.add_parser("list", help="List installed plugins (table or --json)")
     pi_list.add_argument(
         "--json",
         action="store_true",
@@ -308,9 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pi_list.set_defaults(func=run_plugins, plugins_command="list")
 
-    pi_info = plugins_sub.add_parser(
-        "info", help="Show detailed info for one installed plugin"
-    )
+    pi_info = plugins_sub.add_parser("info", help="Show detailed info for one installed plugin")
     pi_info.add_argument("name", help="Plugin name")
     pi_info.add_argument(
         "--data-dir",
@@ -380,12 +370,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pi_update.set_defaults(func=run_plugins, plugins_command="update")
 
-    pi_grant = plugins_sub.add_parser(
-        "grant", help="Grant a capability to an installed plugin"
-    )
+    pi_grant = plugins_sub.add_parser("grant", help="Grant a capability to an installed plugin")
     pi_grant.add_argument("name", help="Plugin name")
-    pi_grant.add_argument(
-        "capability", help="Capability string (e.g. 'filesystem.read')"
+    # Phase 49 (Task 1): the positional ``capability`` and the new
+    # ``--all`` flag are mutually exclusive AND one is required. ``--all``
+    # reads the manifest's declared capability set from the plugins table
+    # (the user-approved set at install time) and grants every one in a
+    # single call — the CI install-smoke-plugin matrix uses it to flip
+    # the reference plugin from pending -> loaded without naming each
+    # capability. ``nargs='?'`` on the positional lets argparse treat the
+    # mutex required=True contract as the authoritative "exactly one"
+    # rule rather than the positional's own required-by-position rule.
+    grant_target = pi_grant.add_mutually_exclusive_group(required=True)
+    grant_target.add_argument(
+        "capability",
+        nargs="?",
+        default=None,
+        help="Capability string (e.g. 'filesystem.read')",
+    )
+    grant_target.add_argument(
+        "--all",
+        action="store_true",
+        dest="grant_all",
+        help="Grant every capability declared in the plugin manifest",
     )
     pi_grant.add_argument(
         "--data-dir",
@@ -399,9 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
         "revoke", help="Revoke a capability from an installed plugin"
     )
     pi_revoke.add_argument("name", help="Plugin name")
-    pi_revoke.add_argument(
-        "capability", help="Capability string (e.g. 'filesystem.read')"
-    )
+    pi_revoke.add_argument("capability", help="Capability string (e.g. 'filesystem.read')")
     pi_revoke.add_argument(
         "--data-dir",
         type=Path,

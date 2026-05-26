@@ -376,9 +376,7 @@ def detect_sdist(download_dir: Path) -> bool:
     has_wheel = any(p.suffix == ".whl" for p in download_dir.iterdir())
     if has_wheel:
         return False
-    has_sdist = any(
-        p.name.endswith((".tar.gz", ".zip")) for p in download_dir.iterdir()
-    )
+    has_sdist = any(p.name.endswith((".tar.gz", ".zip")) for p in download_dir.iterdir())
     return has_sdist
 
 
@@ -408,9 +406,7 @@ def render_grant_prompt(spec: PluginSpec, stdout: TextIO) -> None:
     enum and the mapping are closed at compile time so no
     user-supplied content reaches the prompt.
     """
-    stdout.write(
-        f"Plugin {spec.name} {spec.version} requests these capabilities:\n\n"
-    )
+    stdout.write(f"Plugin {spec.name} {spec.version} requests these capabilities:\n\n")
     for i, cap in enumerate(spec.capabilities):
         letter = string.ascii_lowercase[i]
         try:
@@ -421,9 +417,7 @@ def render_grant_prompt(spec: PluginSpec, stdout: TextIO) -> None:
     stdout.write(
         "\nSee docs/PLUGIN-SECURITY.md for the trust model before granting capabilities.\n"
     )
-    stdout.write(
-        "\nGrant all (y) / per-capability (a/b/c/...) / refuse (n)? "
-    )
+    stdout.write("\nGrant all (y) / per-capability (a/b/c/...) / refuse (n)? ")
 
 
 def prompt_for_grants(
@@ -475,8 +469,7 @@ def prompt_for_grants(
         raise PluginInstallError(
             "grant",
             _REASON_USER_REFUSED,
-            f"unrecognized grant decision {answer!r} for plugin "
-            f"{spec.name} {spec.version}",
+            f"unrecognized grant decision {answer!r} for plugin {spec.name} {spec.version}",
         )
     granted: set[str] = set()
     valid_letters = set(string.ascii_lowercase[: len(requested_names)])
@@ -660,9 +653,7 @@ def install_plugin(
         check_no_downgrade(wheel_path, pre_freeze_parsed)
 
         # Phase C — grant.
-        granted = prompt_for_grants(
-            spec, stdin=stdin, stdout=stdout, assume_yes=assume_yes
-        )
+        granted = prompt_for_grants(spec, stdin=stdin, stdout=stdout, assume_yes=assume_yes)
         permissions = PermissionService(db)
         # Insert the plugins row FIRST (the plugin_capabilities FK
         # requires it). We defer plugin_status to Phase E success so
@@ -710,9 +701,7 @@ def install_plugin(
         try:
             post_freeze_proc = run_pip("freeze", check=False)
             post_freeze_text = post_freeze_proc.stdout
-            post_freeze_hash = hashlib.sha256(
-                post_freeze_text.encode("utf-8")
-            ).hexdigest()
+            post_freeze_hash = hashlib.sha256(post_freeze_text.encode("utf-8")).hexdigest()
             if post_freeze_hash == pre_freeze_hash:
                 raise PluginInstallError(
                     "verify",
@@ -1013,9 +1002,59 @@ def grant_capability(name: str, capability: str, *, db: Database) -> None:
             f"cannot grant capability to {name!r}: no row in the plugins table",
         )
     version, manifest_hash = existing
-    PermissionService(db).grant(
-        name, version, capability, actor="cli", manifest_hash=manifest_hash
-    )
+    PermissionService(db).grant(name, version, capability, actor="cli", manifest_hash=manifest_hash)
+
+
+def grant_all_capabilities(name: str, *, db: Database) -> list[str]:
+    """Grant every capability the plugin declared at install time.
+
+    The capability set is read from the ``plugin_capabilities`` table,
+    which ``install_plugin`` (Phase C) seeded from the user-approved
+    ``spec.capabilities`` at install time. Re-granting that exact set
+    is NOT a privilege expansion (T-49-02 threat-register mitigation):
+    the user already consented to this manifest_hash at install. The
+    method deliberately does NOT consult the on-disk manifest because
+    a malicious update could add new capability requests; the trusted
+    source of truth is the persisted plugins row.
+
+    Returns the list of capability strings that were granted (sorted
+    for deterministic CLI output). The list is the FULL declared set,
+    not just the newly-granted ones — ``PermissionService.grant`` is
+    idempotent on already-granted rows so re-granting is safe.
+    """
+    existing = _load_existing_plugin(db, name)
+    if existing is None:
+        raise PluginInstallError(
+            "validate",
+            "plugin_not_installed",
+            f"cannot grant capabilities to {name!r}: no row in the plugins table",
+        )
+    version, manifest_hash = existing
+    # Read the declared capability set from plugin_capabilities. We
+    # include rows in any state (pending / granted / revoked) because
+    # the manifest hash equality already binds them to this install's
+    # approved set. State filtering would silently drop already-granted
+    # caps from the idempotent re-grant path.
+    with db._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT capability FROM plugin_capabilities
+            WHERE plugin_name = ? AND plugin_version = ?
+            ORDER BY capability
+            """,
+            (name, version),
+        ).fetchall()
+    caps = [row["capability"] for row in rows]
+    if not caps:
+        raise PluginInstallError(
+            "validate",
+            "no_capabilities_declared",
+            f"plugin {name!r} declares no capabilities; nothing to grant",
+        )
+    service = PermissionService(db)
+    for cap in caps:
+        service.grant(name, version, cap, actor="cli", manifest_hash=manifest_hash)
+    return caps
 
 
 def revoke_capability(name: str, capability: str, *, db: Database) -> None:
@@ -1038,6 +1077,7 @@ __all__ = [
     "check_no_pth",
     "detect_sdist",
     "extract_horus_plugin_toml",
+    "grant_all_capabilities",
     "grant_capability",
     "install_plugin",
     "is_venv",

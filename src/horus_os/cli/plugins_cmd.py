@@ -35,15 +35,11 @@ from horus_os.plugins.registry import PluginRegistry
 from horus_os.storage import Database
 
 
-def run_plugins(
-    args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO
-) -> int:
+def run_plugins(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     """Dispatch a ``horus-os plugins X`` invocation. Returns CLI exit code."""
     config = Config.load(getattr(args, "data_dir", None))
     if not config.db_path.exists():
-        stderr.write(
-            f"No database at {config.db_path}. Run `horus-os init` first.\n"
-        )
+        stderr.write(f"No database at {config.db_path}. Run `horus-os init` first.\n")
         return 1
     db = Database(config.db_path)
     op = getattr(args, "plugins_command", None)
@@ -77,9 +73,7 @@ def run_plugins(
 # ----------------------------------------------------------------------
 
 
-def _cmd_install(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_install(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
         name = installer.install_plugin(
             args.spec,
@@ -94,15 +88,11 @@ def _cmd_install(
     except PluginInstallError as exc:
         stderr.write(f"Install failed at phase {exc.phase}: {exc}\n")
         return 1
-    stdout.write(
-        f"Installed plugin {name}. Restart `horus-os serve` to load it.\n"
-    )
+    stdout.write(f"Installed plugin {name}. Restart `horus-os serve` to load it.\n")
     return 0
 
 
-def _cmd_uninstall(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_uninstall(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
         installer.uninstall_plugin(args.name, db=db)
     except PluginInstallError as exc:
@@ -112,9 +102,7 @@ def _cmd_uninstall(
     return 0
 
 
-def _cmd_list(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_list(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     rows = _select_plugin_rows(db)
     if getattr(args, "json", False):
         if not rows:
@@ -129,9 +117,7 @@ def _cmd_list(
     return 0
 
 
-def _cmd_info(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_info(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     name = args.name
     with db._connect() as conn:
         plugin_row = conn.execute(
@@ -197,18 +183,14 @@ def _cmd_info(
     return 0
 
 
-def _cmd_enable(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_enable(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     registry = PluginRegistry(db=db)
     if registry.get(args.name) is None:
         # Fall back to a direct row check — the registry restores
         # from disk on init but might miss a freshly-installed
         # plugin in some test paths.
         with db._connect() as conn:
-            row = conn.execute(
-                "SELECT name FROM plugins WHERE name = ?", (args.name,)
-            ).fetchone()
+            row = conn.execute("SELECT name FROM plugins WHERE name = ?", (args.name,)).fetchone()
         if row is None:
             stderr.write(f"No installed plugin named {args.name!r}.\n")
             return 1
@@ -217,15 +199,11 @@ def _cmd_enable(
     return 0
 
 
-def _cmd_disable(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_disable(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     registry = PluginRegistry(db=db)
     if registry.get(args.name) is None:
         with db._connect() as conn:
-            row = conn.execute(
-                "SELECT name FROM plugins WHERE name = ?", (args.name,)
-            ).fetchone()
+            row = conn.execute("SELECT name FROM plugins WHERE name = ?", (args.name,)).fetchone()
         if row is None:
             stderr.write(f"No installed plugin named {args.name!r}.\n")
             return 1
@@ -234,9 +212,7 @@ def _cmd_disable(
     return 0
 
 
-def _cmd_update(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_update(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
         name = installer.update_plugin(
             args.name,
@@ -256,9 +232,19 @@ def _cmd_update(
     return 0
 
 
-def _cmd_grant(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_grant(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
+    # Phase 49 (Task 1): ``--all`` branch grants every capability the
+    # plugin declared at install time. The v0.4 positional path (single
+    # capability) is byte-identical to today when ``grant_all`` is False
+    # or the attribute is missing entirely.
+    if getattr(args, "grant_all", False):
+        try:
+            granted = installer.grant_all_capabilities(args.name, db=db)
+        except PluginInstallError as exc:
+            stderr.write(f"Grant failed: {exc}\n")
+            return 1
+        stdout.write(f"Granted {len(granted)} capabilities to {args.name}: {', '.join(granted)}.\n")
+        return 0
     try:
         installer.grant_capability(args.name, args.capability, db=db)
     except PluginInstallError as exc:
@@ -268,9 +254,7 @@ def _cmd_grant(
     return 0
 
 
-def _cmd_revoke(
-    db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO
-) -> int:
+def _cmd_revoke(db: Database, args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
         installer.revoke_capability(args.name, args.capability, db=db)
     except PluginInstallError as exc:
@@ -326,10 +310,7 @@ def _format_plugins_table(rows: list[dict[str, object]]) -> str:
     header = f"{'name':28}  {'version':10}  {'status':10}  enabled"
     lines = [header, "-" * len(header)]
     for r in rows:
-        lines.append(
-            f"{r['name']!s:28}  {r['version']!s:10}  "
-            f"{r['status']!s:10}  {r['enabled']!s}"
-        )
+        lines.append(f"{r['name']!s:28}  {r['version']!s:10}  {r['status']!s:10}  {r['enabled']!s}")
     return "\n".join(lines)
 
 
