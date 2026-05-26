@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: observability
-status: milestone_complete
-last_updated: "2026-05-26T07:23:00.619Z"
-last_activity: 2026-05-26, v0.4 Observability milestone shipped (8 of 8 phases). Awaiting maintainer tag + GitHub Release per STOP-BEFORE-TAG.
+milestone: v0.5
+milestone_name: Plugin System
+status: planning
+last_updated: "2026-05-26T10:20:30.401Z"
+last_activity: 2026-05-26
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,18 +24,10 @@ See: .planning/PROJECT.md and .planning/README.md.
 
 ## Current Position
 
-v0.4 Observability: ALL PHASES COMPLETE
-- Phase 32 (schema + persistence + baseline)
-- Phase 33 (capture at runner + SSE)
-- Phase 34 (pricing + CostAnnotator)
-- Phase 35 (queries.py + read APIs)
-- Phase 36 (/observability dashboard tab)
-- Phase 37 (horus-os usage CLI)
-- Phase 38 (OTel adapter)
-- Phase 39 (release gate + docs trio + version bump)
-
-Status: Ready for maintainer to ship v0.4.0 (see .planning/phases/39-three-os-gate-release-migration-doc/39-01-SUMMARY.md ## STOP-BEFORE-TAG section).
-Last activity: 2026-05-26, release gate ran live with all 4 checks green; wheel built as horus_os-0.4.0-py3-none-any.whl shipping bundled pricing.json; 718 tests passing.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-26 — Milestone v0.5 started
 
 ## Prior Milestones
 
