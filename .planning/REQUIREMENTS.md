@@ -327,16 +327,16 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| DASH-5-01 | `/plugins` dashboard tab lists installed plugins with version, declared contributions (tools + adapters), granted capabilities (chips), lifecycle status, last error preview, and error rate over selected window | active | 45 |
-| DASH-5-02 | Enable/disable toggle per plugin from dashboard; grant modal lists per-capability state with revoke buttons | active | 45 |
-| DASH-5-03 | Plugin tile renders hyperlinks from manifest `author`, `homepage`, `issue_tracker` fields (no inline rendering of arbitrary URLs from plugin code, only from validated manifest fields) | active | 45 |
+| DASH-5-01 | `/plugins` dashboard tab lists installed plugins with version, declared contributions (tools + adapters), granted capabilities (chips), lifecycle status, last error preview, and error rate over selected window | complete | 45 |
+| DASH-5-02 | Enable/disable toggle per plugin from dashboard; grant modal lists per-capability state with revoke buttons | complete | 45 |
+| DASH-5-03 | Plugin tile renders hyperlinks from manifest `author`, `homepage`, `issue_tracker` fields (no inline rendering of arbitrary URLs from plugin code, only from validated manifest fields) | complete | 45 |
 
 ### Observability extension (OBSERVE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
 | OBSERVE-01 | `plugin_name TEXT NULL` column added to `llm_calls` and `tool_invocations`; NULL = "horus-os core" (pre-v0.5 rows roll up under that); index `idx_tool_invocations_plugin(plugin_name, created_at)` for rollup query speed | active | 41 |
-| OBSERVE-02 | `/api/observability/plugins` route returns per-plugin error rate (last 7d, 30d window) + p50/p95 latency; `/observability` dashboard tab gains a "by plugin" rollup tile alongside existing "by agent" and "by tool" tiles | active | 45 |
+| OBSERVE-02 | `/api/observability/plugins` route returns per-plugin error rate (last 7d, 30d window) + p50/p95 latency; `/observability` dashboard tab gains a "by plugin" rollup tile alongside existing "by agent" and "by tool" tiles | complete | 45 |
 
 ### Reference plugin (REFERENCE)
 
@@ -449,10 +449,10 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | INSTALL-04 | 44 | Complete (2026-05-26) |
 | INSTALL-05 | 44 | Complete (2026-05-26) |
 | INSTALL-06 | 44 | Complete (2026-05-26) |
-| DASH-5-01 | 45 | Pending |
-| DASH-5-02 | 45 | Pending |
-| DASH-5-03 | 45 | Pending |
-| OBSERVE-02 | 45 | Pending |
+| DASH-5-01 | 45 | Complete (2026-05-26) |
+| DASH-5-02 | 45 | Complete (2026-05-26) |
+| DASH-5-03 | 45 | Complete (2026-05-26) |
+| OBSERVE-02 | 45 | Complete (2026-05-26) |
 | TEST-16 | 46 | Pending |
 | TEST-17 | 46 | Pending |
 | REFERENCE-02 | 47 | Pending |

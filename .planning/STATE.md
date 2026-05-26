@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: Phase 44 complete; proceeding to Phase 45
-last_updated: "2026-05-26T20:00:00.000Z"
-last_activity: 2026-05-26 — Phase 44 shipped (two-phase installer + 9 CLI subcommands + upgrade-diff, 47 new tests, 888 total passing)
+status: Phase 45 complete; proceeding to Phase 46
+last_updated: "2026-05-26T13:35:00.000Z"
+last_activity: 2026-05-26 — Phase 45 shipped (six /api/plugins routes + /api/observability/plugins + /plugins dashboard tab + by-plugin obs tile + DASH-5-03 sanitation regression, 28 new tests, 916 total passing)
 progress:
   total_phases: 32
-  completed_phases: 27
-  total_plans: 27
-  completed_plans: 27
-  percent: 84
+  completed_phases: 28
+  total_plans: 28
+  completed_plans: 28
+  percent: 88
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44 shipped. Next phase: 45 (REST API + /plugins dashboard tab + per-plugin observability).
+**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44, 45 shipped. Next phase: 46 (three-tier test fixtures + pitfall regression suite).
 
 ## Current Position
 
-Phase: 45: REST API + /plugins dashboard tab + per-plugin observability
+Phase: 46: Test surface (three-tier fixtures + pitfall regression suite)
 Plan: —
-Status: Ready for `/gsd-plan-phase 45`
-Last activity: 2026-05-26 — Phase 44 shipped (two-phase installer + 9 CLI subcommands + upgrade-diff)
+Status: Ready for `/gsd-plan-phase 46`
+Last activity: 2026-05-26 — Phase 45 shipped (six /api/plugins routes + /api/observability/plugins + /plugins dashboard tab + by-plugin obs tile + DASH-5-03 sanitation, 28 new tests, 916 total passing)
 
 ## Prior Milestones
 
