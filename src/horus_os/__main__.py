@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from horus_os import __version__
-from horus_os.cli import run_agents, run_init, run_run, run_serve, run_traces
+from horus_os.cli import run_agents, run_init, run_run, run_serve, run_traces, run_usage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -205,6 +205,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the platform default data directory.",
     )
     delete_p.set_defaults(func=run_agents, agents_command="delete")
+
+    usage_p = sub.add_parser("usage", help="Print usage report (cost, latency, tool reliability)")
+    usage_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    usage_p.add_argument(
+        "--since",
+        default="7d",
+        help="Window (24h, 7d, 30d, or any Nh/Nd). Default 7d.",
+    )
+    usage_p.add_argument(
+        "--format",
+        choices=["json", "csv", "table"],
+        default="table",
+        help="Output shape. Default table.",
+    )
+    usage_p.add_argument(
+        "--by",
+        choices=["agent", "tool", "model"],
+        default="agent",
+        help="Slice the report. Default agent.",
+    )
+    usage_p.set_defaults(func=run_usage)
 
     return parser
 
