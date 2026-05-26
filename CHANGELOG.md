@@ -82,9 +82,24 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
 - **12-pitfall regression suite.** `tests/test_plugin_pitfalls/`
   maps 1:1 to `PITFALLS.md`. Each pitfall has one or more tests
   that pin the prevention pattern.
-- **Reference plugin scaffold (forward reference).** Phase 48 lands
-  `examples/horus-os-example-plugin/` demonstrating the four
-  scenarios enumerated in `docs/PLUGINS.md` § Walkthrough.
+- **Reference plugin (`examples/horus-os-example-plugin/`).**
+  Self-contained installable Python package demonstrating the v0.5
+  plugin contract across four scenarios in one distribution:
+  capability-gated filesystem tool (`echo_text_tool` via
+  `@require_capability(FILESYSTEM_READ)`), capability-gated secret
+  tool (`lookup_secret_tool` via `@require_capability(SECRETS_READ)`,
+  returns `None` on missing key), bounded-lifecycle adapter
+  (`ExampleAdapter` with `asyncio.create_task(asyncio.sleep(0))` +
+  cancel/await — well inside Phase 43's
+  `asyncio.wait_for(timeout=2.0)` ceiling), and a single
+  `horus-plugin.toml` registering both tools AND the adapter through
+  `[[contributions.*]]` arrays. Shipped as the canonical starting
+  template for third-party plugin authors. The TEST-21 two-layer
+  guard (ruff `flake8-tidy-imports.banned-api` + pytest source-tree
+  scan at `tests/plugins/test_reference_plugin_public_api_only.py`)
+  pins the plugin's public API surface to `horus_os.plugins.api` and
+  fires on any non-public `horus_os.*` import inside the reference
+  plugin's `src/` tree.
 - **Three new docs files.** `docs/PLUGINS.md` (plugin author
   guide), `docs/PLUGIN-SECURITY.md` (threat model + trust contract
   + out-of-scope defenses + recommended user practices), and

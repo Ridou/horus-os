@@ -342,7 +342,7 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| REFERENCE-01 | `examples/horus-os-example-plugin/` shipped as a separate package with its own `pyproject.toml` and `horus-plugin.toml`; demonstrates four scenarios (simple tool + capability check, config-reading tool, lifecycle adapter with start/stop, plugin registering both tool + adapter) | active | 48 |
+| REFERENCE-01 | `examples/horus-os-example-plugin/` shipped as a separate package with its own `pyproject.toml` and `horus-plugin.toml`; demonstrates four scenarios (simple tool + capability check, config-reading tool, lifecycle adapter with start/stop, plugin registering both tool + adapter) | complete | 48 |
 | REFERENCE-02 | `docs/PLUGINS.md` is the plugin-author guide; covers manifest, capabilities catalog, lifecycle hooks, testing, walkthrough of each reference plugin scenario in order; embedded `horus-plugin.toml` snippet diffs against the example plugin in CI | complete | 47 |
 
 ### Migration (continued from v0.4)
@@ -366,7 +366,7 @@
 | TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
 | TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete (42); start variants pending 43 | 42, 43 |
 | TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | active | 49 |
-| TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff custom rule | active | 48 |
+| TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff `flake8-tidy-imports.banned-api` (layer 1) + pytest source-tree backstop at `tests/plugins/test_reference_plugin_public_api_only.py` (layer 2) | complete | 48 |
 
 ### Release (continued from v0.4)
 
@@ -457,8 +457,8 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | TEST-17 | 46 | Complete (2026-05-26) |
 | REFERENCE-02 | 47 | Complete (2026-05-26) |
 | REL-12 | 47 | Complete (2026-05-26) |
-| REFERENCE-01 | 48 | Pending |
-| TEST-21 | 48 | Pending |
+| REFERENCE-01 | 48 | Complete (2026-05-26) |
+| TEST-21 | 48 | Complete (2026-05-26) |
 | TEST-20 | 49 | Pending |
 | REL-11 | 49 | Pending |
 | REL-10 | 50 | Pending |
