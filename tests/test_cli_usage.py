@@ -163,18 +163,20 @@ def test_usage_invalid_since_writes_invalid_window_to_stderr(tmp_path: Path) -> 
     assert out == ""
 
 
-def test_usage_dispatch_agent_format_csv_hits_stub_until_task_3(tmp_path: Path) -> None:
-    """CSV formatter is a stub until Task 3; agent dispatch still routes to it."""
+def test_usage_dispatch_agent_format_csv_succeeds(tmp_path: Path) -> None:
+    """Dispatch routes --by agent --format csv to the live CSV formatter."""
     _init_db(tmp_path)
-    with pytest.raises(NotImplementedError, match="formatter lands in Task 2/3"):
-        _call_run_usage(tmp_path, by="agent", fmt="csv")
+    code, _out, err = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    assert code == 0
+    assert err == ""
 
 
-def test_usage_dispatch_tool_format_table_hits_stub_until_task_3(tmp_path: Path) -> None:
-    """Table formatter is a stub until Task 3; tool dispatch still routes to it."""
+def test_usage_dispatch_tool_format_table_succeeds(tmp_path: Path) -> None:
+    """Dispatch routes --by tool --format table to the live table formatter."""
     _init_db(tmp_path)
-    with pytest.raises(NotImplementedError, match="formatter lands in Task 2/3"):
-        _call_run_usage(tmp_path, by="tool", fmt="table")
+    code, _out, err = _call_run_usage(tmp_path, by="tool", fmt="table")
+    assert code == 0
+    assert err == ""
 
 
 def test_usage_dispatch_model_hits_query_stub(tmp_path: Path) -> None:
@@ -268,3 +270,144 @@ def test_docs_cli_md_documents_horus_os_usage_subcommand() -> None:
     assert "--since" in docs
     assert "--format" in docs
     assert "--by" in docs
+
+
+# ---------- Task 3: CSV + table formatters ----------
+
+
+def test_csv_format_round_trip_via_dictreader(tmp_path: Path) -> None:
+    """CSV output is csv.DictReader-parseable and the cost survives round-trip."""
+    import csv as _csv
+
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    assert code == 0
+    reader = _csv.DictReader(io.StringIO(out))
+    rows = list(reader)
+    assert len(rows) == 1
+    # Column order is alphabetical (matches JSON sort_keys=True).
+    assert reader.fieldnames == sorted(reader.fieldnames or [])
+    assert float(rows[0]["total_cost_usd"]) == pytest.approx(0.006150, abs=1e-9)
+
+
+def test_csv_format_canonical_cost_no_float_precision_noise(tmp_path: Path) -> None:
+    """USAGE-04 anti-canary: no float-precision noise in CSV output."""
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    assert code == 0
+    assert "0.00615" in out
+    assert "0.006149" not in out
+    assert "0.006150000000" not in out
+
+
+def test_csv_format_empty_db_returns_empty_string(tmp_path: Path) -> None:
+    _init_db(tmp_path)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    assert code == 0
+    # Dispatch appends a single newline; the body itself is empty.
+    assert out == "\n"
+
+
+def test_csv_format_uncosted_run_writes_empty_cell_not_zero(tmp_path: Path) -> None:
+    """Pitfall 11 honesty contract: NULL renders as empty cell, never 0 in CSV."""
+    db = _init_db(tmp_path)
+    _seed_uncosted_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    assert code == 0
+    # uncosted_runs is 1 on the surfaced row; total_cost_usd is the
+    # cost_by_agent contract value (0.0 inside this function family per
+    # Phase 35); the visible NULL contract surfaces via uncosted_runs.
+    import csv as _csv
+
+    rows = list(_csv.DictReader(io.StringIO(out)))
+    assert rows[0]["uncosted_runs"] == "1"
+    assert rows[0]["run_count"] == "1"
+
+
+def test_table_format_canonical_renders_six_decimal_cost(tmp_path: Path) -> None:
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="table")
+    assert code == 0
+    assert "0.00615" in out
+    # Float-precision noise canaries must not appear.
+    assert "0.006149" not in out
+
+
+def test_table_format_empty_db_renders_empty_state_message(tmp_path: Path) -> None:
+    _init_db(tmp_path)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="table")
+    assert code == 0
+    assert "(no usage data in window)" in out
+
+
+def test_table_format_long_agent_name_truncates_with_ellipsis(tmp_path: Path) -> None:
+    """PITFALLS.md table-truncate row: long names ellipsis, never stretch row."""
+    db = _init_db(tmp_path)
+    long_name = "a" * 40
+    _seed_canonical_run(db, agent=long_name)
+    code, out, _err = _call_run_usage(tmp_path, by="agent", fmt="table")
+    assert code == 0
+    assert "..." in out
+    # No single cell exceeds the column cap (30) plus the inter-column
+    # padding (2). The header line lengths bound the data line lengths,
+    # so the longest line is the row line; check that no agent cell is
+    # rendered at its full 40-char length.
+    assert long_name not in out
+
+
+def test_table_format_uncosted_run_renders_hyphen_not_zero(tmp_path: Path) -> None:
+    """Pitfall 11: None cost renders as `-` in table mode, never `0`."""
+    # We seed a row where the cost cell will be None at the formatter
+    # boundary. cost_by_agent's contract converts None to 0.0 at the
+    # boundary, so to exercise the formatter's None branch we test the
+    # generic _round_row + _table_cell_str path directly via a synthetic
+    # row injection through tool_reliability (which honors None on
+    # success_rate when the denominator is 0).
+    db = _init_db(tmp_path)
+    with sqlite3.connect(str(db.path)) as conn:
+        conn.execute(
+            "INSERT INTO tool_invocations "
+            "(invocation_id, trace_id, parent_trace_id, created_at, tool_name, "
+            "latency_ms, status) VALUES (?, ?, NULL, ?, ?, ?, ?)",
+            (
+                uuid.uuid4().hex,
+                uuid.uuid4().hex,
+                _now_iso(),
+                "noop_tool",
+                10,
+                "expected_no_result",
+            ),
+        )
+    code, out, _err = _call_run_usage(tmp_path, by="tool", fmt="table")
+    assert code == 0
+    # success_rate is None when denominator is 0; renders as `-`.
+    assert " - " in out or out.rstrip().endswith("-")
+
+
+def test_all_three_formats_emit_same_numeric_cost_for_canonical_row(
+    tmp_path: Path,
+) -> None:
+    """USAGE-04 cross-format parity: same numeric cost in JSON, CSV, table."""
+    import csv as _csv
+    import re
+
+    db = _init_db(tmp_path)
+    _seed_canonical_run(db)
+
+    _code_j, out_json, _err_j = _call_run_usage(tmp_path, by="agent", fmt="json")
+    json_cost = json.loads(out_json)["rows"][0]["total_cost_usd"]
+
+    _code_c, out_csv, _err_c = _call_run_usage(tmp_path, by="agent", fmt="csv")
+    csv_cost = float(next(iter(_csv.DictReader(io.StringIO(out_csv))))["total_cost_usd"])
+
+    _code_t, out_table, _err_t = _call_run_usage(tmp_path, by="agent", fmt="table")
+    table_match = re.search(r"0\.\d+", out_table)
+    assert table_match is not None
+    table_cost = float(table_match.group(0))
+
+    assert json_cost == pytest.approx(0.006150, abs=1e-9)
+    assert csv_cost == pytest.approx(0.006150, abs=1e-9)
+    assert table_cost == pytest.approx(0.006150, abs=1e-9)

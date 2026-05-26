@@ -14,6 +14,8 @@ float-precision noise that breaks `jq` and `column` pipes downstream
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 from typing import Any, TextIO
 
@@ -125,10 +127,82 @@ def _format_json(rows: list[dict[str, Any]], *, by: str, since: str) -> str:
 
 
 def _format_csv(rows: list[dict[str, Any]]) -> str:
-    """Placeholder formatter; real impl lands in Task 2/3 of plan 37-01."""
-    raise NotImplementedError("formatter lands in Task 2/3 of plan 37-01")
+    """Serialize rows as CSV using csv.DictWriter.
+
+    Empty rows return an empty string so `wc -l` returns 0 on empty
+    windows. Field order is alphabetical (matches JSON sort_keys order
+    so consumer scripts get the same column ordering across formats).
+    Costs round to 6 decimals via the shared _round_row helper (USAGE-04
+    cross-format parity). None values render as empty cells (csv module
+    default), which is distinguishable from "0" and preserves the
+    Pitfall 11 honesty contract in CSV output.
+    """
+    if not rows:
+        return ""
+    fieldnames = sorted(rows[0].keys())
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(_round_row(row))
+    # csv.DictWriter writes its own line terminators; strip the trailing
+    # newline because the run_usage dispatch appends one via stdout.write.
+    return buf.getvalue().rstrip("\n")
 
 
 def _format_table(rows: list[dict[str, Any]]) -> str:
-    """Placeholder formatter; real impl lands in Task 2/3 of plan 37-01."""
-    raise NotImplementedError("formatter lands in Task 2/3 of plan 37-01")
+    """Render rows as a column-aligned table.
+
+    Empty windows render `(no usage data in window)` so an operator
+    distinguishes "no data" from "command failed". Long string values
+    truncate with ellipsis at the 30-char column cap (PITFALLS.md
+    table-truncate row). None renders as `-` (single hyphen) so the
+    Pitfall 11 NULL contract has a visual analog in table mode and
+    never reads as 0. Costs round to 6 decimals via _round_row so the
+    numeric values match JSON and CSV output (USAGE-04 cross-format
+    parity).
+    """
+    if not rows:
+        return "(no usage data in window)"
+    fieldnames = sorted(rows[0].keys())
+    processed = [_round_row(r) for r in rows]
+    # Compute per-column widths from rendered cell strings, capped at
+    # _TABLE_COL_CAP so long agent / model names do not stretch the row
+    # off-screen.
+    widths: dict[str, int] = {}
+    for name in fieldnames:
+        max_cell = len(name)
+        for row in processed:
+            cell = _table_cell_str(row.get(name))
+            max_cell = max(max_cell, len(cell))
+        widths[name] = min(max_cell, _TABLE_COL_CAP)
+    header = "  ".join(f"{name:<{widths[name]}}" for name in fieldnames)
+    separator = "-" * len(header)
+    lines = [header, separator]
+    for row in processed:
+        cells = []
+        for name in fieldnames:
+            cell = _table_cell_str(row.get(name))
+            if len(cell) > widths[name]:
+                cell = cell[: widths[name] - 3] + "..."
+            cells.append(f"{cell:<{widths[name]}}")
+        lines.append("  ".join(cells))
+    return "\n".join(lines)
+
+
+# Table-render column cap. Per PITFALLS.md table-truncate row, long
+# names (e.g., an agent named with a 40-char identifier) must truncate
+# with ellipsis rather than stretching the row off-screen.
+_TABLE_COL_CAP = 30
+
+
+def _table_cell_str(value: Any) -> str:
+    """Render one value for the table cell.
+
+    None becomes `-` (single hyphen, visually distinct from `0` so the
+    Pitfall 11 contract reads honestly). Floats render with their
+    Python repr (which for round(0.006150, 6) is `0.00615`).
+    """
+    if value is None:
+        return "-"
+    return str(value)
