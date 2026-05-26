@@ -75,7 +75,7 @@
 - [x] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards. (completed 2026-05-26)
 - [x] **Phase 36: Observability dashboard tab** - New `/observability` tab (cost-by-agent, latency p50/p95, tool reliability) with window selector, small-sample handling, pricing-staleness banner, and graceful pre-v0.4 trace rendering. (completed 2026-05-26)
 - [x] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented. (completed 2026-05-26)
-- [ ] **Phase 38: OpenTelemetry adapter** - Opt-in `OtelAdapter` behind a `[otel]` extra; lifecycle adapter pattern; default-deny content capture; bounded shutdown; three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke).
+- [x] **Phase 38: OpenTelemetry adapter** - Opt-in `OtelAdapter` behind a `[otel]` extra; lifecycle adapter pattern; default-deny content capture; bounded shutdown; three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke). (completed 2026-05-26)
 - [ ] **Phase 39: Three-OS gate, release, migration doc** - `docs/MIGRATION-v0.3-to-v0.4.md`, `docs/OBSERVABILITY.md`, `docs/OTEL.md` (with explicit Threat model section), `scripts/release_gate.py` (pricing freshness + two-variant install-smoke), 3-OS CI green, v0.4.0 tag and GitHub Release.
 
 ## Phase Details
@@ -324,7 +324,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 38-01-PLAN.md: OtelAdapter (lazy import + RuntimeError contract), BatchSpanProcessor + bounded shutdown, 8 canonical GenAI attrs from semconv module, redactor allowlist + default-deny content capture, three non-negotiable tests (TEST-13 PII / TEST-14 bounded-shutdown / TEST-15 two-variant install-smoke), docs/OTEL.md with Threat model section
+- [x] 38-01-PLAN.md: OtelAdapter (lazy import + RuntimeError contract), BatchSpanProcessor + bounded shutdown, 8 canonical GenAI attrs from semconv module, redactor allowlist + default-deny content capture, three non-negotiable tests (TEST-13 PII / TEST-14 bounded-shutdown / TEST-15 two-variant install-smoke), docs/OTEL.md with Threat model section
 
 ### Phase 39: Three-OS gate, release, migration doc
 **Goal**: The release-quality gate. Document the v0.3-to-v0.4 migration, the observability surface, and the OTel threat model. Ship `scripts/release_gate.py` carrying both the pricing freshness check and the two-variant install-smoke matrix as a release-blocking gate. Three-OS CI green on the full test suite plus all v0.4 tests. Tag v0.4.0 and publish the GitHub Release.
@@ -365,5 +365,5 @@ Plans:
 | 35. Query module and read APIs | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 36. Observability dashboard tab | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 37. `horus-os usage` CLI subcommand | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 38. OpenTelemetry adapter | v0.4 | 0/1 | Not started | - |
+| 38. OpenTelemetry adapter | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 39. Three-OS gate, release, migration doc | v0.4 | 0/1 | Not started | - |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: observability
 status: in_progress
-last_updated: "2026-05-26T05:55:14.619Z"
-last_activity: 2026-05-26, Phase 37 shipped (6 of 8 v0.4 phases complete)
+last_updated: "2026-05-26T06:54:34.555Z"
+last_activity: 2026-05-26, Phase 38 shipped (7 of 8 v0.4 phases complete)
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 87
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md and .planning/README.md.
 
 ## Current Position
 
-Phase: 37 COMPLETE; Phase 38 not yet planned (autonomous chain continues)
+Phase: 38 — COMPLETE
 Plan: 1 of 1 in Phase 37
-Status: Ready for `/gsd-plan-phase 38`
-Last activity: 2026-05-26, Phase 37 shipped. `horus-os usage --since 7d --format json|csv|table --by model|tool|agent` CLI subcommand. Stdlib only. Additive cost_by_model query in queries.py (existing 4 functions unmodified). New /api/observability/cost-by-model route for byte-for-byte CLI/dashboard parity. JSON schema pinned by fixture test. Float-precision anti-canary tests pass. 5 commits, 37 new tests (644 total passing). docs/CLI.md created.
+Status: Phase 38 complete
+Last activity: 2026-05-26 -- Phase 38 marked complete
 
 ## Prior Milestones
 
