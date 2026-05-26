@@ -8,6 +8,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Python 3.13 added to the CI matrix (`lint-and-test` and `install-smoke` jobs) and to the package classifiers.
+
 ### Changed
 
 ## [0.4.0] - 2026-05-26
