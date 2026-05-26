@@ -1,0 +1,16 @@
+{
+  "by": "agent",
+  "rows": [
+    {
+      "agent": "default",
+      "run_count": 1,
+      "total_cache_creation_input_tokens": 0,
+      "total_cache_read_input_tokens": 500,
+      "total_cost_usd": 0.006150,
+      "total_input_tokens": 1000,
+      "total_output_tokens": 200,
+      "uncosted_runs": 0
+    }
+  ],
+  "since": "7d"
+}

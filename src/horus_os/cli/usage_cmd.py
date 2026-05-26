@@ -14,6 +14,7 @@ float-precision noise that breaks `jq` and `column` pipes downstream
 from __future__ import annotations
 
 import argparse
+import json
 from typing import Any, TextIO
 
 from horus_os.config import Config
@@ -23,6 +24,17 @@ from horus_os.observability.queries import (
     tool_reliability,
 )
 from horus_os.storage import Database
+
+# Field-name suffix list used by every formatter for type coercion. Any
+# key whose name ends with one of these is cast to int (defensive guard
+# against SQLite NULL float drift); the queries module already returns
+# ints for these keys but the cast keeps the contract explicit.
+_INT_SUFFIXES = ("_ms", "_tokens", "_count", "_runs", "_calls")
+# Cost / rate keys round to 6 decimals via Python round() BEFORE
+# serialization (USAGE-04 precision contract). Listed explicitly so
+# adding a new field requires a deliberate edit rather than relying on
+# implicit name matching.
+_COST_KEYS = frozenset({"total_cost_usd", "cost_usd", "success_rate"})
 
 
 def run_usage(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
@@ -71,9 +83,45 @@ def _cost_by_model_dispatch(db: Database, since: str) -> list[dict[str, Any]]:
     raise NotImplementedError("--by model lands in Task 4 of plan 37-01")
 
 
+def _round_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Round cost floats to 6 decimals and cast known-int suffix fields.
+
+    Shared by every formatter so the JSON, CSV, and table outputs all
+    carry the same numeric values (USAGE-04 cross-format parity). None
+    values pass through unchanged so the Pitfall 11 honesty contract
+    (None for uncosted, never 0) survives serialization in every shape.
+    """
+    out: dict[str, Any] = {}
+    for key, value in row.items():
+        if value is None:
+            out[key] = None
+            continue
+        if key in _COST_KEYS:
+            # round(value, 6) is the USAGE-04 contract. Python round
+            # (NOT format strings, NOT SQLite ROUND which is platform-
+            # variable on the 3-OS CI matrix) eliminates the
+            # 0.04200000000000001 float-noise that breaks jq and column
+            # pipes downstream.
+            out[key] = round(float(value), 6)
+            continue
+        if any(key.endswith(suffix) for suffix in _INT_SUFFIXES):
+            out[key] = int(value)
+            continue
+        out[key] = value
+    return out
+
+
 def _format_json(rows: list[dict[str, Any]], *, by: str, since: str) -> str:
-    """Placeholder formatter; real impl lands in Task 2/3 of plan 37-01."""
-    raise NotImplementedError("formatter lands in Task 2/3 of plan 37-01")
+    """Serialize rows as JSON wrapped in a {by, since, rows} envelope.
+
+    The wrapper shape makes `jq '.rows[]'` work uniformly across the
+    three --by modes. `sort_keys=True` keeps the output diff-stable
+    against the pinned fixture in tests/fixtures/usage_output_schema.json
+    so schema drift fails the test loudly.
+    """
+    processed = [_round_row(r) for r in rows]
+    payload = {"by": by, "since": since, "rows": processed}
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def _format_csv(rows: list[dict[str, Any]]) -> str:
