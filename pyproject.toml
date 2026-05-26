@@ -112,8 +112,76 @@ ignore = [
 # src/horus_os/adapters/base.py:22) and importlib.resources for packaged
 # data files. tests/plugins/test_pkg_resources_banned.py is the Layer-2
 # source-tree grep guard; this ruff rule is Layer 1.
+#
+# Pitfall 8 (Phase 48 / TEST-21): the reference plugin's src/ tree must
+# import only from horus_os.plugins.api — the single public API surface.
+# Every non-public horus_os submodule the plugin might reach for is
+# banned below. Scope is the reference plugin path only; first-party
+# horus_os modules and tests freely import any submodule. Per-file
+# scoping is rule-code-granular (ruff resolves per-file-ignores by rule
+# code, not per banned-api entry), so the per-file-ignores table below
+# lists every path EXCEPT examples/horus-os-example-plugin/src/ as
+# silencing TID251. The pkg_resources prohibition stays alive on the
+# reference plugin path (it is not silenced there) AND on every other
+# path via the Phase 42 layer-2 source-tree grep test
+# (tests/plugins/test_pkg_resources_banned.py).
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "pkg_resources".msg = "pkg_resources is banned (Pitfall 3 — 1.3-1.5s import overhead, deprecated API drift on 3.12+). Use importlib.metadata.entry_points(group=...) instead. See src/horus_os/adapters/base.py:22 for the canonical pattern."
+# Note on prefix semantics: ruff's banned-api matches by exact dotted
+# path AND any submodule. Banning "horus_os.plugins" would also ban
+# "horus_os.plugins.api" — the sanctioned public surface — so we ban
+# specific non-api submodules instead. A future `horus_os.plugins.<new>`
+# would slip past these per-name entries; the layer-2 source-tree scan
+# in tests/plugins/test_reference_plugin_public_api_only.py catches that
+# case because its regex is "anything except horus_os.plugins.api".
+"horus_os.adapters".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.types".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.spec".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.manifest".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.permissions".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.capability_catalog".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.discovery".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.loader".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.registry".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+"horus_os.plugins.installer".msg = "Reference plugin must import only from horus_os.plugins.api (Pitfall 8 — single public API surface). See docs/PLUGINS.md 'Public API surface' section."
+
+# Scope the horus_os.<non-api> bans to the reference plugin's src/ tree
+# ONLY. Every other path silences TID251 so first-party code can import
+# from any horus_os submodule. Note: this also silences the pkg_resources
+# rule on those paths — Phase 42's tests/plugins/test_pkg_resources_banned.py
+# is the source-tree-grep backstop that keeps pkg_resources out of
+# src/horus_os/ regardless of ruff config drift.
+#
+# IMPORTANT: ruff's per-file-ignores globs match against the file's
+# basename AND full relative path. A blanket "src/**/*.py" pattern
+# would match BOTH the host's first-party src/horus_os/** AND the
+# reference plugin's examples/.../src/** — silencing TID251 on the
+# very tree we want to lock down. Phase 48 uses path patterns that
+# explicitly include their parent component so the reference plugin's
+# nested src/ does not slip through (the host's src/ has no parent
+# component above the project root, so "src/**/*.py" without
+# qualification would match it; we'd lose specificity if we used the
+# same pattern with a wildcard prefix).
+#
+# Practical choice: list each host first-party path with NO wildcard
+# prefix, and let ruff's pre-anchored "examples/horus-os-example-plugin/src/**/*.py"
+# absence be the affirmative non-ignore for the reference plugin.
+[tool.ruff.lint.per-file-ignores]
+"src/horus_os/**/*.py" = ["TID251"]
+"tests/**/*.py" = ["TID251"]
+"scripts/**/*.py" = ["TID251"]
+"docs/**/*.py" = ["TID251"]
+"examples/horus-os-example-plugin/tests/**/*.py" = ["TID251"]
+# Sibling adapter examples directly under examples/ — single path
+# component each (e.g. examples/discord_adapter.py). Use a single-star
+# glob so the reference plugin's nested src/ does NOT match.
+"examples/calendar_adapter.py" = ["TID251"]
+"examples/custom_adapter.py" = ["TID251"]
+"examples/discord_adapter.py" = ["TID251"]
+"examples/email_adapter.py" = ["TID251"]
+"examples/multi_agent.py" = ["TID251"]
+"examples/slack_adapter.py" = ["TID251"]
+"examples/streaming.py" = ["TID251"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -121,7 +189,12 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+# Phase 48: collect the reference plugin's in-process tier-1 tests
+# under the host pytest invocation. The plugin's tests/conftest.py
+# prepends its src/ to sys.path so the package imports without being
+# pip-installed into the host venv (which would pollute the host's
+# plugin-discovery tests with a discoverable entry point).
+testpaths = ["tests", "examples/horus-os-example-plugin/tests"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
 markers = [

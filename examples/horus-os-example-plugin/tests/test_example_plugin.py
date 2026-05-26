@@ -28,15 +28,14 @@ import time
 from pathlib import Path
 
 import pytest
+from horus_os_example_plugin.adapter import ExampleAdapter
+from horus_os_example_plugin.tools import echo_text_tool, lookup_secret_tool
 
 # Test-only internal imports (exempt from TEST-21; the surface lock
 # applies to src/, not tests/).
 from horus_os.plugins.api import Capability, PluginContext
 from horus_os.plugins.manifest import validate_manifest
 from horus_os.plugins.permissions import CapabilityGuard, PermissionDenied
-
-from horus_os_example_plugin.adapter import ExampleAdapter
-from horus_os_example_plugin.tools import echo_text_tool, lookup_secret_tool
 
 REF_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REF_PLUGIN_ROOT / "horus-plugin.toml"
