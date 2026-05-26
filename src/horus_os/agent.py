@@ -258,9 +258,11 @@ def run_agent_loop(
     while result.tool_uses:
         if not _budget.consume():
             break
-        # Task 3 will add `trace_id=_trace_id` to thread the same id into
-        # tools/loop.py so ObsToolCallEvents share the run's trace_id.
-        outcomes = execute_tool_uses(registry, result, on_log=on_tool_result)
+        # Thread trace_id into execute_tool_uses so per-tool
+        # ObsToolCallEvents share the run's trace_id (Phase 33 Task 3).
+        outcomes = execute_tool_uses(
+            registry, result, on_log=on_tool_result, trace_id=_trace_id
+        )
         iteration_idx += 1
         result = _publish_send(iteration_idx, {"tool_results": outcomes, "tools": tools})
     # RunEndEvent is published by the caller (server/api.py:chat) AFTER
