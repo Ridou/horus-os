@@ -335,10 +335,10 @@ Plans:
   2. `scripts/release_gate.py` enforces both (a) `pricing.json.updated_at` within 14 days of the tag date and (b) the two-variant install-smoke matrix from Phase 38 is green; release workflow refuses to tag when either fails (REL-08, Pitfalls 5 and 12)
   3. Three-OS CI matrix (macOS + Ubuntu + Windows × Python 3.11 + 3.12) green on the full test suite plus the new v0.4 tests including the capture-overhead benchmark from Phase 33 and the three non-negotiable OTel tests from Phase 38
   4. `v0.4.0` tag exists on origin; CHANGELOG has a complete `[0.4.0]` section describing the new cost / latency / reliability surface, the OTel opt-in adapter, the two v0.3 correctness fixes, and the v0.3-to-v0.4 migration; GitHub Release at the tag is published with the CHANGELOG body and a link to the migration guide; version bumped to `0.4.0` in `pyproject.toml` and `src/horus_os/__init__.py` (REL-07)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 39-01: Docs trio, release_gate.py, version bump, CHANGELOG, tag, GitHub Release
+- [ ] 39-01-PLAN.md: Docs trio (MIGRATION + OBSERVABILITY + OTEL polish + RELEASE), scripts/release_gate.py + tests, version bump to 0.4.0, CHANGELOG promotion (STOP-BEFORE-TAG; maintainer runs git tag + gh release after approval)
 
 ## Progress
 
