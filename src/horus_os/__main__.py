@@ -81,6 +81,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Override the platform default data directory.",
     )
+    serve_p.add_argument(
+        "--disable-all-plugins",
+        action="store_true",
+        dest="disable_all_plugins",
+        help=(
+            "Skip plugin discovery entirely (ISOLATE-03 escape hatch). Use this when "
+            "a misbehaving plugin is preventing the server from booting."
+        ),
+    )
     serve_p.set_defaults(func=run_serve)
 
     run_p = sub.add_parser("run", help="Run a single agent prompt with the configured tools")

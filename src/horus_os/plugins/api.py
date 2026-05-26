@@ -157,13 +157,13 @@ class PluginContext:
     """
 
     __slots__ = (
+        "data_dir",
+        "filesystem",
+        "guard",
+        "net",
         "plugin_name",
         "plugin_version",
-        "data_dir",
-        "guard",
-        "filesystem",
         "secrets",
-        "net",
     )
 
     def __init__(

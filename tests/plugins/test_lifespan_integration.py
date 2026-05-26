@@ -37,6 +37,53 @@ def lifespan_data_dir(tmp_path: Path) -> Path:
     return data_dir
 
 
+def _healthy_manifest_hash() -> str:
+    """Compute the manifest_hash for the healthy fixture's requested caps."""
+    from horus_os.plugins.manifest import compute_manifest_hash
+
+    return compute_manifest_hash(["filesystem.read"])
+
+
+def _pre_grant_filesystem_read(
+    data_dir: Path,
+    plugin_name: str,
+    plugin_version: str = "0.1.0",
+) -> None:
+    """Pre-grant filesystem.read for a fixture plugin.
+
+    Phase 43 update: under default-deny PermissionGate, a plugin
+    requesting any capability lands in ``error_phase='permission'``
+    unless a grant row exists. Phase 42 tests assert specific
+    error_phases (``'load'`` for ``import-raises``, ``'loaded'`` for
+    ``healthy``); pre-granting the cap lets those plugins flow past
+    the permission gate so the original assertions still hold.
+    """
+    from horus_os.plugins.permissions import PermissionService
+    from horus_os.storage import Database
+
+    db = Database(data_dir / "horus.sqlite")
+    h = _healthy_manifest_hash()
+    with db._connect() as conn:
+        # plugins row must exist before plugin_capabilities FK CASCADE.
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO plugins
+                (name, version, manifest_hash, enabled, installed_at, source)
+            VALUES (?, ?, ?, 1, '2026-05-26T00:00:00Z', 'filesystem')
+            """,
+            (plugin_name, plugin_version, h),
+        )
+    PermissionService(db).grant(
+        plugin_name, plugin_version, "filesystem.read",
+        actor="system", manifest_hash=h,
+    )
+
+
+def _pre_grant_healthy(data_dir: Path) -> None:
+    """Backwards-compat alias for the most common case."""
+    _pre_grant_filesystem_read(data_dir, "healthy")
+
+
 def test_lifespan_continues_on_broken_plugin(
     fake_plugin_entry_points,
     tmp_plugin_dir: Path,
@@ -51,6 +98,11 @@ def test_lifespan_continues_on_broken_plugin(
 
     sys.modules.pop("tests.fixtures.broken_plugins.import_raises", None)
     install_broken_fixture("import_raises")
+    # Phase 43: pre-grant so the failure path lands at 'load' (the
+    # phase the fixture is designed to exercise) rather than at
+    # 'permission' (which would mask the LOAD-phase isolation that
+    # this test pins).
+    _pre_grant_filesystem_read(lifespan_data_dir, "import-raises")
 
     app = create_app(data_dir=lifespan_data_dir)
     with TestClient(app) as client:
@@ -88,6 +140,7 @@ def test_lifespan_loads_healthy_plugin(
     from horus_os.server.api import create_app
 
     install_broken_fixture("healthy")
+    _pre_grant_healthy(lifespan_data_dir)
 
     app = create_app(data_dir=lifespan_data_dir)
 
@@ -146,6 +199,11 @@ def test_lifespan_with_all_broken_fixtures_still_starts(
     install_broken_fixture("import_raises")
     install_broken_fixture("tool_raises_registration")
     install_broken_fixture("healthy")
+    _pre_grant_healthy(lifespan_data_dir)
+    # Phase 43: also pre-grant the load-phase fixtures so they reach
+    # the load step the original Phase 42 test was designed to verify.
+    _pre_grant_filesystem_read(lifespan_data_dir, "import-raises")
+    _pre_grant_filesystem_read(lifespan_data_dir, "tool-raises-registration")
 
     app = create_app(data_dir=lifespan_data_dir)
 

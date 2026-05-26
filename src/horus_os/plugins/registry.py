@@ -376,6 +376,64 @@ class PluginRegistry:
         self._persist_status(entry)
         self._persist_enabled(name, 0)
 
+    # ------------------------------------------------------------------
+    # Phase 43: enable/disable persistence (ISOLATE-03)
+    # ------------------------------------------------------------------
+
+    def enable(self, name: str) -> bool:
+        """Flip ``plugins.enabled = 1`` for ``name``. Returns the new enabled state.
+
+        If the in-memory entry currently has ``status='disabled'``, flip
+        it back to ``pending`` so the next discover pass can re-resolve
+        it. Other statuses are left alone — a previously-loaded entry
+        keeps its ``loaded`` status until a fresh discover refreshes it.
+        """
+        self._persist_enabled(name, 1)
+        entry = self._entries.get(name)
+        if entry is not None and entry.status == PLUGIN_STATUS_DISABLED:
+            entry.status = PLUGIN_STATUS_PENDING
+            entry.last_seen = datetime.now(UTC).isoformat()
+            self._persist_status(entry)
+        return True
+
+    def disable(self, name: str) -> bool:
+        """Flip ``plugins.enabled = 0`` for ``name``. Returns the new enabled state.
+
+        ``mark_disabled(name)`` is also invoked so the in-memory entry's
+        status reflects the change immediately; tests that round-trip
+        through SQL see both the column and the registry entry agree.
+
+        Returns False (the new enabled value) so callers can write
+        ``new_state = registry.disable(name)`` symmetrically with enable.
+        """
+        self.mark_disabled(name)
+        return False
+
+    def is_enabled(self, name: str) -> bool:
+        """Return whether ``plugins.enabled=1`` for ``name``.
+
+        Unknown names default to True so a fresh discovery loop's first
+        encounter with a never-seen plugin does not get filtered out
+        before the registry has a chance to register it (the discovery
+        path is: ``discover_plugins`` → ``register`` → ``is_enabled``
+        check → ``load``; the very first ``is_enabled`` call for a
+        plugin happens AFTER ``register`` has written the plugins row
+        with ``enabled=1`` per the existing _persist_plugin code path).
+        """
+        if self._db is None:
+            return True
+        try:
+            with self._db._connect() as conn:
+                row = conn.execute(
+                    "SELECT enabled FROM plugins WHERE name = ?",
+                    (name,),
+                ).fetchone()
+        except sqlite3.OperationalError:
+            return True
+        if row is None:
+            return True
+        return bool(row["enabled"])
+
     def get(self, name: str) -> PluginEntry | None:
         return self._entries.get(name)
 

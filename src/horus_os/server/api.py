@@ -13,6 +13,7 @@ processes.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -53,6 +54,10 @@ from horus_os.observability.queries import (
     tool_reliability,
 )
 from horus_os.plugins import (
+    PLUGIN_STATUS_LOADED,
+    CapabilityGuard,
+    PermissionGate,
+    PluginContext,
     PluginLoader,
     PluginRegistry,
     discover_plugins,
@@ -62,6 +67,14 @@ from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
 
 DEFAULT_MAX_ITERATIONS = 10
+
+# ISOLATE-02: bounded plugin-lifecycle timeout. Mirrors the v0.4
+# Phase 38 OtelAdapter precedent (FORCE_FLUSH_TIMEOUT_MS = 2000); a
+# misbehaving plugin's start/stop is wrapped in
+# ``asyncio.wait_for(..., timeout=PLUGIN_LIFECYCLE_TIMEOUT_S)`` so a
+# hang or runaway loop cannot block FastAPI lifespan startup or
+# shutdown beyond this budget.
+PLUGIN_LIFECYCLE_TIMEOUT_S = 2.0
 
 
 def create_app(data_dir: str | Path | None = None) -> Any:
@@ -92,16 +105,25 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         tool_registry=_app_tool_registry,
     )
 
-    # Phase 42 wiring: discover + validate + (permission-stub) + load
+    # Phase 42/43 wiring: discover + validate + permission + load
     # third-party plugins into the master ToolRegistry / AdapterRegistry.
-    # Each failure (DiscoveryError, validate failure, load failure) is
-    # routed to plugin_registry.mark_error and the loop continues —
-    # broken plugins NEVER crash lifespan startup (ISOLATE-01).
+    # Each failure (DiscoveryError, validate failure, permission denial,
+    # load failure) is routed to plugin_registry.mark_error and the
+    # loop continues — broken plugins NEVER crash lifespan startup
+    # (ISOLATE-01).
     #
-    # The Start phase (Pattern 2 phase E in ARCHITECTURE.md) lands in
-    # Phase 43 with bounded asyncio.wait_for(start, timeout=2.0) here.
-    # Phase 43 also swaps the CapabilityGuard pass-through stub for
-    # real default-deny enforcement (PERMISSION-01..04).
+    # Phase 43 additions:
+    # 1. HORUS_OS_DISABLE_PLUGINS env var short-circuits the entire
+    #    pipeline (ISOLATE-03 escape hatch). PluginRegistry stays empty.
+    # 2. Per-spec PluginRegistry.is_enabled gate — disabled plugins
+    #    skip clean (no validate / load / start).
+    # 3. PermissionGate.resolve between register and load — missing
+    #    grants flip status to error / error_phase='permission'.
+    # 4. Lifespan loop below wraps plugin adapter start/stop in
+    #    asyncio.wait_for(timeout=PLUGIN_LIFECYCLE_TIMEOUT_S).
+    _plugins_disabled_globally = (
+        os.environ.get("HORUS_OS_DISABLE_PLUGINS", "").lower() == "true"
+    )
     _plugin_db: Database | None = None
     try:
         _plugin_db_path = Config.load(_resolved_data_dir).db_path
@@ -114,13 +136,24 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         tool_registry=_app_tool_registry,
         adapter_registry=_registry,
     )
-    try:
-        _plugin_specs, _plugin_discovery_errors = discover_plugins()
-    except Exception:
-        # discover_plugins() is contracted to never raise out, but the
-        # belt-and-suspenders catch here honors ISOLATE-01 if the
-        # contract ever drifts.
+    # Materialized adapter instances by name — populated as plugins
+    # load, consumed by the lifespan to call start/stop under the
+    # bounded wait. Kept separate from AdapterRegistry (which stores
+    # names only).
+    _plugin_adapter_instances: dict[str, object] = {}
+
+    if _plugins_disabled_globally:
+        # ISOLATE-03: skip discovery entirely. The empty lists below
+        # cause the per-spec / per-error loops to no-op.
         _plugin_specs, _plugin_discovery_errors = [], []
+    else:
+        try:
+            _plugin_specs, _plugin_discovery_errors = discover_plugins()
+        except Exception:
+            # discover_plugins() is contracted to never raise out, but
+            # the belt-and-suspenders catch here honors ISOLATE-01 if
+            # the contract ever drifts.
+            _plugin_specs, _plugin_discovery_errors = [], []
     for _err in _plugin_discovery_errors:
         try:
             _plugin_registry.register_discovery_error(
@@ -145,10 +178,46 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 error_message=f"{type(_exc).__name__}: {_exc}",
             )
             continue
-        # Phase 43 inserts the permission gate here:
-        # if not _permission_gate.check(_spec):
-        #     _plugin_registry.mark_error(_spec.name, "permission", ...)
-        #     continue
+
+        # ISOLATE-03 per-plugin gate: disabled plugins skip clean.
+        # The check runs AFTER register so the in-memory entry exists
+        # and the disabled status surfaces in /api/plugins.
+        if _plugin_db is not None and not _plugin_registry.is_enabled(_spec.name):
+            _plugin_registry.mark_disabled(_spec.name)
+            continue
+
+        # Phase 43 permission gate: resolve the spec's requested caps
+        # against persisted grants. Any cap that lands in `pending`
+        # (not granted, manifest_hash mismatch, or revoked) blocks the
+        # load and flips the entry to error_phase='permission'.
+        if _plugin_db is not None:
+            try:
+                _gate = PermissionGate(_plugin_db)
+                _granted, _pending = _gate.resolve(_spec)
+            except Exception as _exc:
+                # An unknown capability name (ValueError from
+                # Capability(name)) or any other gate failure lands as
+                # error_phase='permission' so the dashboard pill
+                # surfaces the failure plainly. ISOLATE-01 keeps the
+                # loop running.
+                _plugin_registry.mark_error(
+                    _spec.name, "permission",
+                    f"{type(_exc).__name__}: {_exc}",
+                )
+                continue
+            if _pending:
+                _plugin_registry.mark_error(
+                    _spec.name, "permission",
+                    f"missing grants: {sorted(c.value for c in _pending)}",
+                )
+                continue
+            # Inject the resolved-grant guard into the loader so the
+            # tool-handler wrap site sees the real granted set.
+            _guard = CapabilityGuard(
+                _spec.name, granted_capabilities=_granted,
+            )
+            _plugin_loader._guards[_spec.name] = _guard
+
         try:
             _result = _plugin_loader.load(_spec)
         except Exception as _exc:
@@ -164,6 +233,10 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 registered_tools=_result.registered_tools,
                 registered_adapters=_result.registered_adapters,
             )
+            # Phase 43: stash materialized adapter instances for the
+            # bounded start/stop calls in the lifespan below.
+            for _adapter_name, _adapter_obj in _result.materialized_adapters:
+                _plugin_adapter_instances[_adapter_name] = _adapter_obj
         else:
             _plugin_registry.mark_error(
                 _spec.name,
@@ -173,9 +246,11 @@ def create_app(data_dir: str | Path | None = None) -> Any:
 
     @asynccontextmanager
     async def _lifespan(_app: Any) -> AsyncGenerator[None, None]:
-        # Startup: call `start(context)` on each adapter that has one.
+        # Startup: call `start(context)` on each first-party adapter.
         # A failing start is captured into the registry; other adapters
-        # still get their turn.
+        # still get their turn. First-party adapters (discord, slack,
+        # otel, ...) stay on the v0.3 unbounded-wait path — they are
+        # trusted code shipped with the package.
         for _a in _adapters:
             _start = getattr(_a, "start", None)
             if _start is None:
@@ -184,12 +259,54 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 await _start(_adapter_context)
             except Exception as exc:
                 _registry.mark_error(_a.name, f"{type(exc).__name__}: {exc}")
+
+        # Phase 43 / ISOLATE-02: plugin-adapter starts under bounded
+        # asyncio.wait_for(start, timeout=PLUGIN_LIFECYCLE_TIMEOUT_S).
+        # A hang or runaway loop in a third-party plugin's start()
+        # cannot block the lifespan beyond this budget; the failure
+        # surfaces as status='error' / error_phase='start' on the
+        # plugin entry. Lifespan continues to the next plugin /
+        # request-serving phase regardless.
+        for _entry in _plugin_registry.all():
+            if _entry.status != PLUGIN_STATUS_LOADED:
+                continue
+            for _adapter_name in _entry.registered_adapters:
+                _adapter_obj = _plugin_adapter_instances.get(_adapter_name)
+                if _adapter_obj is None:
+                    continue
+                _start_fn = getattr(_adapter_obj, "start", None)
+                if _start_fn is None:
+                    continue
+                _guard_for_ctx = _plugin_loader._guards.get(
+                    _entry.name,
+                    CapabilityGuard(_entry.name),
+                )
+                _plugin_ctx = PluginContext(
+                    plugin_name=_entry.name,
+                    plugin_version=_entry.spec.version if _entry.spec else "",
+                    data_dir=_resolved_data_dir / "plugins" / _entry.name,
+                    guard=_guard_for_ctx,
+                )
+                try:
+                    await asyncio.wait_for(
+                        _start_fn(_plugin_ctx),
+                        timeout=PLUGIN_LIFECYCLE_TIMEOUT_S,
+                    )
+                except TimeoutError:
+                    _plugin_registry.mark_error(
+                        _entry.name, "start",
+                        f"start() exceeded {PLUGIN_LIFECYCLE_TIMEOUT_S}s",
+                    )
+                except Exception as exc:
+                    _plugin_registry.mark_error(
+                        _entry.name, "start",
+                        f"{type(exc).__name__}: {exc}",
+                    )
+
         try:
             yield
         finally:
-            # Shutdown: call `stop()` on each adapter that has one,
-            # in reverse order. A failing stop bumps error_count but
-            # never aborts shutdown.
+            # Shutdown: first-party adapters in reverse, unbounded.
             for _a in reversed(_adapters):
                 _stop = getattr(_a, "stop", None)
                 if _stop is None:
@@ -198,6 +315,34 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                     await _stop()
                 except Exception as exc:
                     _registry.mark_error(_a.name, f"{type(exc).__name__}: {exc}")
+
+            # Phase 43: plugin-adapter stops under bounded wait,
+            # reverse order. Symmetric to the start path above.
+            for _entry in reversed(_plugin_registry.all()):
+                if _entry.status != PLUGIN_STATUS_LOADED:
+                    continue
+                for _adapter_name in reversed(_entry.registered_adapters):
+                    _adapter_obj = _plugin_adapter_instances.get(_adapter_name)
+                    if _adapter_obj is None:
+                        continue
+                    _stop_fn = getattr(_adapter_obj, "stop", None)
+                    if _stop_fn is None:
+                        continue
+                    try:
+                        await asyncio.wait_for(
+                            _stop_fn(),
+                            timeout=PLUGIN_LIFECYCLE_TIMEOUT_S,
+                        )
+                    except TimeoutError:
+                        _plugin_registry.mark_error(
+                            _entry.name, "stop",
+                            f"stop() exceeded {PLUGIN_LIFECYCLE_TIMEOUT_S}s",
+                        )
+                    except Exception as exc:
+                        _plugin_registry.mark_error(
+                            _entry.name, "stop",
+                            f"{type(exc).__name__}: {exc}",
+                        )
 
     app = FastAPI(
         title="horus-os",
@@ -215,6 +360,12 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     # /api/plugins route (Phase 45) and for tests that inspect
     # plugin_registry.error() / .enabled() to verify ISOLATE-01.
     app.state.plugin_registry = _plugin_registry
+    # Phase 43: expose the materialized adapter instances + loader so
+    # tests that need to inspect what got wired in past the registry
+    # name-only surface have a handle. Production callers use the
+    # registry; this is for diagnostics.
+    app.state.plugin_adapter_instances = _plugin_adapter_instances
+    app.state.plugin_loader = _plugin_loader
     # Phase 33 wiring: the ObservationBus is the central pub-sub for
     # LLMCallEvent / ToolCallEvent / RunEndEvent. Phase 34 CostAnnotator
     # subscribes here BEFORE the persister so the persister writes

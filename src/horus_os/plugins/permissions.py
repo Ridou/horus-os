@@ -92,7 +92,7 @@ class PermissionDenied(Exception):
     leak prompt content (Pitfall 6 message hygiene).
     """
 
-    __slots__ = ("plugin_name", "capability")
+    __slots__ = ("capability", "plugin_name")
 
     def __init__(self, plugin_name: str, capability: str) -> None:
         self.plugin_name = plugin_name
@@ -208,7 +208,7 @@ class CapabilityGuard:
     via the like-named property as a frozenset for stable iteration.
     """
 
-    __slots__ = ("_capabilities", "_plugin_name", "_granted")
+    __slots__ = ("_capabilities", "_granted", "_plugin_name")
 
     def __init__(
         self,
@@ -390,7 +390,7 @@ class PermissionService:
     def pending_on_upgrade(
         self,
         plugin_name: str,
-        old_version: str,  # noqa: ARG002 — kept in signature for caller-clarity / future diff
+        old_version: str,
         new_version: str,
         capabilities: set[str] | frozenset[str] | tuple[str, ...],
         new_hash: str,

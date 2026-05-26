@@ -69,19 +69,10 @@ def test_filesystem_read_path_escape_defense(tmp_path: Path) -> None:
     target = tmp_path / "real.txt"
     target.write_text("ok", encoding="utf-8")
 
-    with patch.object(Path, "resolve",
-                      autospec=True,
-                      side_effect=lambda self, **kw: Path.resolve.__wrapped__(self, **kw)
-                      if hasattr(Path.resolve, "__wrapped__")
-                      else self) as mock_resolve:
-        # We need to call the real resolve inside the patch, so we use
-        # a side_effect that calls the original implementation. The
-        # simpler approach: pre-snapshot the bound method.
-        pass
-
-    # The mock-call-the-original recipe is brittle; assert the
-    # invariant directly by wrapping the bound resolve in a counter
-    # and reading the path the shim resolves it to.
+    # Assert Path.resolve runs at least once during the read by
+    # wrapping it in a counter that also delegates to the real
+    # implementation; the shim's contract is that resolution runs
+    # BEFORE the cap check (Pitfall 1).
     calls: list[Path] = []
     original_resolve = Path.resolve
 

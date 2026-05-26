@@ -62,6 +62,15 @@ class PluginLoadResult:
     ``registered_tools`` and ``registered_adapters`` are non-empty
     only on ``status='loaded'``; on error the loader rolls back every
     registration before returning so these fields stay empty.
+
+    Phase 43 adds ``materialized_adapters`` — a tuple of
+    ``(adapter_name, adapter_instance)`` pairs the FastAPI lifespan
+    consumes to invoke ``start(ctx)`` and ``stop()`` on the actual
+    adapter object under ``asyncio.wait_for(..., timeout=2.0)``. The
+    AdapterRegistry tracks names only; storing the instance here lets
+    the lifespan reach the live object without a parallel dict on
+    create_app. Defaults to an empty tuple so Phase 42 callers stay
+    byte-identical.
     """
 
     status: str
@@ -69,6 +78,7 @@ class PluginLoadResult:
     error: str | None = None
     registered_tools: tuple[str, ...] = ()
     registered_adapters: tuple[str, ...] = ()
+    materialized_adapters: tuple[tuple[str, object], ...] = ()
 
 
 def _resolve_entry_point(entry_point: str) -> object:
@@ -219,11 +229,13 @@ class PluginLoader:
                 self._tool_registry.register(tool, replace=False)
                 registered_tools.append(tool)
 
+            materialized_pairs: list[tuple[str, object]] = []
             for adapter_name, entry_point in spec.adapter_entries:
                 target = _resolve_entry_point(entry_point)
                 adapter = _materialize_adapter(target, adapter_name)
                 self._adapter_registry.register(adapter.name)
                 registered_adapter_names.append(adapter.name)
+                materialized_pairs.append((adapter.name, adapter))
 
         except Exception as exc:
             # Rollback in reverse registration order.
@@ -248,6 +260,7 @@ class PluginLoader:
             error=None,
             registered_tools=tuple(t.name for t in registered_tools),
             registered_adapters=tuple(registered_adapter_names),
+            materialized_adapters=tuple(materialized_pairs),
         )
 
 

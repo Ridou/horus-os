@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import TextIO
 
@@ -11,6 +12,16 @@ def run_serve(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> in
     host: str = getattr(args, "host", "127.0.0.1")
     port: int = getattr(args, "port", 8765)
     data_dir: Path | None = getattr(args, "data_dir", None)
+
+    # ISOLATE-03 escape hatch: --disable-all-plugins sets the env var
+    # BEFORE create_app() runs so the lifespan's plugin pipeline
+    # short-circuits without ever calling discover_plugins(). The env
+    # var is the authoritative gate (the lifespan reads it directly)
+    # so any future caller — uvicorn worker, docker entrypoint, the
+    # dashboard via os.execvp — can opt out without going through the
+    # serve CLI.
+    if getattr(args, "disable_all_plugins", False):
+        os.environ["HORUS_OS_DISABLE_PLUGINS"] = "true"
 
     try:
         import uvicorn
