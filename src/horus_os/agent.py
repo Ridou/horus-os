@@ -23,6 +23,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from horus_os._providers import _anthropic, _gemini
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.observability import get_observation_bus
 from horus_os.observability.bus import LLMCallEvent
 from horus_os.tools.delegation import IterationBudget
@@ -94,7 +95,7 @@ async def run_agent_stream(
     model: str | None = None,
     max_tokens: int = 1024,
     system: str | None = None,
-) -> AsyncGenerator[str | ToolCallEvent, None]:
+) -> AsyncGenerator[str | ToolCallEvent | _StreamUsage, None]:
     """Stream incremental tokens from one provider turn.
 
     Yields each text delta as a `str` as the model produces it, then any
@@ -260,9 +261,7 @@ def run_agent_loop(
             break
         # Thread trace_id into execute_tool_uses so per-tool
         # ObsToolCallEvents share the run's trace_id (Phase 33 Task 3).
-        outcomes = execute_tool_uses(
-            registry, result, on_log=on_tool_result, trace_id=_trace_id
-        )
+        outcomes = execute_tool_uses(registry, result, on_log=on_tool_result, trace_id=_trace_id)
         iteration_idx += 1
         result = _publish_send(iteration_idx, {"tool_results": outcomes, "tools": tools})
     # RunEndEvent is published by the caller (server/api.py:chat) AFTER

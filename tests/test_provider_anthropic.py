@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 import pytest
 
 from horus_os._providers import _anthropic
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.types import Tool, ToolCallEvent
 
 
@@ -195,6 +196,17 @@ async def _collect(gen: Any) -> list[Any]:
     return [item async for item in gen]
 
 
+def _strip_sentinel(items: list[Any]) -> list[Any]:
+    """Filter out the Phase 33 terminal _StreamUsage sentinel.
+
+    The legacy provider streaming contract was [str | ToolCallEvent].
+    Phase 33 appends a `_StreamUsage` to surface terminal token counts
+    to the SSE handler. Tests that pin the legacy str/event surface
+    drop the sentinel for assertion convenience.
+    """
+    return [i for i in items if not isinstance(i, _StreamUsage)]
+
+
 def test_stream_anthropic_async_yields_tokens(
     fake_streaming_anthropic_module: types.ModuleType,
 ) -> None:
@@ -203,7 +215,7 @@ def test_stream_anthropic_async_yields_tokens(
     items = asyncio.run(
         _collect(_anthropic.stream_anthropic_async("hi", model="claude-sonnet-4-6"))
     )
-    assert items == ["Hello", ", ", "world"]
+    assert _strip_sentinel(items) == ["Hello", ", ", "world"]
 
 
 def test_stream_anthropic_async_yields_tool_call_event(
@@ -217,6 +229,7 @@ def test_stream_anthropic_async_yields_tool_call_event(
     items = asyncio.run(
         _collect(_anthropic.stream_anthropic_async("say hi", model="claude-sonnet-4-6"))
     )
+    items = _strip_sentinel(items)
     assert items[0] == "calling"
     assert len(items) == 2
     event = items[1]

@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from horus_os import Database, create_app
 from horus_os._providers import _anthropic
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.server import api as server_api
 from horus_os.types import ToolCallEvent
 
@@ -166,9 +167,13 @@ def test_stream_anthropic_async_handles_empty_final_message(
     _FakeStreamingAnthropic.next_tokens = ["ok"]
     _FakeStreamingAnthropic.next_final_blocks = []
     items = asyncio.run(_collect(_anthropic.stream_anthropic_async("hi", model="m")))
-    assert items == ["ok"]
-    # No tool events emitted from an empty content list.
-    assert not any(isinstance(i, ToolCallEvent) for i in items)
+    # Phase 33 added a terminal _StreamUsage sentinel after the text
+    # chunks and any ToolCallEvents. Filter it out for the legacy
+    # surface assertion; that the sentinel is present is covered by
+    # tests/observability/test_sse_capture.py.
+    non_sentinel = [i for i in items if not isinstance(i, _StreamUsage)]
+    assert non_sentinel == ["ok"]
+    assert not any(isinstance(i, ToolCallEvent) for i in non_sentinel)
 
 
 def test_stream_anthropic_async_tolerates_malformed_tool_use_block(
@@ -187,9 +192,12 @@ def test_stream_anthropic_async_tolerates_malformed_tool_use_block(
         _Block(type="tool_use"),  # no name, no input
     ]
     items = asyncio.run(_collect(_anthropic.stream_anthropic_async("hi", model="m")))
-    assert items[0] == "calling"
-    assert len(items) == 2
-    event = items[1]
+    # Strip the Phase 33 terminal _StreamUsage sentinel; the legacy
+    # surface assertion only cares about text + ToolCallEvent shape.
+    non_sentinel = [i for i in items if not isinstance(i, _StreamUsage)]
+    assert non_sentinel[0] == "calling"
+    assert len(non_sentinel) == 2
+    event = non_sentinel[1]
     assert isinstance(event, ToolCallEvent)
     assert event.name == ""
     assert event.input == {}

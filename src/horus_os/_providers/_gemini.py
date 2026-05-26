@@ -10,6 +10,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult, ToolUse
 
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -139,13 +140,19 @@ async def stream_gemini_async(
     *,
     model: str,
     system: str | None = None,
-) -> AsyncGenerator[str | ToolCallEvent, None]:
+) -> AsyncGenerator[str | ToolCallEvent | _StreamUsage, None]:
     """Stream incremental text tokens from Gemini, then any tool-call events.
 
     Yields each non-empty `chunk.text` as a `str`. Function-call parts seen
     during iteration are buffered and yielded as `ToolCallEvent` values after
     the text stream completes, matching the Anthropic streaming surface. This
     function does not execute tools, by design.
+
+    Phase 33: after the tool_call events, yields a terminal
+    `_StreamUsage` sentinel carrying the final chunk's `usage_metadata`
+    so the SSE handler can persist non-zero token counts (PITFALLS.md
+    Pitfall 2). Gemini surfaces usage on the final chunk; we track the
+    last-seen value and forward it.
     """
     from google import genai
 
@@ -157,9 +164,16 @@ async def stream_gemini_async(
 
         request["config"] = genai_types.GenerateContentConfig(system_instruction=system)
     tool_events: list[ToolCallEvent] = []
+    _last_usage: Any = None
     async for chunk in client.aio.models.generate_content_stream(**request):
         if chunk.text:
             yield chunk.text
+        # Gemini surfaces usage_metadata on the final chunk; track the
+        # most recent non-None value so the terminal sentinel reflects
+        # the canonical totals.
+        chunk_usage = getattr(chunk, "usage_metadata", None)
+        if chunk_usage is not None:
+            _last_usage = chunk_usage
         for candidate in getattr(chunk, "candidates", None) or []:
             content = getattr(candidate, "content", None)
             for part in getattr(content, "parts", None) or []:
@@ -173,6 +187,16 @@ async def stream_gemini_async(
                     )
     for event in tool_events:
         yield event
+    # Phase 33 terminal sentinel. Empty dict signals usage_metadata was
+    # not present on any chunk; the SSE consumer falls back to a
+    # char-count estimate so non-empty streams never persist zero.
+    usage_dict: dict[str, Any] = {}
+    if _last_usage is not None:
+        for key in ("prompt_token_count", "candidates_token_count"):
+            value = getattr(_last_usage, key, None)
+            if value is not None:
+                usage_dict[key] = value
+    yield _StreamUsage(usage=usage_dict)
 
 
 class Conversation:

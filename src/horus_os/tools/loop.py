@@ -122,12 +122,8 @@ def _execute_one(
         # outcome.error is formatted as "{ClassName}: {message}" by the
         # try/except above. Split on the FIRST colon to recover the
         # class name only; never persist the message body (Pitfall 9).
-        _error_class = (
-            outcome.error.split(":", 1)[0] if outcome.error is not None else None
-        )
-        _output_size = (
-            len(str(outcome.output).encode("utf-8")) if outcome.output is not None else 0
-        )
+        _error_class = outcome.error.split(":", 1)[0] if outcome.error is not None else None
+        _output_size = len(str(outcome.output).encode("utf-8")) if outcome.output is not None else 0
         get_observation_bus().publish(
             ObsToolCallEvent(
                 trace_id=trace_id,
