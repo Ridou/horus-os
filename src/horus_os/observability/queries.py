@@ -299,8 +299,54 @@ def cost_by_agent(db: Database, window: str) -> list[dict[str, Any]]:
 
 
 def latency_p50_p95(db: Database, window: str) -> dict[str, Any]:
-    """Global p50 / p95 / sample_count over the window. Implemented in Task 3."""
-    raise NotImplementedError("latency_p50_p95 ships in Task 3")
+    """Global p50 / p95 / sample_count over the window.
+
+    Returns a single dict (this function does NOT group by agent;
+    per-agent percentiles live on `agent_totals`):
+
+        p50_ms       : int | None  (None when sample_count == 0)
+        p95_ms       : int | None
+        sample_count : int
+
+    The empty-window contract returns `None` for both percentile keys,
+    never 0 (Pitfall 10 line 272: rendering 0 for n=0 is the bug). The
+    `sample_count` is surfaced so callers (Phase 36 dashboard, Phase 37
+    CLI) can apply the n>=10 render rule.
+
+    Implementation: a CTE selects `latency_ms` with `NTILE(100) OVER
+    (ORDER BY latency_ms)` over the windowed `llm_calls` rows. The outer
+    SELECT extracts `p50` and `p95` via `MAX(CASE WHEN pct <= K THEN
+    latency_ms END)`. SQLite returns NULL when the CASE matches no rows,
+    which the Python boundary passes through unchanged to JSON null.
+    """
+    threshold = parse_window(window)
+    sql = """
+        WITH windowed AS (
+            SELECT latency_ms
+            FROM llm_calls
+            WHERE created_at >= ?
+        ),
+        ranked AS (
+            SELECT latency_ms,
+                   NTILE(100) OVER (ORDER BY latency_ms) AS pct
+            FROM windowed
+        )
+        SELECT
+            MAX(CASE WHEN pct <= 50 THEN latency_ms END) AS p50_ms,
+            MAX(CASE WHEN pct <= 95 THEN latency_ms END) AS p95_ms,
+            COUNT(*) AS sample_count
+        FROM ranked
+    """
+    with db._connect() as conn:
+        row = conn.execute(sql, (threshold,)).fetchone()
+    sample_count = int(row["sample_count"]) if row is not None else 0
+    if sample_count == 0:
+        return {"p50_ms": None, "p95_ms": None, "sample_count": 0}
+    return {
+        "p50_ms": row["p50_ms"],
+        "p95_ms": row["p95_ms"],
+        "sample_count": sample_count,
+    }
 
 
 def tool_reliability(db: Database, window: str) -> list[dict[str, Any]]:
