@@ -275,6 +275,107 @@
 | REL-08 | `scripts/release_gate.py` enforces (a) `pricing.json.updated_at` within 14 days of tag date AND (b) a green two-variant install-smoke matrix | active | 39 |
 | REL-09 | `docs/OTEL.md` includes a "Threat model" section covering what an OTel collector receives in default and content-capture-enabled modes | active | 39 |
 
+## v0.5 Plugin System
+
+### Manifest schema (MANIFEST)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MANIFEST-01 | `horus-plugin.toml` declares `manifest_version: int` (required from day one), `name`, `version`, `description`, `author`, `license`, `homepage`, `issue_tracker` | active | 41 |
+| MANIFEST-02 | `horus_os_compat` declares supported horus-os range as a PEP 440 specifier string (e.g. `">=0.5,<0.6"`) parsed via `packaging.SpecifierSet`; mismatch yields validation error before load | active | 41 |
+| MANIFEST-03 | `[contributions]` table declares plugin's tool entry points and adapter entry points by reference (dotted path); duplicates against built-ins refused by loader | active | 41 |
+| MANIFEST-04 | `[capabilities]` array lists requested capabilities by string; every entry must be a member of `capability_catalog.py` closed enum or validation fails | active | 41 |
+| MANIFEST-05 | Pydantic v2 schema validation runs at install time and at every server boot; errors surface line-numbered, plain-English messages via `format_validation_error()` | active | 41 |
+
+### Discovery (DISCOVERY)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DISCOVERY-01 | Server discovers plugins via `importlib.metadata.entry_points(group="horus_os.plugins")` (canonical path for pip-installed plugins); `pkg_resources` is lint-banned | active | 42 |
+| DISCOVERY-02 | Server discovers dev plugins via filesystem walk of `~/.horus-os/plugins/<name>/` (each contains a `horus-plugin.toml` + Python package); loaded via `importlib.util.spec_from_file_location` | active | 42 |
+
+### Installer flow (INSTALL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| INSTALL-01 | `horus-os plugins install <pip-spec>` wraps `pip install --require-virtualenv` via `subprocess.check_call([sys.executable, "-m", "pip", ...])`; refuses outside a venv (`sys.prefix == sys.base_prefix` check) with `--allow-system-python` escape hatch | active | 44 |
+| INSTALL-02 | Two-phase install: phase A `pip download --no-deps` → phase B validate manifest + show requested capabilities + grant prompt → phase C `pip install --no-deps --no-build-isolation <wheel>`; aborts cleanly on phase B refusal | active | 44 |
+| INSTALL-03 | Sdist (`*.tar.gz`) refused by default; `--allow-sdist` flag required to bypass; wheels containing `.pth` files in RECORD also refused | active | 44 |
+| INSTALL-04 | Installer refuses any spec that would downgrade horus-os runtime deps (pydantic, packaging, fastapi, etc.); `pip freeze` hash captured pre/post install for rollback verification | active | 44 |
+| INSTALL-05 | First-install grant prompt lists each requested capability with plain-English `capability_catalog.py` description; user types `y` to grant all or per-capability tokens; refusing any capability aborts install (no half-grant state) | active | 44 |
+| INSTALL-06 | `horus-os plugins {uninstall,list,info,enable,disable,update}` subcommands; `update` runs the upgrade-diff (PERMISSION-02) | active | 44 |
+
+### Permission model (PERMISSION)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| PERMISSION-01 | Default-deny posture enforced by `DEFAULT_GRANT_POLICY = "deny"` constant; helper shims (`ctx.filesystem`, `ctx.secrets`, `ctx.net`, `ctx.process`, `ctx.env`) raise `PermissionDenied` if grant row missing | active | 43 |
+| PERMISSION-02 | Grants persisted in `plugin_capabilities` table keyed on `(plugin_name, plugin_version, capability)` AND tied to `manifest_hash = sha256(capabilities_set)`; manifest-hash diff on upgrade flips previously-granted rows to `pending` and triggers re-prompt | active | 43 |
+| PERMISSION-03 | Grants revocable from `/plugins` dashboard tab and via `horus-os plugins revoke <name> <capability>`; revocation takes effect on next plugin run (no in-flight cancellation needed) | active | 43 |
+| PERMISSION-04 | `capability_catalog.py` is the single source of truth for the closed enum of capability strings; v0.5 ships at minimum `filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`; each entry carries a plain-English description surfaced at the prompt | active | 43 |
+
+### Failure isolation (ISOLATE)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| ISOLATE-01 | Plugin import failure, manifest validation failure, or `start()` exception NEVER crashes horus-os; failed plugin appears in `/api/plugins` with `status="error"` and structured `error_phase` (discover/validate/permission/load/start), lifespan continues | active | 42, 43 |
+| ISOLATE-02 | Plugin `start()` and `stop()` wrapped in `asyncio.wait_for(..., timeout=2.0)` matching v0.4 Phase 38 OtelAdapter shape; timeout or exception → `status="error", error_phase="start"`, lifespan continues | active | 43 |
+| ISOLATE-03 | Per-plugin enable/disable persisted in `plugins.enabled` column; disabled plugins skip discovery (no half-loaded state); `--disable-all-plugins` CLI flag as escape hatch | active | 43 |
+| ISOLATE-04 | Plugin runtime exceptions inside tool invocations absorbed by existing `ObservationBus.publish` exception-swallow at `observability/bus.py:174-181`; per-plugin error rate surfaced in `/api/plugins/{name}.health` and `/observability` | active | 42 |
+
+### Plugins dashboard tab (DASH-5)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DASH-5-01 | `/plugins` dashboard tab lists installed plugins with version, declared contributions (tools + adapters), granted capabilities (chips), lifecycle status, last error preview, and error rate over selected window | active | 45 |
+| DASH-5-02 | Enable/disable toggle per plugin from dashboard; grant modal lists per-capability state with revoke buttons | active | 45 |
+| DASH-5-03 | Plugin tile renders hyperlinks from manifest `author`, `homepage`, `issue_tracker` fields (no inline rendering of arbitrary URLs from plugin code, only from validated manifest fields) | active | 45 |
+
+### Observability extension (OBSERVE)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| OBSERVE-01 | `plugin_name TEXT NULL` column added to `llm_calls` and `tool_invocations`; NULL = "horus-os core" (pre-v0.5 rows roll up under that); index `idx_tool_invocations_plugin(plugin_name, created_at)` for rollup query speed | active | 41 |
+| OBSERVE-02 | `/api/observability/plugins` route returns per-plugin error rate (last 7d, 30d window) + p50/p95 latency; `/observability` dashboard tab gains a "by plugin" rollup tile alongside existing "by agent" and "by tool" tiles | active | 45 |
+
+### Reference plugin (REFERENCE)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REFERENCE-01 | `examples/horus-os-example-plugin/` shipped as a separate package with its own `pyproject.toml` and `horus-plugin.toml`; demonstrates four scenarios (simple tool + capability check, config-reading tool, lifecycle adapter with start/stop, plugin registering both tool + adapter) | active | 48 |
+| REFERENCE-02 | `docs/PLUGINS.md` is the plugin-author guide; covers manifest, capabilities catalog, lifecycle hooks, testing, walkthrough of each reference plugin scenario in order; embedded `horus-plugin.toml` snippet diffs against the example plugin in CI | active | 47 |
+
+### Migration (continued from v0.4)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MIG-05 | v0.4 SQLite databases upgrade to v0.5 (v6) schema idempotently; additive only (three new tables + two NULLABLE columns + one index); v0.4 fixture (`tests/fixtures/v0_4_database.sqlite3`) loads cleanly; multiple runs of the migration are a no-op after the first | active | 41 |
+
+### Baseline measurement (continued from v0.4)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| BASELINE-02 | A `tests/perf/v0_4_baseline.json` artifact captures v0.4 cold-start time + discovery overhead with zero plugins; committed before Phase 42 discovery lands; cold-start regression test asserts against it | active | 40 |
+
+### Test and CI (continued from v0.4)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | active | 46 |
+| TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | active | 46 |
+| TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | active | 42 |
+| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | active | 42, 43 |
+| TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | active | 49 |
+| TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff custom rule | active | 48 |
+
+### Release (continued from v0.4)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | active | 50 |
+| REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | active | 49 |
+| REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | active | 47 |
+
 ## Coverage summary
 
 | Category | Total | Active | Validated |
@@ -285,25 +386,33 @@
 | MEM | 3 | 3 | 3 |
 | DASH | 3 | 3 | 3 |
 | WIZARD | 4 | 4 | 4 |
-| TEST | 15 | 15 | 10 |
-| REL | 9 | 9 | 6 |
+| TEST | 21 | 21 | 15 |
+| REL | 12 | 12 | 9 |
 | MA | 4 | 4 | 4 |
 | STREAM | 3 | 3 | 3 |
 | ADAPT | 3 | 3 | 3 |
-| MIG | 4 | 4 | 3 |
+| MIG | 5 | 5 | 4 |
 | ART | 3 | 3 | 3 |
 | DISC | 3 | 3 | 3 |
 | SLAK | 3 | 3 | 3 |
 | MAIL | 3 | 3 | 3 |
 | CAL | 2 | 2 | 2 |
 | DASH-3 | 2 | 2 | 2 |
-| METRIC | 5 | 5 | 0 |
-| STORE | 5 | 5 | 0 |
-| PRICE | 5 | 5 | 0 |
-| DASH-4 | 5 | 5 | 0 |
-| USAGE | 4 | 4 | 0 |
-| OTEL | 7 | 7 | 0 |
-| BASELINE | 1 | 1 | 0 |
-| **Total** | **107** | **107** | **66** |
+| METRIC | 5 | 5 | 5 |
+| STORE | 5 | 5 | 5 |
+| PRICE | 5 | 5 | 5 |
+| DASH-4 | 5 | 5 | 5 |
+| USAGE | 4 | 4 | 4 |
+| OTEL | 7 | 7 | 7 |
+| BASELINE | 2 | 2 | 1 |
+| MANIFEST | 5 | 5 | 0 |
+| DISCOVERY | 2 | 2 | 0 |
+| INSTALL | 6 | 6 | 0 |
+| PERMISSION | 4 | 4 | 0 |
+| ISOLATE | 4 | 4 | 0 |
+| DASH-5 | 3 | 3 | 0 |
+| OBSERVE | 2 | 2 | 0 |
+| REFERENCE | 2 | 2 | 0 |
+| **Total** | **141** | **141** | **107** |
 
-"Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`). v0.4 requirements stay unvalidated until their phases ship.
+"Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
