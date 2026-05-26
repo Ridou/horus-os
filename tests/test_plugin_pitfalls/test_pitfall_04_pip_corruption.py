@@ -90,6 +90,5 @@ def test_installer_guard_files_collect_without_errors() -> None:
     stdout = result.stdout
     for rel in INSTALLER_GUARD_FILES:
         assert rel in stdout, (
-            f"Pitfall 4 META: no test ids collected from {rel}. "
-            f"collect-only output:\n{stdout}"
+            f"Pitfall 4 META: no test ids collected from {rel}. collect-only output:\n{stdout}"
         )

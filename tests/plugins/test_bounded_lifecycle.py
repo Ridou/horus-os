@@ -142,8 +142,7 @@ def _patch_loader_to_inject(
     a PluginLoadResult(status='loaded', materialized_adapters=...).
     discover_plugins is also stubbed to yield the synthetic specs.
     """
-    specs = [_make_synthetic_spec(getattr(a, "name", f"synth-{i}"))
-             for i, a in enumerate(adapters)]
+    specs = [_make_synthetic_spec(getattr(a, "name", f"synth-{i}")) for i, a in enumerate(adapters)]
     by_name = {s.name: a for s, a in zip(specs, adapters, strict=True)}
 
     def _fake_discover() -> tuple[list[object], list[object]]:
@@ -161,10 +160,12 @@ def _patch_loader_to_inject(
         )
 
     monkeypatch.setattr(
-        "horus_os.server.api.discover_plugins", _fake_discover,
+        "horus_os.server.api.discover_plugins",
+        _fake_discover,
     )
     monkeypatch.setattr(
-        "horus_os.plugins.loader.PluginLoader.load", _fake_load,
+        "horus_os.plugins.loader.PluginLoader.load",
+        _fake_load,
     )
 
 

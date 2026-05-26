@@ -172,12 +172,8 @@ def test_total_cost_usd_null_stays_null_never_zero(tmp_path: Path) -> None:
         plugin_name="plugin_uncosted",
     )
     # Two llm_calls with cost_usd = NULL.
-    _seed_llm_call(
-        db, call_id="lc-1", plugin_name="plugin_uncosted", cost_usd=None
-    )
-    _seed_llm_call(
-        db, call_id="lc-2", plugin_name="plugin_uncosted", cost_usd=None
-    )
+    _seed_llm_call(db, call_id="lc-1", plugin_name="plugin_uncosted", cost_usd=None)
+    _seed_llm_call(db, call_id="lc-2", plugin_name="plugin_uncosted", cost_usd=None)
 
     rows = per_plugin_rollup(db, "7d")
     row = next(r for r in rows if r["plugin_name"] == "plugin_uncosted")

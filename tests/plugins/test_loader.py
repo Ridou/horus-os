@@ -78,9 +78,7 @@ def test_load_returns_result_dataclass_shape() -> None:
 def test_load_registers_one_tool() -> None:
     """Case (a): a spec with one tool_entry registers the tool."""
     spec = _make_spec(
-        tool_entries=(
-            ("hello_tool", "tests.fixtures.broken_plugins.healthy:make_tool"),
-        )
+        tool_entries=(("hello_tool", "tests.fixtures.broken_plugins.healthy:make_tool"),)
     )
     tool_registry = ToolRegistry()
     adapter_registry = AdapterRegistry()
@@ -118,9 +116,7 @@ def test_load_rolls_back_on_name_collision() -> None:
     assert tool_registry.get("hello_tool") is pre_existing
 
     spec = _make_spec(
-        tool_entries=(
-            ("hello_tool", "tests.fixtures.broken_plugins.healthy:make_tool"),
-        )
+        tool_entries=(("hello_tool", "tests.fixtures.broken_plugins.healthy:make_tool"),)
     )
     loader = PluginLoader(tool_registry=tool_registry, adapter_registry=AdapterRegistry())
 
@@ -183,11 +179,7 @@ def test_load_failure_on_unimportable_module() -> None:
     via test_loader_isolation.py, but uses a synthetic entry_point so
     the test does not depend on the fixture's filesystem layout.
     """
-    spec = _make_spec(
-        tool_entries=(
-            ("ghost_tool", "tests.plugins._nonexistent_module:make_tool"),
-        )
-    )
+    spec = _make_spec(tool_entries=(("ghost_tool", "tests.plugins._nonexistent_module:make_tool"),))
     loader = PluginLoader(tool_registry=ToolRegistry(), adapter_registry=AdapterRegistry())
 
     result = loader.load(spec)
@@ -201,9 +193,7 @@ def test_load_failure_on_unimportable_module() -> None:
 def test_load_failure_on_factory_returning_wrong_type() -> None:
     """A factory that returns something other than Tool -> error_phase='load'."""
     spec = _make_spec(
-        tool_entries=(
-            ("non_tool", "tests.plugins._loader_partial_fixture:make_non_tool"),
-        )
+        tool_entries=(("non_tool", "tests.plugins._loader_partial_fixture:make_non_tool"),)
     )
     loader = PluginLoader(tool_registry=ToolRegistry(), adapter_registry=AdapterRegistry())
 

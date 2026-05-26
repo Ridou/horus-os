@@ -42,9 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REF_PLUGIN_PATH = REPO_ROOT / "examples" / "horus-os-example-plugin"
 
 
-def _pre_install_plugins_row(
-    db: Database, name: str, version: str, manifest_hash: str
-) -> None:
+def _pre_install_plugins_row(db: Database, name: str, version: str, manifest_hash: str) -> None:
     """The plugin_capabilities table has an FK on plugins.name; seed it."""
     with db._connect() as conn:
         conn.execute(
@@ -106,18 +104,14 @@ def test_reference_plugin_installs_and_loads_after_grant(
     db = Database(data_dir / "horus.sqlite")
     db.init()
 
-    spec = validate_manifest(
-        (REF_PLUGIN_PATH / "horus-plugin.toml").read_bytes()
-    )
+    spec = validate_manifest((REF_PLUGIN_PATH / "horus-plugin.toml").read_bytes())
 
     app = create_app(data_dir=data_dir)
     with TestClient(app) as client:
         response = client.get("/api/plugins")
     assert response.status_code == 200
     body = response.json()
-    plugin_rows = [
-        p for p in body["plugins"] if p["name"] == "horus-os-example-plugin"
-    ]
+    plugin_rows = [p for p in body["plugins"] if p["name"] == "horus-os-example-plugin"]
     assert len(plugin_rows) == 1, (
         f"expected exactly one horus-os-example-plugin row; got {plugin_rows}"
     )
@@ -162,11 +156,7 @@ def test_reference_plugin_installs_and_loads_after_grant(
         response2 = client2.get("/api/plugins")
     assert response2.status_code == 200
     body2 = response2.json()
-    plugin_rows2 = [
-        p
-        for p in body2["plugins"]
-        if p["name"] == "horus-os-example-plugin"
-    ]
+    plugin_rows2 = [p for p in body2["plugins"] if p["name"] == "horus-os-example-plugin"]
     assert len(plugin_rows2) == 1, plugin_rows2
     row2 = plugin_rows2[0]
     # The PluginLoader (Phase 42) reads the entry-point group from
@@ -213,9 +203,7 @@ def test_reference_plugin_installs_and_loads_after_grant(
     #    in any pytest run that follows this one without a manual clean.
     #    Remove the egg-info so the source tree returns to its pre-test
     #    shape.
-    egg_info = (
-        REF_PLUGIN_PATH / "src" / "horus_os_example_plugin.egg-info"
-    )
+    egg_info = REF_PLUGIN_PATH / "src" / "horus_os_example_plugin.egg-info"
     if egg_info.exists():
         shutil.rmtree(egg_info)
     # Also handle dist-info from non-editable installs (--no-deps still

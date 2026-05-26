@@ -39,7 +39,8 @@ def test_env_var_skips_discover(
         raise AssertionError("discover_plugins must NOT be called when disabled")
 
     monkeypatch.setattr(
-        "horus_os.server.api.discover_plugins", _explode_discover,
+        "horus_os.server.api.discover_plugins",
+        _explode_discover,
     )
 
     from horus_os.server.api import create_app
@@ -65,7 +66,8 @@ def test_env_var_false_does_discover(
         return [], []
 
     monkeypatch.setattr(
-        "horus_os.server.api.discover_plugins", _counting_discover,
+        "horus_os.server.api.discover_plugins",
+        _counting_discover,
     )
 
     from horus_os.server.api import create_app
@@ -90,7 +92,8 @@ def test_env_var_unset_does_discover(
         return [], []
 
     monkeypatch.setattr(
-        "horus_os.server.api.discover_plugins", _counting_discover,
+        "horus_os.server.api.discover_plugins",
+        _counting_discover,
     )
 
     from horus_os.server.api import create_app
@@ -119,7 +122,8 @@ def test_cli_flag_sets_env_var(
 
     def _fake_create_app(*, data_dir: object) -> object:
         captured_env["HORUS_OS_DISABLE_PLUGINS"] = os.environ.get(
-            "HORUS_OS_DISABLE_PLUGINS", "<unset>",
+            "HORUS_OS_DISABLE_PLUGINS",
+            "<unset>",
         )
 
         class _StubApp:
@@ -131,7 +135,8 @@ def test_cli_flag_sets_env_var(
 
     monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
     monkeypatch.setattr(
-        "horus_os.server.create_app", _fake_create_app,
+        "horus_os.server.create_app",
+        _fake_create_app,
     )
 
     from horus_os.__main__ import build_parser
@@ -142,6 +147,7 @@ def test_cli_flag_sets_env_var(
     assert args.disable_all_plugins is True
 
     import io
+
     try:
         rc = run_serve(args, stdout=io.StringIO(), stderr=io.StringIO())
         assert rc == 0
@@ -184,6 +190,7 @@ def test_cli_no_flag_does_not_set_env_var(
     assert args.disable_all_plugins is False
 
     import io
+
     run_serve(args, stdout=io.StringIO(), stderr=io.StringIO())
     assert captured["env"] == "<unset>"
 

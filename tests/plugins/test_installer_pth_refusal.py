@@ -87,6 +87,4 @@ def test_install_refuses_wheel_with_pth(
     assert excinfo.value.phase == "pth"
     # Critical assertion: no install call ever ran.
     install_calls = [c for c in captured if c and c[0] == "install"]
-    assert install_calls == [], (
-        f"unexpected pip install call(s) before Phase D: {install_calls!r}"
-    )
+    assert install_calls == [], f"unexpected pip install call(s) before Phase D: {install_calls!r}"

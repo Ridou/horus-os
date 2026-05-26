@@ -100,8 +100,11 @@ def test_pending_on_upgrade_appends_log_row(tmp_path: Path) -> None:
     db = _make_db(tmp_path)
     svc = PermissionService(db)
     svc.pending_on_upgrade(
-        "foo", "1.0", "1.1",
-        {"filesystem.read"}, "newhash",
+        "foo",
+        "1.0",
+        "1.1",
+        {"filesystem.read"},
+        "newhash",
         actor="system",
     )
 

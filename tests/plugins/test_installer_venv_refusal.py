@@ -29,9 +29,7 @@ def _make_db(tmp_path: Path) -> Database:
     return db
 
 
-def test_venv_refused_outside_venv(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_venv_refused_outside_venv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _make_db(tmp_path)
     # Force sys.prefix == sys.base_prefix so is_venv() returns False.
     monkeypatch.setattr(installer.sys, "prefix", "/usr")
@@ -63,14 +61,19 @@ def test_venv_refusal_mentions_escape_hatch(
     monkeypatch.setattr(
         installer,
         "run_pip",
-        lambda *a, **kw: subprocess.CompletedProcess(args=list(a), returncode=0, stdout="", stderr=""),
+        lambda *a, **kw: subprocess.CompletedProcess(
+            args=list(a), returncode=0, stdout="", stderr=""
+        ),
     )
 
     with pytest.raises(PluginInstallError) as excinfo:
         install_plugin("anything==1.0", db=db, allow_system_python=False)
     # The message should mention --allow-system-python so users know
     # how to override.
-    assert "allow-system-python" in str(excinfo.value).lower() or "allow_system_python" in str(excinfo.value).lower()
+    assert (
+        "allow-system-python" in str(excinfo.value).lower()
+        or "allow_system_python" in str(excinfo.value).lower()
+    )
 
 
 def test_allow_system_python_proceeds_past_venv_gate(

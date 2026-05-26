@@ -202,9 +202,7 @@ class PluginObservabilityRollup(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    plugin_name: str = Field(
-        description="Plugin name; 'horus-os core' for the NULL bucket"
-    )
+    plugin_name: str = Field(description="Plugin name; 'horus-os core' for the NULL bucket")
     total_invocations: int = Field(description="Count of tool_invocations rows in the window")
     error_rate: float | None = Field(
         description=(

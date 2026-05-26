@@ -130,9 +130,7 @@ def test_index_html_validates_url_scheme() -> None:
     )
 
     # No raw interpolation of plugin.manifest_homepage into an href.
-    bad_pattern = re.compile(
-        r'href\s*=\s*["\'`]\$\{\s*[^}]*\bmanifest_homepage\b[^}]*\}["\'`]'
-    )
+    bad_pattern = re.compile(r'href\s*=\s*["\'`]\$\{\s*[^}]*\bmanifest_homepage\b[^}]*\}["\'`]')
     raw_match = bad_pattern.search(text)
     assert raw_match is None, (
         f"index.html interpolates manifest_homepage into href without a guard: "

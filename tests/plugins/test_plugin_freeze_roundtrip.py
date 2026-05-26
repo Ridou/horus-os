@@ -111,7 +111,9 @@ def _build_fake_pip(
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
         if args and args[0] == "freeze":
             stdout = post_freeze if state["installed"] else pre_freeze
-            return subprocess.CompletedProcess(args=list(args), returncode=0, stdout=stdout, stderr="")
+            return subprocess.CompletedProcess(
+                args=list(args), returncode=0, stdout=stdout, stderr=""
+            )
         if args and args[0] == "install":
             state["installed"] = True
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
@@ -132,8 +134,12 @@ def test_branch_a_success_inserts_plugins_row(
     clean_wheel = installer_fixture_wheels["wheel_clean"]
     pre = "pydantic==2.7.0\npackaging==24.0\n"
     post = "pydantic==2.7.0\npackaging==24.0\nhorus-example-clean==0.1.0\n"
-    monkeypatch.setattr(installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=pre, post_freeze=post))
-    monkeypatch.setattr(installer, "discover_plugins", _stub_discover_returns("horus-example-clean"))
+    monkeypatch.setattr(
+        installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=pre, post_freeze=post)
+    )
+    monkeypatch.setattr(
+        installer, "discover_plugins", _stub_discover_returns("horus-example-clean")
+    )
 
     name = install_plugin(
         "horus-example-clean",
@@ -169,8 +175,12 @@ def test_branch_b_silent_rollback(
     db = _make_db(tmp_path)
     clean_wheel = installer_fixture_wheels["wheel_clean"]
     same = "pydantic==2.7.0\npackaging==24.0\n"
-    monkeypatch.setattr(installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=same, post_freeze=same))
-    monkeypatch.setattr(installer, "discover_plugins", _stub_discover_returns("horus-example-clean"))
+    monkeypatch.setattr(
+        installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=same, post_freeze=same)
+    )
+    monkeypatch.setattr(
+        installer, "discover_plugins", _stub_discover_returns("horus-example-clean")
+    )
 
     with pytest.raises(PluginInstallError) as excinfo:
         install_plugin(
@@ -202,8 +212,12 @@ def test_branch_c_runtime_dep_changed(
     clean_wheel = installer_fixture_wheels["wheel_clean"]
     pre = "pydantic==2.7.0\npackaging==24.0\n"
     post = "pydantic==2.6.0\npackaging==24.0\nhorus-example-clean==0.1.0\n"
-    monkeypatch.setattr(installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=pre, post_freeze=post))
-    monkeypatch.setattr(installer, "discover_plugins", _stub_discover_returns("horus-example-clean"))
+    monkeypatch.setattr(
+        installer, "run_pip", _build_fake_pip(clean_wheel, pre_freeze=pre, post_freeze=post)
+    )
+    monkeypatch.setattr(
+        installer, "discover_plugins", _stub_discover_returns("horus-example-clean")
+    )
 
     with pytest.raises(PluginInstallError) as excinfo:
         install_plugin(

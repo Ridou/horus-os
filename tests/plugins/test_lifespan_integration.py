@@ -74,8 +74,11 @@ def _pre_grant_filesystem_read(
             (plugin_name, plugin_version, h),
         )
     PermissionService(db).grant(
-        plugin_name, plugin_version, "filesystem.read",
-        actor="system", manifest_hash=h,
+        plugin_name,
+        plugin_version,
+        "filesystem.read",
+        actor="system",
+        manifest_hash=h,
     )
 
 

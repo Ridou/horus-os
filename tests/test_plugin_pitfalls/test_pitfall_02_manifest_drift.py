@@ -61,14 +61,14 @@ def test_minimum_v1_manifest_parses_cleanly() -> None:
 def test_unknown_v1_field_emits_userwarning_and_still_parses() -> None:
     """Unknown top-level fields warn but still produce a valid spec."""
     toml_bytes = (
-        b'manifest_version = 1\n'
+        b"manifest_version = 1\n"
         b'name = "test-unknown-field"\n'
         b'version = "0.1.0"\n'
         b'description = "Tests forward-compat unknown-field warning."\n'
         b'author = "horus-os contributors"\n'
         b'license = "Apache-2.0"\n'
         b'horus_os_compat = ">=0.5,<0.6"\n'
-        b'capabilities = []\n'
+        b"capabilities = []\n"
         b'signing_key_fingerprint = "abc123"\n'  # unknown field
     )
     with warnings.catch_warnings(record=True) as captured:
@@ -78,9 +78,9 @@ def test_unknown_v1_field_emits_userwarning_and_still_parses() -> None:
     assert spec.name == "test-unknown-field"
     # At least one UserWarning mentioning the unknown field.
     matching = [
-        w for w in captured
-        if issubclass(w.category, UserWarning)
-        and "unknown manifest field" in str(w.message)
+        w
+        for w in captured
+        if issubclass(w.category, UserWarning) and "unknown manifest field" in str(w.message)
     ]
     assert matching, f"expected unknown-field UserWarning; captured: {captured}"
 
@@ -88,14 +88,14 @@ def test_unknown_v1_field_emits_userwarning_and_still_parses() -> None:
 def test_manifest_version_2_refuses_with_clear_message() -> None:
     """An unsupported manifest_version=2 raises ValidationError with a clear message."""
     toml_bytes = (
-        b'manifest_version = 2\n'
+        b"manifest_version = 2\n"
         b'name = "test-v2"\n'
         b'version = "0.1.0"\n'
         b'description = "Forward manifest_version test."\n'
         b'author = "horus-os contributors"\n'
         b'license = "Apache-2.0"\n'
         b'horus_os_compat = ">=0.5,<0.6"\n'
-        b'capabilities = []\n'
+        b"capabilities = []\n"
     )
     with pytest.raises(ValidationError) as excinfo:
         validate_manifest(toml_bytes)

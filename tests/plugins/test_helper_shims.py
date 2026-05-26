@@ -19,8 +19,9 @@ from horus_os.plugins.capability_catalog import Capability
 from horus_os.plugins.permissions import CapabilityGuard, PermissionDenied
 
 
-def _make_ctx(plugin_name: str, data_dir: Path,
-              granted: set[Capability] | None = None) -> PluginContext:
+def _make_ctx(
+    plugin_name: str, data_dir: Path, granted: set[Capability] | None = None
+) -> PluginContext:
     guard = CapabilityGuard(
         plugin_name,
         granted_capabilities=granted if granted is not None else set(),

@@ -60,9 +60,7 @@ def _hash_rows(conn: sqlite3.Connection, table: str, exclude_cols: tuple[str, ..
     check between pre- and post-migration row contents.
     """
     cols = [
-        row[1]
-        for row in conn.execute(f"PRAGMA table_info({table})")
-        if row[1] not in exclude_cols
+        row[1] for row in conn.execute(f"PRAGMA table_info({table})") if row[1] not in exclude_cols
     ]
     col_list = ", ".join(cols)
     rows = conn.execute(f"SELECT {col_list} FROM {table} ORDER BY rowid").fetchall()
@@ -151,9 +149,7 @@ def test_new_tables_have_correct_columns(upgraded_db: tuple[Path, dict[str, str]
     with sqlite3.connect(str(db_path)) as conn:
         for table, expected in expected_columns.items():
             cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-            assert cols == expected, (
-                f"{table} columns mismatch: expected {expected}, got {cols}"
-            )
+            assert cols == expected, f"{table} columns mismatch: expected {expected}, got {cols}"
 
 
 def test_new_columns_exist_on_llm_calls(upgraded_db: tuple[Path, dict[str, str]]) -> None:
@@ -168,9 +164,7 @@ def test_new_columns_exist_on_llm_calls(upgraded_db: tuple[Path, dict[str, str]]
     assert row[3] == 0, "plugin_name must be NULLABLE (notnull=0)"
 
 
-def test_new_columns_exist_on_tool_invocations(
-    upgraded_db: tuple[Path, dict[str, str]]
-) -> None:
+def test_new_columns_exist_on_tool_invocations(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db_path, _ = upgraded_db
     with sqlite3.connect(str(db_path)) as conn:
         info = list(conn.execute("PRAGMA table_info(tool_invocations)"))
@@ -194,16 +188,12 @@ def test_new_index_exists(upgraded_db: tuple[Path, dict[str, str]]) -> None:
 # --- Row preservation (Pitfall 9) ------------------------------------------
 
 
-def test_existing_rows_preserved_byte_identical(
-    upgraded_db: tuple[Path, dict[str, str]]
-) -> None:
+def test_existing_rows_preserved_byte_identical(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db_path, pre_hashes = upgraded_db
     with sqlite3.connect(str(db_path)) as conn:
         for tbl in ROW_PRESERVED_TABLES:
             post_hash = _hash_rows(conn, tbl)
-            assert post_hash == pre_hashes[tbl], (
-                f"{tbl} rows changed during v5 -> v6 migration"
-            )
+            assert post_hash == pre_hashes[tbl], f"{tbl} rows changed during v5 -> v6 migration"
         for tbl in ROW_PRESERVED_TABLES_EXCEPT_PLUGIN_NAME:
             # Exclude the new column for fair comparison.
             post_hash = _hash_rows(conn, tbl, exclude_cols=("plugin_name",))
@@ -213,7 +203,7 @@ def test_existing_rows_preserved_byte_identical(
 
 
 def test_plugin_name_is_null_on_pre_migration_rows(
-    upgraded_db: tuple[Path, dict[str, str]]
+    upgraded_db: tuple[Path, dict[str, str]],
 ) -> None:
     db_path, _ = upgraded_db
     with sqlite3.connect(str(db_path)) as conn:
@@ -291,8 +281,13 @@ def test_fresh_database_path_matches_upgraded_database_path(tmp_path: Path) -> N
         }
         assert u_tables == f_tables
 
-        for tbl in ("plugins", "plugin_capabilities", "plugin_status",
-                    "llm_calls", "tool_invocations"):
+        for tbl in (
+            "plugins",
+            "plugin_capabilities",
+            "plugin_status",
+            "llm_calls",
+            "tool_invocations",
+        ):
             u_cols = {r[1] for r in u_conn.execute(f"PRAGMA table_info({tbl})")}
             f_cols = {r[1] for r in f_conn.execute(f"PRAGMA table_info({tbl})")}
             assert u_cols == f_cols, f"{tbl} columns diverge: upgraded={u_cols}, fresh={f_cols}"
@@ -304,10 +299,7 @@ def test_fresh_database_path_matches_upgraded_database_path(tmp_path: Path) -> N
 def test_no_drop_or_rename_in_migration_block() -> None:
     """The v5 -> v6 migration block must be additive only."""
     storage_src = (
-        Path(__file__).resolve().parent.parent.parent
-        / "src"
-        / "horus_os"
-        / "storage.py"
+        Path(__file__).resolve().parent.parent.parent / "src" / "horus_os" / "storage.py"
     ).read_text()
     # Extract the v5 -> v6 block: from the `# v5 -> v6` comment marker until
     # the next un-indented closing of init() / next top-level statement.
@@ -318,12 +310,8 @@ def test_no_drop_or_rename_in_migration_block() -> None:
     block = storage_src[start:end]
     # Strip comment lines so prose discussion of "DROP" / "RENAME" doesn't
     # false-positive the grep.
-    code_lines = [
-        line for line in block.splitlines() if not line.lstrip().startswith("#")
-    ]
+    code_lines = [line for line in block.splitlines() if not line.lstrip().startswith("#")]
     code = "\n".join(code_lines)
     assert "DROP" not in code.upper(), "v5 -> v6 block must not contain DROP"
     assert "RENAME" not in code.upper(), "v5 -> v6 block must not contain RENAME"
-    assert "NOT NULL" not in code.upper(), (
-        "v5 -> v6 block must not ADD COLUMN with NOT NULL"
-    )
+    assert "NOT NULL" not in code.upper(), "v5 -> v6 block must not ADD COLUMN with NOT NULL"

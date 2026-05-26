@@ -72,15 +72,15 @@ def _build_synthetic_wheel(
     wheel_path = tmp_path / wheel_name
     cap_lines = ",\n".join(f'  "{c}"' for c in capabilities)
     toml = (
-        f'manifest_version = 1\n'
+        f"manifest_version = 1\n"
         f'name = "{plugin_name}"\n'
         f'version = "{version}"\n'
         f'description = "synthetic"\n'
         f'author = "test"\n'
         f'license = "Apache-2.0"\n'
         f'horus_os_compat = ">=0.5,<0.6"\n'
-        f'capabilities = [\n{cap_lines}\n]\n\n'
-        f'[contributions]\ntools = []\nadapters = []\n'
+        f"capabilities = [\n{cap_lines}\n]\n\n"
+        f"[contributions]\ntools = []\nadapters = []\n"
     ).encode()
     dist_info = f"{dist_name}-{version}.dist-info"
     with zipfile.ZipFile(wheel_path, "w") as zf:
@@ -110,7 +110,9 @@ def _fake_pip_factory(
                     break
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
         if args and args[0] == "freeze":
-            return subprocess.CompletedProcess(args=list(args), returncode=0, stdout=pre_freeze, stderr="")
+            return subprocess.CompletedProcess(
+                args=list(args), returncode=0, stdout=pre_freeze, stderr=""
+            )
         return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
 
     return fake
@@ -239,7 +241,9 @@ def test_update_reduced_revokes_surplus_caps(
     # Audit log has 2 revoke rows + 1 grant row for the surviving cap.
     actions = _query_log_actions(db, "foo")
     revoke_caps = {cap for cap, action, _ in actions if action == "revoked"}
-    grant_caps_new = {cap for cap, action, version in actions if action == "granted" and version == "1.1"}
+    grant_caps_new = {
+        cap for cap, action, version in actions if action == "granted" and version == "1.1"
+    }
     assert revoke_caps == {"net.outbound", "secrets.read"}
     assert "filesystem.read" in grant_caps_new
 
@@ -305,9 +309,7 @@ def test_update_expanded_prompts_and_grants_on_accept(
         assert new_state[cap] == "granted"
 
 
-def test_update_expanded_refuse_aborts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_expanded_refuse_aborts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = Database(tmp_path / "horus.sqlite3")
     db.init()
     old_caps = ("filesystem.read",)

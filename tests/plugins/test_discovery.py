@@ -131,9 +131,7 @@ def test_dedup_entry_point_wins_over_filesystem_with_warning(
     assert specs[0].source == "entry_point"
 
     # Find the dedup warning (others may fire too).
-    dedup_warnings = [
-        w for w in captured if "discovered from both" in str(w.message)
-    ]
+    dedup_warnings = [w for w in captured if "discovered from both" in str(w.message)]
     assert len(dedup_warnings) == 1
     msg = str(dedup_warnings[0].message)
     assert "healthy" in msg
@@ -152,9 +150,7 @@ def test_entry_point_with_unreadable_manifest_is_contained(
     """
     # Manually wire an entry without manifest bytes by going around inject.
     # The simplest path: register a manifest and then patch the helper to raise.
-    fake_plugin_entry_points.inject(
-        [("broken-ep", "broken_ep.module", _HEALTHY_MANIFEST_BYTES)]
-    )
+    fake_plugin_entry_points.inject([("broken-ep", "broken_ep.module", _HEALTHY_MANIFEST_BYTES)])
     # Replace the manifest-bytes resolver with one that always raises.
     import horus_os.plugins.discovery as discovery_module
 
@@ -238,9 +234,7 @@ def test_explicit_extra_paths_arg_takes_precedence(
     # hermetic even when ~/.horus-os/plugins/ exists for the user.
     import horus_os.plugins.discovery as discovery_module
 
-    monkeypatch.setattr(
-        discovery_module, "DEFAULT_FILESYSTEM_PLUGIN_DIR", tmp_path / "absent"
-    )
+    monkeypatch.setattr(discovery_module, "DEFAULT_FILESYSTEM_PLUGIN_DIR", tmp_path / "absent")
 
     specs, errors = discover_plugins(extra_paths=[extra_dir])
     assert errors == []
@@ -252,9 +246,7 @@ def test_entry_point_with_invalid_toml_is_contained(
     fake_plugin_entry_points,
 ) -> None:
     """Entry-point manifest bytes that fail TOML parsing -> error_phase='discover'."""
-    fake_plugin_entry_points.inject(
-        [("bad-ep", "bad_ep.module", _BAD_TOML_BYTES)]
-    )
+    fake_plugin_entry_points.inject([("bad-ep", "bad_ep.module", _BAD_TOML_BYTES)])
     specs, errors = discover_plugins()
     assert specs == []
     assert len(errors) == 1
@@ -289,9 +281,7 @@ def test_discover_plugins_never_raises_on_unexpected_validator_failure(
     or some other unanticipated type. The discovery walk swallows it
     and routes it to error_phase='validate' instead of crashing.
     """
-    fake_plugin_entry_points.inject(
-        [("surprise", "surprise.module", _HEALTHY_MANIFEST_BYTES)]
-    )
+    fake_plugin_entry_points.inject([("surprise", "surprise.module", _HEALTHY_MANIFEST_BYTES)])
 
     import horus_os.plugins.discovery as discovery_module
 

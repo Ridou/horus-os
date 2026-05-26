@@ -69,7 +69,9 @@ def test_v5_to_v6_migration_is_additive_and_non_destructive(tmp_path: Path) -> N
     shutil.copy(FIXTURE_V0_4, db_path)
 
     # Capture the pre-migration traces row count + a sample row's identity columns.
-    pre_traces = _raw_select(db_path, "SELECT trace_id, agent_profile_name, status FROM traces ORDER BY id")
+    pre_traces = _raw_select(
+        db_path, "SELECT trace_id, agent_profile_name, status FROM traces ORDER BY id"
+    )
     pre_trace_count = len(pre_traces)
     assert pre_trace_count > 0, "fixture should carry at least one traces row"
 
@@ -81,7 +83,9 @@ def test_v5_to_v6_migration_is_additive_and_non_destructive(tmp_path: Path) -> N
     assert post_version[0]["version"] == 6
 
     # 2. traces row count unchanged.
-    post_traces = _raw_select(db_path, "SELECT trace_id, agent_profile_name, status FROM traces ORDER BY id")
+    post_traces = _raw_select(
+        db_path, "SELECT trace_id, agent_profile_name, status FROM traces ORDER BY id"
+    )
     assert len(post_traces) == pre_trace_count
     for pre, post in zip(pre_traces, post_traces, strict=True):
         assert pre["trace_id"] == post["trace_id"]

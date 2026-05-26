@@ -71,17 +71,19 @@ def test_baseline_json_parses_and_every_row_has_required_schema_fields() -> None
         assert not missing, f"row {idx} missing fields: {missing}"
         assert not extra, f"row {idx} has unexpected fields: {extra}"
         assert entry["os"] in VALID_OS, f"row {idx} os={entry['os']!r} not in {VALID_OS}"
-        assert (
-            entry["python"] in VALID_PYTHON
-        ), f"row {idx} python={entry['python']!r} not in {VALID_PYTHON}"
-        assert (
-            entry["horus_os_version"] == "0.4.0"
-        ), f"row {idx} horus_os_version={entry['horus_os_version']!r} (expected 0.4.0)"
+        assert entry["python"] in VALID_PYTHON, (
+            f"row {idx} python={entry['python']!r} not in {VALID_PYTHON}"
+        )
+        assert entry["horus_os_version"] == "0.4.0", (
+            f"row {idx} horus_os_version={entry['horus_os_version']!r} (expected 0.4.0)"
+        )
         assert entry["n_samples"] == 20, f"row {idx} n_samples={entry['n_samples']!r} (expected 20)"
         captured_at = entry["captured_at"]
         assert captured_at == "placeholder" or (
             isinstance(captured_at, str) and captured_at.endswith("Z")
-        ), f"row {idx} captured_at={captured_at!r} must be 'placeholder' or an ISO8601 Z-suffixed string"
+        ), (
+            f"row {idx} captured_at={captured_at!r} must be 'placeholder' or an ISO8601 Z-suffixed string"
+        )
 
 
 def test_at_least_one_row_is_fully_populated() -> None:
@@ -99,18 +101,14 @@ def test_at_least_one_row_is_fully_populated() -> None:
         if e["captured_at"] != "placeholder"
         and all(e[field] is not None for field in MEASUREMENT_FIELDS)
     ]
-    assert (
-        len(populated) >= 1
-    ), "Phase 40 requires at least one fully populated baseline row; got 0"
+    assert len(populated) >= 1, "Phase 40 requires at least one fully populated baseline row; got 0"
     for entry in populated:
         for field in MEASUREMENT_FIELDS:
             value = entry[field]
-            assert isinstance(
-                value, (int, float)
-            ), f"{entry['os']} py{entry['python']} {field}={value!r} must be numeric"
-            assert (
-                value > 0
-            ), f"{entry['os']} py{entry['python']} {field}={value} must be > 0"
+            assert isinstance(value, (int, float)), (
+                f"{entry['os']} py{entry['python']} {field}={value!r} must be numeric"
+            )
+            assert value > 0, f"{entry['os']} py{entry['python']} {field}={value} must be > 0"
 
 
 def test_no_duplicate_os_python_keys() -> None:

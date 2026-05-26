@@ -29,9 +29,7 @@ from horus_os.plugins.capability_catalog import DESCRIPTIONS, Capability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGINS_MD_PATH = REPO_ROOT / "docs" / "PLUGINS.md"
-MANIFEST_FIXTURE_PATH = (
-    REPO_ROOT / "tests" / "fixtures" / "manifests" / "manifest_v1_full.toml"
-)
+MANIFEST_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "manifests" / "manifest_v1_full.toml"
 
 CANONICAL_SECTION_HEADINGS: list[str] = [
     "What is a plugin?",
@@ -80,10 +78,7 @@ def test_plugins_md_lists_every_capability_with_description(
             missing.append(f"capability dotted-key {cap.value!r}")
         description = DESCRIPTIONS[cap]
         if description not in plugins_md_text:
-            missing.append(
-                f"description for {cap.value} (expected substring: "
-                f"{description!r})"
-            )
+            missing.append(f"description for {cap.value} (expected substring: {description!r})")
     assert not missing, (
         "docs/PLUGINS.md is missing the following capability-catalog rows:\n  - "
         + "\n  - ".join(missing)

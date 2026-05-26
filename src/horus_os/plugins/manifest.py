@@ -61,6 +61,7 @@ MANIFEST_VERSION = 1
 
 # --- Submodels -------------------------------------------------------------
 
+
 class ContributionEntry(BaseModel):
     """One tool or adapter contributed by a plugin.
 
@@ -88,6 +89,7 @@ class ManifestContributions(BaseModel):
 
 
 # --- Top-level schema ------------------------------------------------------
+
 
 class MANIFEST_V1_SCHEMA(BaseModel):
     """pydantic v2 schema for ``horus-plugin.toml`` at manifest_version=1.
@@ -136,18 +138,14 @@ class MANIFEST_V1_SCHEMA(BaseModel):
         try:
             Version(value)
         except InvalidVersion as exc:
-            raise ValueError(
-                f"'version' is not a valid PEP 440 version; got {value!r}"
-            ) from exc
+            raise ValueError(f"'version' is not a valid PEP 440 version; got {value!r}") from exc
         return value
 
     @field_validator("description")
     @classmethod
     def _check_description(cls, value: str) -> str:
         if len(value) > 200:
-            raise ValueError(
-                f"'description' must be ≤200 chars; got {len(value)} chars"
-            )
+            raise ValueError(f"'description' must be ≤200 chars; got {len(value)} chars")
         return value
 
     @field_validator("author")
@@ -192,6 +190,7 @@ class MANIFEST_V1_SCHEMA(BaseModel):
 
 # --- Public functions ------------------------------------------------------
 
+
 def validate_manifest(toml_bytes: bytes) -> PluginSpec:
     """Parse a ``horus-plugin.toml`` payload and return a frozen ``PluginSpec``.
 
@@ -221,9 +220,7 @@ def validate_manifest(toml_bytes: bytes) -> PluginSpec:
         CapabilityRequest(name=cap_name, reason="") for cap_name in validated.capabilities
     )
     tool_entries = tuple((c.name, c.entry_point) for c in validated.contributions.tools)
-    adapter_entries = tuple(
-        (c.name, c.entry_point) for c in validated.contributions.adapters
-    )
+    adapter_entries = tuple((c.name, c.entry_point) for c in validated.contributions.adapters)
     manifest_hash = compute_manifest_hash(validated.capabilities)
 
     return PluginSpec(

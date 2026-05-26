@@ -349,8 +349,16 @@ class PermissionService:
                 """,
                 (plugin_name, plugin_version, capability, manifest_hash, _STATE_GRANTED, now),
             )
-            self._append_log(conn, plugin_name, plugin_version, capability,
-                             _ACTION_GRANTED, manifest_hash, actor, now)
+            self._append_log(
+                conn,
+                plugin_name,
+                plugin_version,
+                capability,
+                _ACTION_GRANTED,
+                manifest_hash,
+                actor,
+                now,
+            )
 
     def revoke(
         self,
@@ -384,8 +392,16 @@ class PermissionService:
                 """,
                 (_STATE_REVOKED, plugin_name, plugin_version, capability),
             )
-            self._append_log(conn, plugin_name, plugin_version, capability,
-                             _ACTION_REVOKED, existing_hash, actor, now)
+            self._append_log(
+                conn,
+                plugin_name,
+                plugin_version,
+                capability,
+                _ACTION_REVOKED,
+                existing_hash,
+                actor,
+                now,
+            )
 
     def pending_on_upgrade(
         self,
@@ -420,8 +436,16 @@ class PermissionService:
                     """,
                     (plugin_name, new_version, cap, new_hash, _STATE_PENDING),
                 )
-                self._append_log(conn, plugin_name, new_version, cap,
-                                 _ACTION_PENDING_ON_UPGRADE, new_hash, actor, now)
+                self._append_log(
+                    conn,
+                    plugin_name,
+                    new_version,
+                    cap,
+                    _ACTION_PENDING_ON_UPGRADE,
+                    new_hash,
+                    actor,
+                    now,
+                )
 
     @staticmethod
     def _append_log(
@@ -441,8 +465,7 @@ class PermissionService:
                  manifest_hash, actor, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (plugin_name, plugin_version, capability, action,
-             manifest_hash, actor, timestamp),
+            (plugin_name, plugin_version, capability, action, manifest_hash, actor, timestamp),
         )
 
 

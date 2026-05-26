@@ -53,9 +53,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 # --- Collection-time skip --------------------------------------------------
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip every ``installer_e2e``-marked item unless --run-installer-e2e is set."""
     if config.getoption("--run-installer-e2e"):
         return
@@ -95,9 +93,7 @@ def _find_site_packages(venv_root: Path) -> Path:
     """
     candidates = list(venv_root.rglob("site-packages"))
     if not candidates:
-        raise FileNotFoundError(
-            f"no site-packages directory found under {venv_root}"
-        )
+        raise FileNotFoundError(f"no site-packages directory found under {venv_root}")
     return candidates[0]
 
 
@@ -132,9 +128,7 @@ def clean_venv(
             bin_dir = venv_root / "Scripts"
         venv_python = bin_dir / ("python.exe" if sys.platform == "win32" else "python")
         if not venv_python.exists():
-            raise FileNotFoundError(
-                f"could not locate venv python under {venv_root}"
-            )
+            raise FileNotFoundError(f"could not locate venv python under {venv_root}")
         # pip install -e <repo_root> — this is the only pip invocation
         # the test surface ever performs. The repo's runtime deps install
         # transitively.

@@ -32,9 +32,7 @@ REL12_LITERAL_SENTENCE = "plugins execute in the horus-os Python process"
 @pytest.fixture(scope="module")
 def security_md_text() -> str:
     if not SECURITY_MD_PATH.is_file():
-        pytest.fail(
-            "docs/PLUGIN-SECURITY.md does not exist — REL-12 requires this doc."
-        )
+        pytest.fail("docs/PLUGIN-SECURITY.md does not exist — REL-12 requires this doc.")
     return SECURITY_MD_PATH.read_text(encoding="utf-8")
 
 

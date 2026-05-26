@@ -41,9 +41,7 @@ REF_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REF_PLUGIN_ROOT / "horus-plugin.toml"
 
 
-def _build_context(
-    granted: set[Capability], tmp_path: Path
-) -> PluginContext:
+def _build_context(granted: set[Capability], tmp_path: Path) -> PluginContext:
     """Build a ``PluginContext`` for tier-1 in-process tests."""
     guard = CapabilityGuard(
         plugin_name="horus-os-example-plugin",
@@ -90,16 +88,12 @@ def test_lookup_secret_tool_denied_and_granted(
 
     # Granted path with missing key -> None (not an exception).
     monkeypatch.delenv("HORUS_OS_EXAMPLE_KEY", raising=False)
-    ctx_granted = _build_context(
-        granted={Capability.SECRETS_READ}, tmp_path=tmp_path
-    )
+    ctx_granted = _build_context(granted={Capability.SECRETS_READ}, tmp_path=tmp_path)
     assert lookup_secret_tool(ctx_granted, "HORUS_OS_EXAMPLE_KEY") is None
 
     # Granted path with key set -> the env var value.
     monkeypatch.setenv("HORUS_OS_EXAMPLE_KEY", "ref-value")
-    assert (
-        lookup_secret_tool(ctx_granted, "HORUS_OS_EXAMPLE_KEY") == "ref-value"
-    )
+    assert lookup_secret_tool(ctx_granted, "HORUS_OS_EXAMPLE_KEY") == "ref-value"
 
 
 def test_example_adapter_start_stop_bounded(tmp_path: Path) -> None:

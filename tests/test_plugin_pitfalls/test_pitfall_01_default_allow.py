@@ -48,9 +48,7 @@ def test_permission_gate_resolves_empty_grants_to_all_pending(
     pitfall_db: Database,
 ) -> None:
     """A fresh DB has no grant rows → every requested cap is pending."""
-    spec, _module = make_synthetic_plugin(
-        name="pitfall-01", capabilities=["filesystem.read"]
-    )
+    spec, _module = make_synthetic_plugin(name="pitfall-01", capabilities=["filesystem.read"])
     gate = PermissionGate(pitfall_db)
     granted, pending = gate.resolve(spec)
     assert granted == set()

@@ -45,7 +45,7 @@ def test_migration_doc_contains_verification_command(migration_text: str) -> Non
     """The migration doc names the PRAGMA user_version verification command."""
     assert "PRAGMA user_version" in migration_text, (
         "docs/MIGRATION-v0.4-to-v0.5.md must document the verification "
-        "command `sqlite3 ~/.horus-os/data.db \"PRAGMA user_version\"` so "
+        'command `sqlite3 ~/.horus-os/data.db "PRAGMA user_version"` so '
         "the user can confirm the v5→v6 migration ran."
     )
 

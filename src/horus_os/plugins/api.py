@@ -67,17 +67,13 @@ class _FilesystemShim:
     def read(self, path: str | Path) -> str:
         resolved = Path(path).resolve()
         if Capability.FILESYSTEM_READ not in self._guard.granted_capabilities:
-            raise PermissionDenied(
-                self._guard.plugin_name, str(Capability.FILESYSTEM_READ)
-            )
+            raise PermissionDenied(self._guard.plugin_name, str(Capability.FILESYSTEM_READ))
         return resolved.read_text(encoding="utf-8")
 
     def write(self, path: str | Path, content: str) -> None:
         resolved = Path(path).resolve()
         if Capability.FILESYSTEM_WRITE not in self._guard.granted_capabilities:
-            raise PermissionDenied(
-                self._guard.plugin_name, str(Capability.FILESYSTEM_WRITE)
-            )
+            raise PermissionDenied(self._guard.plugin_name, str(Capability.FILESYSTEM_WRITE))
         resolved.write_text(content, encoding="utf-8")
 
 
@@ -99,9 +95,7 @@ class _SecretsShim:
 
     def read(self, key: str) -> str | None:
         if Capability.SECRETS_READ not in self._guard.granted_capabilities:
-            raise PermissionDenied(
-                self._guard.plugin_name, str(Capability.SECRETS_READ)
-            )
+            raise PermissionDenied(self._guard.plugin_name, str(Capability.SECRETS_READ))
         return os.environ.get(key)
 
 
@@ -127,9 +121,7 @@ class _NetShim:
 
     def outbound(self, url: str, *, method: str = "GET", **kwargs: Any) -> Any:
         if Capability.NET_OUTBOUND not in self._guard.granted_capabilities:
-            raise PermissionDenied(
-                self._guard.plugin_name, str(Capability.NET_OUTBOUND)
-            )
+            raise PermissionDenied(self._guard.plugin_name, str(Capability.NET_OUTBOUND))
         try:
             import httpx
         except ImportError as exc:

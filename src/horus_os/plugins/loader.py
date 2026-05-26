@@ -121,8 +121,7 @@ def _materialize_tool(target: object, expected_name: str) -> Tool:
         )
     if not isinstance(tool, Tool):
         raise TypeError(
-            f"factory for tool {expected_name!r} did not return a Tool; "
-            f"got {type(tool).__name__}"
+            f"factory for tool {expected_name!r} did not return a Tool; got {type(tool).__name__}"
         )
     if tool.name != expected_name:
         raise ValueError(

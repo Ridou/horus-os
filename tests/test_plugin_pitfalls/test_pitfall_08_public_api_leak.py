@@ -86,6 +86,5 @@ def test_every_all_name_resolves_to_non_none_attribute() -> None:
     for name in plugin_api.__all__:
         value = getattr(plugin_api, name, None)
         assert value is not None, (
-            f"Pitfall 8: horus_os.plugins.api.{name} resolves to None — "
-            "broken public surface."
+            f"Pitfall 8: horus_os.plugins.api.{name} resolves to None — broken public surface."
         )

@@ -56,13 +56,12 @@ def test_cold_start_zero_plugins_below_100ms(
     tmp_path: Path,
 ) -> None:
     """Median of N=10 samples (after warm-up) is below the 100ms threshold."""
+
     # Rebind entry_points to an always-empty source.
     def _empty_entry_points(*, group: str) -> list[object]:
         return []
 
-    monkeypatch.setattr(
-        "horus_os.plugins.discovery.entry_points", _empty_entry_points
-    )
+    monkeypatch.setattr("horus_os.plugins.discovery.entry_points", _empty_entry_points)
     # Point the filesystem walk at an empty tmp dir.
     empty_plugins_dir = tmp_path / "plugins"
     empty_plugins_dir.mkdir()

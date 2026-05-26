@@ -101,8 +101,7 @@ def test_docs_drift_against_committed_schema_file() -> None:
     """
     if not DOCS_SCHEMA_PATH.is_file():
         pytest.skip(
-            "docs/manifest-v1.schema.json shipped in Phase 47 — "
-            "docs-drift gate activates then."
+            "docs/manifest-v1.schema.json shipped in Phase 47 — docs-drift gate activates then."
         )
     runtime_schema = MANIFEST_V1_SCHEMA.model_json_schema()
     bundled_text = DOCS_SCHEMA_PATH.read_text(encoding="utf-8")

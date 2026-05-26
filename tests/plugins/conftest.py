@@ -117,13 +117,9 @@ class FakeEntryPointsBundle:
             ep_name = getattr(ep, "name", None)
             if ep_name in self._manifests:
                 return self._manifests[ep_name]
-            raise FileNotFoundError(
-                f"no manifest bytes wired for entry point {ep_name!r}"
-            )
+            raise FileNotFoundError(f"no manifest bytes wired for entry point {ep_name!r}")
 
-        monkeypatch.setattr(
-            "horus_os.plugins.discovery.entry_points", _entry_points
-        )
+        monkeypatch.setattr("horus_os.plugins.discovery.entry_points", _entry_points)
         monkeypatch.setattr(
             "horus_os.plugins.discovery._read_entry_point_manifest_bytes",
             _read_manifest,
@@ -188,6 +184,7 @@ def install_broken_fixture(tmp_plugin_dir: Path) -> Callable[[str], Path]:
     ``tmp_plugin_dir/<name>/`` so the filesystem walk picks it up.
     Returns the destination path.
     """
+
     def _install(name: str) -> Path:
         src = FIXTURES_BROKEN_PLUGINS / name
         if not src.exists():
@@ -264,9 +261,7 @@ def make_synthetic_plugin(
     capability SET produce the same hash — capability-order-independent
     and duplicate-tolerant (matches Phase 41 manifest_hash semantics).
     """
-    caps_tuple = tuple(
-        CapabilityRequest(name=cap_name, reason="") for cap_name in capabilities
-    )
+    caps_tuple = tuple(CapabilityRequest(name=cap_name, reason="") for cap_name in capabilities)
     manifest_hash = compute_manifest_hash([c.name for c in caps_tuple])
     spec = PluginSpec(
         name=name,
@@ -317,9 +312,7 @@ def make_fake_entry_point(
     """
     if entry_point_value is None:
         entry_point_value = f"horus_os_test.{spec.name}:plugin"
-    caps_lines = "\n".join(
-        f'  "{c.name}",' for c in spec.capabilities
-    )
+    caps_lines = "\n".join(f'  "{c.name}",' for c in spec.capabilities)
     if caps_lines:
         caps_block = f"capabilities = [\n{caps_lines}\n]\n"
     else:

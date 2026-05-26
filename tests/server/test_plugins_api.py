@@ -296,9 +296,7 @@ def test_grant_happy_path(tmp_path: Path) -> None:
     client = TestClient(app)
     with client:
         _register_plugin(app, spec, mark_loaded=True)
-        response = client.post(
-            "/api/plugins/foo/grant", json={"capability": "filesystem.read"}
-        )
+        response = client.post("/api/plugins/foo/grant", json={"capability": "filesystem.read"})
     assert response.status_code == 200
     rows = _grants_log_rows(db, "foo")
     assert len(rows) == 1
@@ -327,9 +325,7 @@ def test_grant_unknown_capability(tmp_path: Path) -> None:
     client = TestClient(app)
     with client:
         _register_plugin(app, spec, mark_loaded=True)
-        response = client.post(
-            "/api/plugins/foo/grant", json={"capability": "made.up.cap"}
-        )
+        response = client.post("/api/plugins/foo/grant", json={"capability": "made.up.cap"})
     assert response.status_code == 400
     detail = response.json()["detail"].lower()
     assert "unknown" in detail or "must be one of" in detail
@@ -339,9 +335,7 @@ def test_grant_404_plugin(tmp_path: Path) -> None:
     _init_data_dir(tmp_path)
     client = TestClient(create_app(data_dir=tmp_path))
     with client:
-        response = client.post(
-            "/api/plugins/unknown/grant", json={"capability": "filesystem.read"}
-        )
+        response = client.post("/api/plugins/unknown/grant", json={"capability": "filesystem.read"})
     assert response.status_code == 404
 
 
@@ -359,9 +353,7 @@ def test_grant_409_no_spec(tmp_path: Path) -> None:
             error_phase="discover",
             error_message="bad",
         )
-        response = client.post(
-            "/api/plugins/broken/grant", json={"capability": "filesystem.read"}
-        )
+        response = client.post("/api/plugins/broken/grant", json={"capability": "filesystem.read"})
     assert response.status_code == 409
     assert "spec" in response.json()["detail"].lower()
 

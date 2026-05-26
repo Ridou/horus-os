@@ -100,9 +100,7 @@ def _read_entry_point_manifest_bytes(ep: object) -> bytes:
     return importlib.resources.files(dist_name).joinpath(PLUGIN_MANIFEST_FILENAME).read_bytes()
 
 
-def _validate_with_source(
-    toml_bytes: bytes, *, source: str, source_detail: str
-) -> PluginSpec:
+def _validate_with_source(toml_bytes: bytes, *, source: str, source_detail: str) -> PluginSpec:
     """Run ``validate_manifest`` and rewrite the spec's source attribution.
 
     ``validate_manifest`` hardcodes ``source="filesystem"`` /

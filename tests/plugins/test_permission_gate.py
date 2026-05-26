@@ -84,10 +84,8 @@ def _make_spec(
 
 def test_resolve_all_granted(tmp_path: Path) -> None:
     db = _make_db(tmp_path)
-    _insert_grant(db, "foo", "1.0", "filesystem.read",
-                  state="granted", manifest_hash="hash1")
-    _insert_grant(db, "foo", "1.0", "net.outbound",
-                  state="granted", manifest_hash="hash1")
+    _insert_grant(db, "foo", "1.0", "filesystem.read", state="granted", manifest_hash="hash1")
+    _insert_grant(db, "foo", "1.0", "net.outbound", state="granted", manifest_hash="hash1")
 
     spec = _make_spec("foo", "1.0", ("filesystem.read", "net.outbound"), "hash1")
     gate = PermissionGate(db)
@@ -111,8 +109,7 @@ def test_resolve_first_install(tmp_path: Path) -> None:
 def test_resolve_hash_mismatch(tmp_path: Path) -> None:
     """PERMISSION-02 / Pitfall 5: previously granted but new manifest_hash → pending."""
     db = _make_db(tmp_path)
-    _insert_grant(db, "foo", "1.0", "filesystem.read",
-                  state="granted", manifest_hash="old_hash")
+    _insert_grant(db, "foo", "1.0", "filesystem.read", state="granted", manifest_hash="old_hash")
 
     spec = _make_spec("foo", "1.0", ("filesystem.read",), "new_hash")
     gate = PermissionGate(db)
@@ -125,8 +122,7 @@ def test_resolve_hash_mismatch(tmp_path: Path) -> None:
 def test_resolve_revoked_acts_as_deny(tmp_path: Path) -> None:
     """A revoked row must NOT count as granted; it lands in pending."""
     db = _make_db(tmp_path)
-    _insert_grant(db, "foo", "1.0", "net.outbound",
-                  state="revoked", manifest_hash="hash1")
+    _insert_grant(db, "foo", "1.0", "net.outbound", state="revoked", manifest_hash="hash1")
 
     spec = _make_spec("foo", "1.0", ("net.outbound",), "hash1")
     gate = PermissionGate(db)
@@ -138,15 +134,11 @@ def test_resolve_revoked_acts_as_deny(tmp_path: Path) -> None:
 
 def test_resolve_partial(tmp_path: Path) -> None:
     db = _make_db(tmp_path)
-    _insert_grant(db, "foo", "1.0", "filesystem.read",
-                  state="granted", manifest_hash="hash1")
-    _insert_grant(db, "foo", "1.0", "net.outbound",
-                  state="granted", manifest_hash="hash1")
+    _insert_grant(db, "foo", "1.0", "filesystem.read", state="granted", manifest_hash="hash1")
+    _insert_grant(db, "foo", "1.0", "net.outbound", state="granted", manifest_hash="hash1")
     # secrets.read is requested but has no row at all → pending.
 
-    spec = _make_spec("foo", "1.0",
-                      ("filesystem.read", "net.outbound", "secrets.read"),
-                      "hash1")
+    spec = _make_spec("foo", "1.0", ("filesystem.read", "net.outbound", "secrets.read"), "hash1")
     gate = PermissionGate(db)
     granted, pending = gate.resolve(spec)
 

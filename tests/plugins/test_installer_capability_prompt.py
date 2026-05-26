@@ -134,7 +134,9 @@ def _fake_pip_factory(
                 stdout = "pydantic==2.7.0\npackaging==24.0\nhorus-example-clean==0.1.0\n"
             else:
                 stdout = "pydantic==2.7.0\npackaging==24.0\n"
-            return subprocess.CompletedProcess(args=list(args), returncode=0, stdout=stdout, stderr="")
+            return subprocess.CompletedProcess(
+                args=list(args), returncode=0, stdout=stdout, stderr=""
+            )
         if args and args[0] == "install":
             state["installed"] = True
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")

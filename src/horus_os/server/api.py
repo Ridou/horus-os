@@ -122,9 +122,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     #    grants flip status to error / error_phase='permission'.
     # 4. Lifespan loop below wraps plugin adapter start/stop in
     #    asyncio.wait_for(timeout=PLUGIN_LIFECYCLE_TIMEOUT_S).
-    _plugins_disabled_globally = (
-        os.environ.get("HORUS_OS_DISABLE_PLUGINS", "").lower() == "true"
-    )
+    _plugins_disabled_globally = os.environ.get("HORUS_OS_DISABLE_PLUGINS", "").lower() == "true"
     _plugin_db: Database | None = None
     try:
         _plugin_db_path = Config.load(_resolved_data_dir).db_path
@@ -202,20 +200,23 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 # surfaces the failure plainly. ISOLATE-01 keeps the
                 # loop running.
                 _plugin_registry.mark_error(
-                    _spec.name, "permission",
+                    _spec.name,
+                    "permission",
                     f"{type(_exc).__name__}: {_exc}",
                 )
                 continue
             if _pending:
                 _plugin_registry.mark_error(
-                    _spec.name, "permission",
+                    _spec.name,
+                    "permission",
                     f"missing grants: {sorted(c.value for c in _pending)}",
                 )
                 continue
             # Inject the resolved-grant guard into the loader so the
             # tool-handler wrap site sees the real granted set.
             _guard = CapabilityGuard(
-                _spec.name, granted_capabilities=_granted,
+                _spec.name,
+                granted_capabilities=_granted,
             )
             _plugin_loader._guards[_spec.name] = _guard
 
@@ -224,9 +225,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         except Exception as _exc:
             # PluginLoader.load() must never raise; this catch is the
             # belt-and-suspenders ISOLATE-01 guard.
-            _plugin_registry.mark_error(
-                _spec.name, "load", f"{type(_exc).__name__}: {_exc}"
-            )
+            _plugin_registry.mark_error(_spec.name, "load", f"{type(_exc).__name__}: {_exc}")
             continue
         if _result.status == "loaded":
             _plugin_registry.mark_loaded(
@@ -295,12 +294,14 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                     )
                 except TimeoutError:
                     _plugin_registry.mark_error(
-                        _entry.name, "start",
+                        _entry.name,
+                        "start",
                         f"start() exceeded {PLUGIN_LIFECYCLE_TIMEOUT_S}s",
                     )
                 except Exception as exc:
                     _plugin_registry.mark_error(
-                        _entry.name, "start",
+                        _entry.name,
+                        "start",
                         f"{type(exc).__name__}: {exc}",
                     )
 
@@ -336,12 +337,14 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                         )
                     except TimeoutError:
                         _plugin_registry.mark_error(
-                            _entry.name, "stop",
+                            _entry.name,
+                            "stop",
                             f"stop() exceeded {PLUGIN_LIFECYCLE_TIMEOUT_S}s",
                         )
                     except Exception as exc:
                         _plugin_registry.mark_error(
-                            _entry.name, "stop",
+                            _entry.name,
+                            "stop",
                             f"{type(exc).__name__}: {exc}",
                         )
 

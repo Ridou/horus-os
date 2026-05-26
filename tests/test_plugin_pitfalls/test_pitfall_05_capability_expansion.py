@@ -87,9 +87,7 @@ def test_v1_1_with_expanded_caps_has_different_manifest_hash() -> None:
     )
     assert spec_v1_0.manifest_hash != spec_v1_1.manifest_hash
     # Sanity-check: the hash function is deterministic.
-    assert spec_v1_1.manifest_hash == compute_manifest_hash(
-        ["filesystem.read", "net.outbound"]
-    )
+    assert spec_v1_1.manifest_hash == compute_manifest_hash(["filesystem.read", "net.outbound"])
 
 
 def test_capability_expansion_does_not_silently_inherit_v1_0_grant(

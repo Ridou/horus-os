@@ -85,12 +85,8 @@ def test_reference_plugin_source_dir_exists() -> None:
         f"moved, update REF_PLUGIN_SRC in this test file."
     )
     assert (REF_PLUGIN_SRC / "horus_os_example_plugin" / "tools.py").is_file()
-    assert (
-        REF_PLUGIN_SRC / "horus_os_example_plugin" / "adapter.py"
-    ).is_file()
-    assert (
-        REF_PLUGIN_SRC / "horus_os_example_plugin" / "__init__.py"
-    ).is_file()
+    assert (REF_PLUGIN_SRC / "horus_os_example_plugin" / "adapter.py").is_file()
+    assert (REF_PLUGIN_SRC / "horus_os_example_plugin" / "__init__.py").is_file()
 
 
 def test_reference_plugin_uses_only_public_api() -> None:

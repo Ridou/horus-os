@@ -45,6 +45,7 @@ def test_wrap_tool_handler_with_grant_passes() -> None:
 
 def test_wrap_tool_handler_no_required_caps_passes_through() -> None:
     """Handlers with no decorator marker bypass the gate (opt-in design)."""
+
     def handler(*, value: str) -> dict[str, str]:
         return {"echo": value}
 
@@ -58,6 +59,7 @@ def test_wrap_tool_handler_no_required_caps_passes_through() -> None:
 
 def test_wrap_tool_handler_with_required_cap_kwarg_raises() -> None:
     """Explicit required_cap kwarg works for shim closures that bind one cap."""
+
     def handler() -> str:
         return "ok"
 
@@ -79,6 +81,7 @@ def test_permission_denied_str_format() -> None:
 
 def test_wrap_handler_preserves_required_caps_attribute() -> None:
     """Wrapper exposes the same __horus_required_caps__ for dashboard introspection."""
+
     @require_capability(Capability.FILESYSTEM_READ, Capability.SECRETS_READ)
     def handler() -> int:
         return 0
@@ -93,9 +96,7 @@ def test_wrap_handler_preserves_required_caps_attribute() -> None:
 
 
 def test_capability_guard_granted_capabilities_property_is_frozenset() -> None:
-    guard = CapabilityGuard(
-        "foo", granted_capabilities={Capability.FILESYSTEM_READ}
-    )
+    guard = CapabilityGuard("foo", granted_capabilities={Capability.FILESYSTEM_READ})
     assert isinstance(guard.granted_capabilities, frozenset)
     assert guard.granted_capabilities == frozenset({Capability.FILESYSTEM_READ})
     assert guard.plugin_name == "foo"

@@ -58,9 +58,7 @@ def test_no_pkg_resources_anywhere_under_src_horus_os() -> None:
         "deprecated API drift on 3.12+). Use importlib.metadata.entry_points "
         "instead. See src/horus_os/adapters/base.py:22 for the canonical "
         "pattern.\n\nOffenders:\n"
-        + "\n".join(
-            f"  {path}:{lineno}: {line!r}" for path, lineno, line in offenders
-        )
+        + "\n".join(f"  {path}:{lineno}: {line!r}" for path, lineno, line in offenders)
     )
 
 

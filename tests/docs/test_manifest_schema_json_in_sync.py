@@ -58,10 +58,7 @@ def test_docs_schema_matches_runtime_schema(bundled_text: str) -> None:
 
 def test_docs_schema_is_byte_stable_canonical(bundled_text: str) -> None:
     """The bundled file matches the canonical canonicalization byte-for-byte."""
-    canonical = (
-        json.dumps(MANIFEST_V1_SCHEMA.model_json_schema(), indent=2, sort_keys=True)
-        + "\n"
-    )
+    canonical = json.dumps(MANIFEST_V1_SCHEMA.model_json_schema(), indent=2, sort_keys=True) + "\n"
     assert bundled_text == canonical, (
         "docs/manifest-v1.schema.json drifted from "
         "MANIFEST_V1_SCHEMA.model_json_schema() at the byte level. "

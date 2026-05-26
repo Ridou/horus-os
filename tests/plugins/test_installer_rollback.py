@@ -59,7 +59,9 @@ def test_phase_e_failure_triggers_rollback(
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")
         if args and args[0] == "freeze":
             stdout = post_freeze if state["installed"] else pre_freeze
-            return subprocess.CompletedProcess(args=list(args), returncode=0, stdout=stdout, stderr="")
+            return subprocess.CompletedProcess(
+                args=list(args), returncode=0, stdout=stdout, stderr=""
+            )
         if args and args[0] == "install":
             state["installed"] = True
             return subprocess.CompletedProcess(args=list(args), returncode=0, stdout="", stderr="")

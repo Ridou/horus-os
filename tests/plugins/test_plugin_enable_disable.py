@@ -61,9 +61,7 @@ def test_disable_persists_to_sql(db_and_registry: tuple[Database, PluginRegistry
 
     assert new_state is False
     with db._connect() as conn:
-        row = conn.execute(
-            "SELECT enabled FROM plugins WHERE name = 'foo'"
-        ).fetchone()
+        row = conn.execute("SELECT enabled FROM plugins WHERE name = 'foo'").fetchone()
         assert row["enabled"] == 0
     assert registry.is_enabled("foo") is False
     entry = registry.get("foo")
@@ -139,10 +137,12 @@ def test_disable_skips_load_at_create_app(
         return PluginLoadResult(status="loaded")
 
     monkeypatch.setattr(
-        "horus_os.server.api.discover_plugins", _fake_discover,
+        "horus_os.server.api.discover_plugins",
+        _fake_discover,
     )
     monkeypatch.setattr(
-        "horus_os.plugins.loader.PluginLoader.load", _fake_load,
+        "horus_os.plugins.loader.PluginLoader.load",
+        _fake_load,
     )
 
     from horus_os.server.api import create_app

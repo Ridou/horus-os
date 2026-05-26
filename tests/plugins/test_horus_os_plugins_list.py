@@ -82,9 +82,7 @@ def _run_list(
     return rc, stdout.getvalue(), stderr.getvalue()
 
 
-def test_list_tabular_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_tabular_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _make_db_with_plugins(tmp_path)
     rc, out, err = _run_list(db, monkeypatch, json_flag=False)
     assert rc == 0
@@ -105,9 +103,7 @@ def test_list_tabular_default(
     assert out.find("alpha") < out.find("beta")
 
 
-def test_list_json_returns_parseable_list(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_json_returns_parseable_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _make_db_with_plugins(tmp_path)
     rc, out, _ = _run_list(db, monkeypatch, json_flag=True)
     assert rc == 0
@@ -125,9 +121,7 @@ def test_list_json_returns_parseable_list(
     assert by_name["beta"]["enabled"] is False
 
 
-def test_list_empty_tabular(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_empty_tabular(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = tmp_path / "horus.sqlite3"
     db = Database(db_path)
     db.init()
@@ -136,9 +130,7 @@ def test_list_empty_tabular(
     assert out == "(no plugins installed)\n"
 
 
-def test_list_empty_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_empty_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = tmp_path / "horus.sqlite3"
     db = Database(db_path)
     db.init()

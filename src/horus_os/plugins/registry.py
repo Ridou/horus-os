@@ -252,9 +252,7 @@ class PluginRegistry:
         and adapters.
         """
         if status not in _VALID_STATUSES:
-            raise ValueError(
-                f"status={status!r} is not one of {sorted(_VALID_STATUSES)}"
-            )
+            raise ValueError(f"status={status!r} is not one of {sorted(_VALID_STATUSES)}")
         now = datetime.now(UTC).isoformat()
         existing = self._entries.get(spec.name)
         if existing is None:
