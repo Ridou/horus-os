@@ -71,7 +71,7 @@
 
 - [x] **Phase 32: Schema migration, persistence skeleton, v0.3 baseline** - Schema v4→v5 additive migration, ObservationBus + SQLitePersister written but not yet wired into the runner, v0.3 capture-overhead baseline artifact committed. (completed 2026-05-26)
 - [x] **Phase 33: Capture at the runner + SSE branch** - Wrap each `Conversation.send` and `_execute_one` with bus publishes; fix the SSE branch in `server/api.py:_event_stream` so streamed runs never silently record $0; capture-overhead CI benchmark. (completed 2026-05-26)
-- [ ] **Phase 34: Pricing table and cost annotation** - Bundle `pricing.json`, ship `PricingTable` + `CostAnnotator`; user override path; `pricing_missing=1, cost_usd=NULL` for unknown models.
+- [x] **Phase 34: Pricing table and cost annotation** - Bundle `pricing.json`, ship `PricingTable` + `CostAnnotator`; user override path; `pricing_missing=1, cost_usd=NULL` for unknown models. (completed 2026-05-26)
 - [ ] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards.
 - [ ] **Phase 36: Observability dashboard tab** - New `/observability` tab (cost-by-agent, latency p50/p95, tool reliability) with window selector, small-sample handling, pricing-staleness banner, and graceful pre-v0.4 trace rendering.
 - [ ] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented.
@@ -264,7 +264,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 34-01-PLAN.md: PricingTable, bundled pricing.json + package-data wiring, CostAnnotator subscriber with cache-aware math, user override, Pitfall 5 defence-in-depth
+- [x] 34-01-PLAN.md: PricingTable, bundled pricing.json + package-data wiring, CostAnnotator subscriber with cache-aware math, user override, Pitfall 5 defence-in-depth
 
 ### Phase 35: Query module and read APIs
 **Goal**: Build `observability/queries.py` once so the dashboard (Phase 36) and CLI (Phase 37) cannot drift. All percentiles via SQLite-side `NTILE(100) OVER (...)`, never aggregate-of-aggregates. Ship the four new `/api/observability/*` GET routes and the `/api/agents` extension that adds rollup columns to the existing v0.3 surface.
@@ -361,7 +361,7 @@ Plans:
 | 31. v0.3.0 release | v0.3 | 1/1 | Complete | 2026-05-24 |
 | 32. Schema migration, persistence skeleton, v0.3 baseline | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 33. Capture at the runner + SSE branch | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 34. Pricing table and cost annotation | v0.4 | 0/1 | Not started | - |
+| 34. Pricing table and cost annotation | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 35. Query module and read APIs | v0.4 | 0/1 | Not started | - |
 | 36. Observability dashboard tab | v0.4 | 0/1 | Not started | - |
 | 37. `horus-os usage` CLI subcommand | v0.4 | 0/1 | Not started | - |
