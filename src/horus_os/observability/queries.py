@@ -105,8 +105,10 @@ def agent_totals(db: Database, window: str) -> list[dict[str, Any]]:
         total_input_tokens   : int | None  (SQL SUM of non-NULL rows; None
                                             when all contributing rows are NULL)
         total_output_tokens  : int | None
-        total_cost_usd       : float  (SUM of non-NULL rows, rounded to 6dp;
-                                       0.0 when no costed runs)
+        total_cost_usd       : float | None
+                                      (SUM of non-NULL rows, rounded to 6dp;
+                                       None when every contributing row is
+                                       NULL, never 0; Pitfall 11 honesty)
         uncosted_runs        : int   (rows where total_cost_usd IS NULL;
                                       Pitfall 11 surface contract)
         latency_p50_ms       : int | None  (NTILE(100) on llm_calls.latency_ms;
@@ -185,8 +187,10 @@ def agent_totals(db: Database, window: str) -> list[dict[str, Any]]:
                     "total_runs": int(row["total_runs"]),
                     "total_input_tokens": row["total_input_tokens"],
                     "total_output_tokens": row["total_output_tokens"],
+                    # None (not 0) when every contributing row's
+                    # total_cost_usd is NULL; Pitfall 11 honesty contract.
                     "total_cost_usd": (
-                        round(float(total_cost), 6) if total_cost is not None else 0.0
+                        round(float(total_cost), 6) if total_cost is not None else None
                     ),
                     "uncosted_runs": int(row["uncosted_runs"]),
                     "latency_p50_ms": row["p50_ms"],

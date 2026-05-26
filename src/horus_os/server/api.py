@@ -44,6 +44,7 @@ from horus_os.observability import (
 )
 from horus_os.observability.bus import LLMCallEvent, RunEndEvent
 from horus_os.observability.queries import (
+    agent_totals,
     cost_by_agent,
     latency_p50_p95,
     parse_window,
@@ -193,12 +194,39 @@ def create_app(data_dir: str | Path | None = None) -> Any:
             raise HTTPException(503, detail="database not initialized; run `horus-os init`")
         db = Database(cfg.db_path)
         profiles = db.list_profiles()
-        return {
-            "agents": [
-                _profile_to_dict(p, last_activity_at=_last_activity_for(db, p.name))
-                for p in profiles
-            ]
-        }
+        # Phase 35 DASH-4-04 extension: merge per-agent rollup over the 7d
+        # default window. Agents with zero in-window runs get default
+        # zero/null rollup fields so the existing v0.3 surface stays
+        # byte-identical for any agent that already returned a row.
+        rollups = {row["agent"]: row for row in agent_totals(db, "7d")}
+        agents = []
+        for profile in profiles:
+            base = _profile_to_dict(
+                profile, last_activity_at=_last_activity_for(db, profile.name)
+            )
+            rollup = rollups.get(profile.name)
+            if rollup is None:
+                base.update(
+                    {
+                        "total_runs": 0,
+                        "total_cost_usd": None,
+                        "latency_p50_ms": None,
+                        "latency_p95_ms": None,
+                        "uncosted_runs": 0,
+                    }
+                )
+            else:
+                base.update(
+                    {
+                        "total_runs": rollup["total_runs"],
+                        "total_cost_usd": rollup["total_cost_usd"],
+                        "latency_p50_ms": rollup["latency_p50_ms"],
+                        "latency_p95_ms": rollup["latency_p95_ms"],
+                        "uncosted_runs": rollup["uncosted_runs"],
+                    }
+                )
+            agents.append(base)
+        return {"agents": agents}
 
     @app.get("/api/agents/{name}")
     def agents_show(name: str) -> dict[str, Any]:
