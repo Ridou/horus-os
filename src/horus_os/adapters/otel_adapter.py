@@ -16,7 +16,12 @@ Bounded shutdown contract (Pitfall 6): `stop()` calls
 `provider.force_flush(timeout_millis=2000)` then `provider.shutdown()`.
 Against an unreachable collector, `stop()` returns in less than 3
 seconds wall-clock; the daemon-thread shutdown bug in OTel-Python
-issue #3309 / #4623 is worked around by the bounded flush.
+issue #3309 / #4623 is worked around by the bounded flush. The
+batched span processor is used unconditionally in production; the
+simple span processor variant is forbidden in this source file
+(grep gate enforces). Test fixtures may use the simple variant with
+the in-memory exporter for synchronous assertions; the adapter
+production code does not.
 
 Default-deny content capture is the load-bearing safety guarantee of
 this adapter. Even in opt-in mode (`HORUS_OS_OTEL_CAPTURE_CONTENT=true`),
@@ -42,6 +47,8 @@ console.
 
 from __future__ import annotations
 
+import contextlib
+import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -56,6 +63,13 @@ OTEL_EXTRA_HINT = "OTel adapter requires 'pip install horus-os[otel]'"
 OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT"
 CAPTURE_CONTENT_ENV = "HORUS_OS_OTEL_CAPTURE_CONTENT"
 FORCE_FLUSH_TIMEOUT_MS = 2000
+
+
+def _import_version() -> str:
+    """Return the installed horus_os version; isolated so tests can monkeypatch."""
+    from horus_os import __version__
+
+    return __version__
 
 
 class OtelAdapter:
@@ -90,6 +104,12 @@ class OtelAdapter:
         RuntimeError with the install hint substring, NEVER a bare
         ModuleNotFoundError. The registry is also marked so the
         dashboard Adapters tab shows the error pill.
+
+        Pitfall 6: the batched span processor is wired unconditionally
+        in production. The adapter holds its OWN TracerProvider via
+        self._provider and does NOT mutate the global tracer-provider
+        slot; disabling the adapter cleanly drops its provider without
+        touching other tracers a user may add separately.
         """
         self._context = context
         try:
@@ -98,12 +118,62 @@ class OtelAdapter:
             context.registry.mark_error(self.name, OTEL_EXTRA_HINT)
             raise RuntimeError(OTEL_EXTRA_HINT) from exc
 
-        # Task 3 wires the TracerProvider + BatchSpanProcessor + OTLP
-        # exporter; Task 4 adds the bus subscription. For Task 2 the
-        # adapter is a no-op start that proves the lazy-import contract.
+        endpoint = os.environ.get(OTLP_ENDPOINT_ENV)
+        if not endpoint:
+            # Benign mis-config: the user enabled [otel] but did not
+            # set the collector URL. The registry pill carries the
+            # message; no raise (mirrors DiscordAdapter's TOKEN_ENV
+            # check).
+            context.registry.mark_error(self.name, f"{OTLP_ENDPOINT_ENV} is not set")
+            return
+
+        # OTel SDK imports run at function scope per Pitfall 12.
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        resource = Resource.create(
+            {"service.name": "horus-os", "service.version": _import_version()}
+        )
+        # OTLPSpanExporter reads OTEL_EXPORTER_OTLP_ENDPOINT and
+        # OTEL_EXPORTER_OTLP_HEADERS from os.environ directly; no kwargs.
+        exporter = OTLPSpanExporter()
+        provider = TracerProvider(resource=resource)
+        # Pitfall 6: BatchSpanProcessor ALWAYS in production. The
+        # synchronous-export variant is banned in this source file;
+        # the grep gate in test_adapters_otel_bounded_shutdown.py
+        # enforces the ban.
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        self._provider = provider
+
+        # Task 4 wires the bus subscription here:
+        # self._unsubscribe = get_observation_bus().subscribe(self._on_event)
+
         context.registry.mark_running(self.name)
 
     async def stop(self) -> None:
-        # Task 3 implements the bounded force_flush(2000) then
-        # shutdown() contract; for Task 2 stop() is a no-op.
-        return None
+        """Drain in-flight spans and shut down the provider with bounded wait.
+
+        Pitfall 6: force_flush(timeout_millis=FORCE_FLUSH_TIMEOUT_MS) then
+        shutdown(). Against an unreachable collector, stop() returns in
+        less than 3 seconds wall-clock (TEST-14 pins this). Both calls
+        are guarded with contextlib.suppress so a flaky exporter cannot
+        prevent the next cleanup step.
+        """
+        # Unsubscribe FIRST so no further events queue while we flush
+        # in-flight spans.
+        if self._unsubscribe is not None:
+            with contextlib.suppress(Exception):
+                self._unsubscribe()
+            self._unsubscribe = None
+        if self._provider is not None:
+            with contextlib.suppress(Exception):
+                self._provider.force_flush(timeout_millis=FORCE_FLUSH_TIMEOUT_MS)
+            with contextlib.suppress(Exception):
+                self._provider.shutdown()
+            self._provider = None
+        if self._context is not None:
+            self._context.registry.mark_stopped(self.name)
