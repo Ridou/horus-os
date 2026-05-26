@@ -25,6 +25,7 @@ No top-level imports of FastAPI / SQLite / observability stacks happen
 here, so ``import horus_os.plugins`` stays cheap.
 """
 
+from horus_os.plugins.api import PluginContext, require_capability
 from horus_os.plugins.discovery import (
     DEFAULT_FILESYSTEM_PLUGIN_DIR,
     PLUGIN_ENTRY_POINT_GROUP,
@@ -66,9 +67,11 @@ __all__ = (
     "PermissionDenied",
     "PermissionGate",
     "PermissionService",
+    "PluginContext",
     "PluginEntry",
     "PluginLoadResult",
     "PluginLoader",
     "PluginRegistry",
     "discover_plugins",
+    "require_capability",
 )
