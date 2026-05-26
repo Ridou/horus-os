@@ -306,10 +306,10 @@ Plans:
   2. `--format json|csv|table` controls output shape; the JSON output schema is documented in `docs/CLI.md` and pinned by a test that diffs the output against a fixture (USAGE-02)
   3. `--by model|tool|agent` slices the report into per-model, per-tool, or per-agent views; output for each shape matches the corresponding `/api/observability/*` route byte-for-byte where the data overlaps (USAGE-03)
   4. Costs render rounded to 6 decimal places, durations to integer ms, consistent units across all three formats; a `jq` pipe on the JSON output never trips on float-precision noise like `0.04200000000000001` (USAGE-04, Pitfall float-precision UX trap)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 37-01: usage subparser, three formatters, JSON schema pin, docs/CLI.md entry
+- [ ] 37-01-PLAN.md: usage subparser, three formatters (JSON/CSV/table) with float-precision rounding, additive cost_by_model query + matching /api/observability/cost-by-model route for --by model byte-for-byte parity, JSON schema pin, docs/CLI.md entry
 
 ### Phase 38: OpenTelemetry adapter
 **Goal**: Highest-risk phase, lands LAST among the feature phases. Ship `OtelAdapter` as a v0.3-style `LifecycleAdapter` behind a `[otel]` extra. Lazy imports so a bare `pip install horus-os` never sees `opentelemetry-*`. Default-deny content capture: prompt and completion bodies are NEVER attached to spans by default; opt-in via `HORUS_OS_OTEL_CAPTURE_CONTENT=true` plus a redactor allowlist. `BatchSpanProcessor` always, never `SimpleSpanProcessor` in production. Bounded `force_flush(2000)` then `shutdown()` so Ctrl-C never blocks for 60 seconds (Pitfalls 6, 7, 12).
