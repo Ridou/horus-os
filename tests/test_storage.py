@@ -515,3 +515,108 @@ def test_list_child_traces_unknown_parent_returns_empty(tmp_path: Path) -> None:
     db = Database(tmp_path / "horus.sqlite")
     db.init()
     assert db.list_child_traces("nonexistent") == []
+
+
+# ---------------------------------------------------------------------------
+# v0.3 (schema v4) to v0.4 (schema v5) migration tests
+# ---------------------------------------------------------------------------
+
+import shutil  # noqa: E402
+
+V0_3_FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "v0_3_database.sqlite3"
+
+
+def test_schema_v4_database_upgrades_to_v5(tmp_path: Path) -> None:
+    """Single highest-leverage check for Pitfall 11 (additive-only contract).
+
+    Copies the checked-in v0.3 fixture to a tmp directory so the test does
+    not mutate it, runs Database.init() on the copy, and asserts the v4 to
+    v5 upgrade adds the new tables and columns while preserving the old
+    usage JSON blob and leaving pre-v0.4 rows NULL on the new columns.
+    """
+    assert V0_3_FIXTURE_PATH.exists(), (
+        f"v0.3 fixture missing at {V0_3_FIXTURE_PATH}; "
+        "run scripts/build_v0_3_fixture.py to regenerate"
+    )
+    db_path = tmp_path / "horus.sqlite"
+    shutil.copy(V0_3_FIXTURE_PATH, db_path)
+
+    db = Database(db_path)
+    db.init()
+
+    with sqlite3.connect(str(db_path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 5
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "llm_calls" in tables
+        assert "tool_invocations" in tables
+        traces_cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
+        assert {
+            "total_input_tokens",
+            "total_output_tokens",
+            "total_cost_usd",
+            "total_duration_ms",
+        }.issubset(traces_cols)
+        # Pre-v0.4 rows must have NULL on the new rollup columns (Pitfall 11).
+        rollup_rows = conn.execute(
+            "SELECT total_input_tokens, total_output_tokens, "
+            "total_cost_usd, total_duration_ms FROM traces"
+        ).fetchall()
+        assert len(rollup_rows) == 2
+        for row in rollup_rows:
+            assert all(value is None for value in row)
+        # Old usage JSON blob must still read back intact (Pitfall 11).
+        usage_row = conn.execute(
+            "SELECT usage FROM traces WHERE usage LIKE '%input_tokens%'"
+        ).fetchone()
+        assert usage_row is not None
+        assert "input_tokens" in usage_row[0]
+        assert "output_tokens" in usage_row[0]
+
+
+def test_v5_init_is_idempotent(tmp_path: Path) -> None:
+    """Three init() calls in a row leave a v5 database in a stable state."""
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.init()
+    db.init()
+    with sqlite3.connect(str(db.path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 5
+        llm_count = conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0]
+        assert llm_count == 0
+        tool_count = conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0]
+        assert tool_count == 0
+
+
+def test_pragmas_read_back_correctly(tmp_path: Path) -> None:
+    """STORE-05 + Pitfall 8: journal_mode=wal and synchronous=NORMAL after init.
+
+    journal_mode is a file-level property and persists across connections;
+    a fresh raw sqlite3.connect on the same path must report 'wal'.
+    synchronous is per-connection, so we open a connection via the same
+    PRAGMA dance Database._connect uses and assert it reads back as 1
+    (NORMAL), never 2 (FULL) or 0 (OFF).
+    """
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    # File-level: journal_mode persists across connections.
+    with sqlite3.connect(str(db.path)) as raw:
+        journal_mode = raw.execute("PRAGMA journal_mode").fetchone()[0]
+    assert journal_mode.lower() == "wal", f"expected journal_mode=wal, got {journal_mode!r}"
+    # Per-connection: synchronous must come back as NORMAL on connections
+    # opened via the same pragma dance as Database._connect.
+    conn = sqlite3.connect(str(db.path), isolation_level=None)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
+    finally:
+        conn.close()
+    assert synchronous == 1, (
+        f"expected synchronous=1 (NORMAL), got {synchronous} (0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA)"
+    )
