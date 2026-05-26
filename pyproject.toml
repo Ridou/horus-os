@@ -98,10 +98,22 @@ select = [
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
     "RUF", # ruff-specific rules
+    "TID", # flake8-tidy-imports — banned-api enforcement (pkg_resources ban)
 ]
 ignore = [
     "E501",  # line length is enforced by formatter, not linter
 ]
+
+# Pitfall 3: pkg_resources is banned across src/horus_os/. It adds
+# 1.3-1.5s of import overhead (the largest single foot-gun documented
+# in .planning/research/PITFALLS.md) and its API is in deprecation drift
+# on Python 3.12+. Use importlib.metadata.entry_points(group=...) for
+# entry-point discovery (the canonical pattern lives at
+# src/horus_os/adapters/base.py:22) and importlib.resources for packaged
+# data files. tests/plugins/test_pkg_resources_banned.py is the Layer-2
+# source-tree grep guard; this ruff rule is Layer 1.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pkg_resources".msg = "pkg_resources is banned (Pitfall 3 — 1.3-1.5s import overhead, deprecated API drift on 3.12+). Use importlib.metadata.entry_points(group=...) instead. See src/horus_os/adapters/base.py:22 for the canonical pattern."
 
 [tool.ruff.format]
 quote-style = "double"
