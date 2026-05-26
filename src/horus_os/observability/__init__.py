@@ -31,6 +31,7 @@ from horus_os.observability.queries import (
     parse_window,
     tool_reliability,
 )
+from horus_os.observability.redact import redact
 
 _BUS: ObservationBus | None = None
 
@@ -77,6 +78,7 @@ __all__ = [
     "get_observation_bus",
     "latency_p50_p95",
     "parse_window",
+    "redact",
     "reset_observation_bus_for_tests",
     "tool_reliability",
 ]
