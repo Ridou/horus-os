@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "horus-os-example-plugin"
+version = "0.1.0"
+description = "Reference plugin demonstrating the v0.5 contract."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "horus-os contributors" },
+]
+keywords = ["horus-os", "plugin", "reference"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "horus-os>=0.5,<0.6",
+]
+
+[project.entry-points."horus_os.plugins"]
+horus-os-example-plugin = "horus_os_example_plugin"
+
+[project.urls]
+Homepage = "https://github.com/Ridou/horus-os/tree/main/examples/horus-os-example-plugin"
+Issues = "https://github.com/Ridou/horus-os/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

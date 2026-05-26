@@ -1,0 +1,25 @@
+manifest_version = 1
+name = "horus-os-example-plugin"
+version = "0.1.0"
+description = "Reference plugin demonstrating the v0.5 contract."
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+homepage = "https://github.com/Ridou/horus-os/tree/main/examples/horus-os-example-plugin"
+issue_tracker = "https://github.com/Ridou/horus-os/issues"
+capabilities = [
+    "filesystem.read",
+    "secrets.read",
+]
+
+[[contributions.tools]]
+name = "echo_text_tool"
+entry_point = "horus_os_example_plugin.tools:echo_text_tool"
+
+[[contributions.tools]]
+name = "lookup_secret_tool"
+entry_point = "horus_os_example_plugin.tools:lookup_secret_tool"
+
+[[contributions.adapters]]
+name = "example_adapter"
+entry_point = "horus_os_example_plugin.adapter:ExampleAdapter"
