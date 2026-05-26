@@ -28,7 +28,7 @@ import pytest
 from horus_os import Database
 from horus_os import agent as agent_module
 from horus_os.observability import CostAnnotator, SQLitePersister, reset_observation_bus_for_tests
-from horus_os.types import AgentResult, ToolUse
+from horus_os.types import AgentResult
 
 LOOP_ITERATIONS = 1  # one LLM call per chat for clean cost arithmetic
 INPUT_TOKENS = 1000
@@ -105,9 +105,7 @@ def _post_chat_one_call(
     return body["trace_id"], db.path
 
 
-def test_e2e_known_model_writes_cost_usd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_e2e_known_model_writes_cost_usd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     trace_id, db_path = _post_chat_one_call(tmp_path, monkeypatch)
     with sqlite3.connect(str(db_path)) as conn:
         conn.row_factory = sqlite3.Row
@@ -163,14 +161,12 @@ def test_e2e_subscriber_order_annotator_before_persister(
     annotator_idx = next(
         i
         for i, h in enumerate(handlers)
-        if getattr(h, "__self__", None) is not None
-        and isinstance(h.__self__, CostAnnotator)
+        if getattr(h, "__self__", None) is not None and isinstance(h.__self__, CostAnnotator)
     )
     persister_idx = next(
         i
         for i, h in enumerate(handlers)
-        if getattr(h, "__self__", None) is not None
-        and isinstance(h.__self__, SQLitePersister)
+        if getattr(h, "__self__", None) is not None and isinstance(h.__self__, SQLitePersister)
     )
     assert annotator_idx < persister_idx, (
         f"CostAnnotator must subscribe BEFORE SQLitePersister; got "
@@ -178,9 +174,7 @@ def test_e2e_subscriber_order_annotator_before_persister(
     )
 
 
-def test_e2e_pricing_override_via_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_e2e_pricing_override_via_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """PRICE-04 wiring proof: HORUS_OS_PRICING_PATH overrides bundled rates."""
     override = tmp_path / "fixture_pricing.json"
     override.write_text(
