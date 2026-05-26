@@ -1,0 +1,31 @@
+manifest_version = 1
+name = "horus-os-test-full"
+version = "1.2.3"
+description = "Full horus-plugin.toml fixture exercising every documented field."
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.7,!=0.5.1"
+homepage = "https://github.com/example/horus-os-test-full"
+issue_tracker = "https://github.com/example/horus-os-test-full/issues"
+capabilities = [
+    "filesystem.read",
+    "filesystem.write",
+    "net.outbound",
+    "secrets.read",
+]
+
+[[contributions.tools]]
+name = "alpha_tool"
+entry_point = "example_plugin.tools:alpha"
+
+[[contributions.tools]]
+name = "beta_tool"
+entry_point = "example_plugin.tools:beta"
+
+[[contributions.adapters]]
+name = "alpha_adapter"
+entry_point = "example_plugin.adapters:AlphaAdapter"
+
+[[contributions.adapters]]
+name = "beta_adapter"
+entry_point = "example_plugin.adapters:BetaAdapter"

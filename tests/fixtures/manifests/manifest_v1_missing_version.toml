@@ -1,0 +1,12 @@
+# manifest_version = 1  -- intentionally commented out for the missing-version fixture
+name = "horus-os-test-missing-version"
+version = "0.1.0"
+description = "Malformed fixture: manifest_version omitted; loader must raise ValidationError."
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["filesystem.read"]
+
+[[contributions.tools]]
+name = "echo"
+entry_point = "fixture.mod:echo_tool"

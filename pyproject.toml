@@ -21,7 +21,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
-dependencies = []
+# v0.5 base deps: pydantic for plugin manifest validation, packaging for PEP 440 horus_os_compat parsing. See REL-10.
+dependencies = [
+    "pydantic>=2.7,<3",
+    "packaging>=24.0",
+]
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]

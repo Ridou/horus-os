@@ -1,0 +1,12 @@
+manifest_version = 1
+name = "horus-os-test-invalid-compat"
+version = "0.1.0"
+description = "Malformed fixture: horus_os_compat is not a parseable PEP 440 SpecifierSet."
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = "not-a-spec-set"
+capabilities = ["filesystem.read"]
+
+[[contributions.tools]]
+name = "echo"
+entry_point = "fixture.mod:echo_tool"
