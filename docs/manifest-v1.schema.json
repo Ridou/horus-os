@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "ContributionEntry": {
+      "additionalProperties": false,
+      "description": "One tool or adapter contributed by a plugin.\n\n``name`` is a lowercase-ASCII identifier scoped within the plugin\n(uniqueness against built-ins is enforced later by Phase 42's\nloader). ``entry_point`` is a dotted-path import string with an\noptional ``:Symbol`` suffix.",
+      "properties": {
+        "entry_point": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*(:[A-Za-z_][A-Za-z0-9_]*)?$",
+          "title": "Entry Point",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "entry_point"
+      ],
+      "title": "ContributionEntry",
+      "type": "object"
+    },
+    "ManifestContributions": {
+      "additionalProperties": false,
+      "description": "The plugin's tool + adapter contribution tables.",
+      "properties": {
+        "adapters": {
+          "items": {
+            "$ref": "#/$defs/ContributionEntry"
+          },
+          "title": "Adapters",
+          "type": "array"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/$defs/ContributionEntry"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "title": "ManifestContributions",
+      "type": "object"
+    }
+  },
+  "description": "pydantic v2 schema for ``horus-plugin.toml`` at manifest_version=1.\n\nUnknown top-level fields are silently dropped (``extra='ignore'``);\n``validate_manifest`` issues a ``UserWarning`` for each before\nhanding the dict to ``model_validate`` so plugin authors get a\nforward-compat hint without their plugin failing to load.",
+  "properties": {
+    "author": {
+      "title": "Author",
+      "type": "string"
+    },
+    "capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "contributions": {
+      "$ref": "#/$defs/ManifestContributions"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "homepage": {
+      "anyOf": [
+        {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Homepage"
+    },
+    "horus_os_compat": {
+      "title": "Horus Os Compat",
+      "type": "string"
+    },
+    "issue_tracker": {
+      "anyOf": [
+        {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Issue Tracker"
+    },
+    "license": {
+      "title": "License",
+      "type": "string"
+    },
+    "manifest_version": {
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest_version",
+    "name",
+    "version",
+    "description",
+    "author",
+    "license",
+    "horus_os_compat"
+  ],
+  "title": "MANIFEST_V1_SCHEMA",
+  "type": "object"
+}

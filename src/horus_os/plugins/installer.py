@@ -419,6 +419,9 @@ def render_grant_prompt(spec: PluginSpec, stdout: TextIO) -> None:
             description = "(no description registered)"
         stdout.write(f"  [{letter}] {cap.name} — {description}\n")
     stdout.write(
+        "\nSee docs/PLUGIN-SECURITY.md for the trust model before granting capabilities.\n"
+    )
+    stdout.write(
         "\nGrant all (y) / per-capability (a/b/c/...) / refuse (n)? "
     )
 
