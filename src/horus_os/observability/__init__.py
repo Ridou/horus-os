@@ -23,6 +23,13 @@ from horus_os.observability.bus import (
 from horus_os.observability.cost import CostAnnotator
 from horus_os.observability.persist import SQLitePersister
 from horus_os.observability.pricing import ModelPricing, PricingTable
+from horus_os.observability.queries import (
+    agent_totals,
+    cost_by_agent,
+    latency_p50_p95,
+    parse_window,
+    tool_reliability,
+)
 
 _BUS: ObservationBus | None = None
 
@@ -63,6 +70,11 @@ __all__ = [
     "RunEndEvent",
     "SQLitePersister",
     "ToolCallEvent",
+    "agent_totals",
+    "cost_by_agent",
     "get_observation_bus",
+    "latency_p50_p95",
+    "parse_window",
     "reset_observation_bus_for_tests",
+    "tool_reliability",
 ]

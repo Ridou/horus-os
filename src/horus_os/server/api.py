@@ -43,6 +43,13 @@ from horus_os.observability import (
     get_observation_bus,
 )
 from horus_os.observability.bus import LLMCallEvent, RunEndEvent
+from horus_os.observability.queries import (
+    agent_totals,
+    cost_by_agent,
+    latency_p50_p95,
+    parse_window,
+    tool_reliability,
+)
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -187,12 +194,37 @@ def create_app(data_dir: str | Path | None = None) -> Any:
             raise HTTPException(503, detail="database not initialized; run `horus-os init`")
         db = Database(cfg.db_path)
         profiles = db.list_profiles()
-        return {
-            "agents": [
-                _profile_to_dict(p, last_activity_at=_last_activity_for(db, p.name))
-                for p in profiles
-            ]
-        }
+        # Phase 35 DASH-4-04 extension: merge per-agent rollup over the 7d
+        # default window. Agents with zero in-window runs get default
+        # zero/null rollup fields so the existing v0.3 surface stays
+        # byte-identical for any agent that already returned a row.
+        rollups = {row["agent"]: row for row in agent_totals(db, "7d")}
+        agents = []
+        for profile in profiles:
+            base = _profile_to_dict(profile, last_activity_at=_last_activity_for(db, profile.name))
+            rollup = rollups.get(profile.name)
+            if rollup is None:
+                base.update(
+                    {
+                        "total_runs": 0,
+                        "total_cost_usd": None,
+                        "latency_p50_ms": None,
+                        "latency_p95_ms": None,
+                        "uncosted_runs": 0,
+                    }
+                )
+            else:
+                base.update(
+                    {
+                        "total_runs": rollup["total_runs"],
+                        "total_cost_usd": rollup["total_cost_usd"],
+                        "latency_p50_ms": rollup["latency_p50_ms"],
+                        "latency_p95_ms": rollup["latency_p95_ms"],
+                        "uncosted_runs": rollup["uncosted_runs"],
+                    }
+                )
+            agents.append(base)
+        return {"agents": agents}
 
     @app.get("/api/agents/{name}")
     def agents_show(name: str) -> dict[str, Any]:
@@ -285,6 +317,71 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         db = Database(cfg.db_path)
         writes = db.list_note_writes(limit=max(1, limit), offset=max(0, offset))
         return {"writes": [_write_to_dict(w) for w in writes]}
+
+    @app.get("/api/observability/cost")
+    def observability_cost(since: str = "7d") -> dict[str, Any]:
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        try:
+            rows = cost_by_agent(Database(cfg.db_path), since)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return {"agents": rows}
+
+    @app.get("/api/observability/latency")
+    def observability_latency(since: str = "7d") -> dict[str, Any]:
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        try:
+            return latency_p50_p95(Database(cfg.db_path), since)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.get("/api/observability/tools")
+    def observability_tools(since: str = "7d") -> dict[str, Any]:
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        try:
+            rows = tool_reliability(Database(cfg.db_path), since)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return {"tools": rows}
+
+    @app.get("/api/observability/llm-calls")
+    def observability_llm_calls(since: str = "7d") -> dict[str, Any]:
+        # Drilldown row-level route for the Phase 36 dashboard. Selects an
+        # explicit column list that deliberately omits the text-content
+        # error column on llm_calls; only error_type (exception class name)
+        # flows to the wire so user-supplied content embedded in an
+        # exception text never leaves the persister write path
+        # (Pitfalls 7 + 9).
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        try:
+            threshold = parse_window(since)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        db = Database(cfg.db_path)
+        with db._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT call_id, trace_id, iteration_idx, created_at, provider, model,
+                       input_tokens, output_tokens, cache_creation_input_tokens,
+                       cache_read_input_tokens, cost_usd, pricing_missing,
+                       latency_ms, status, error_type
+                FROM llm_calls
+                WHERE created_at >= ?
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+                (threshold,),
+            )
+            calls = [dict(row) for row in cursor.fetchall()]
+        return {"calls": calls}
 
     @app.post("/api/chat")
     async def chat(payload: dict = Body(...)) -> dict[str, Any]:  # noqa: B008
