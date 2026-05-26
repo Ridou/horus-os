@@ -372,7 +372,7 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | active | 50 |
+| REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | complete | 50 |
 | REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | complete | 49 |
 | REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | complete | 47 |
 
@@ -461,6 +461,6 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | TEST-21 | 48 | Complete (2026-05-26) |
 | TEST-20 | 49 | Complete (2026-05-26) |
 | REL-11 | 49 | Complete (2026-05-26) |
-| REL-10 | 50 | Pending |
+| REL-10 | 50 | Complete (2026-05-26) |
 
 **Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.

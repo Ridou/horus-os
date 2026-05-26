@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: Phase 49 complete; proceeding to Phase 50
-last_updated: "2026-05-26T15:20:00.000Z"
-last_activity: 2026-05-26 — Phase 49 shipped (3-OS install-smoke-plugin CI matrix + release_gate.py extended 4 -> 8 checks + horus-os plugins grant --all flag; 1011 total passing; TEST-20 + REL-11 complete)
+status: milestone_complete (v0.5 shipped pending maintainer tag per STOP-BEFORE-TAG block in .planning/phases/50-v0-5-0-release/50-01-SUMMARY.md)
+last_updated: "2026-05-26T22:30:00.000Z"
+last_activity: "2026-05-26: Phase 50 prepared; v0.5.0 version bump + CHANGELOG promotion + STOP-BEFORE-TAG handed to maintainer (REL-10 complete; 1011 tests green; 6 release-gate active checks OK + 2 SKIP under executor env overrides)"
 progress:
   total_phases: 33
-  completed_phases: 32
-  total_plans: 32
-  completed_plans: 32
-  percent: 97
+  completed_phases: 33
+  total_plans: 33
+  completed_plans: 33
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44, 45, 46, 47, 48, 49 shipped. Next phase: 50 (v0.5.0 release).
+**Current focus:** v0.5 Plugin System milestone shipped (Phases 40-50). v0.5.0 release prepared; STOP-BEFORE-TAG handoff in place for the maintainer.
 
 ## Current Position
 
-Phase: 50: v0.5.0 release
-Plan: —
-Status: Ready for `/gsd-plan-phase 50`
-Last activity: 2026-05-26 — Phase 49 shipped (3-OS install-smoke-plugin CI matrix + scripts/release_gate.py extended from 4 to 8 checks + horus-os plugins grant --all ergonomics flag; 1011 total passing in 28s wall clock; TEST-20 + REL-11 complete; 2 deviations both Rule-3-style: shared _write_ci_yml fixture expanded, unrealistic data-loss test replaced with corrupt-SQLite mutation)
+Phase: 50: v0.5.0 release (prepared; awaiting maintainer tag per STOP-BEFORE-TAG block)
+Plan: 50-01 complete
+Status: milestone_complete (v0.5 shipped pending maintainer `git tag -a v0.5.0` + `gh release create v0.5.0`)
+Last activity: "2026-05-26: Phase 50 prepared. Version 0.5.0 bump landed in pyproject.toml + src/horus_os/__init__.py; CHANGELOG `[0.5.0] - YYYY-MM-DD` draft promoted to `[0.5.0] - 2026-05-26` with fresh `[Unreleased]` stub above; 50-01-SUMMARY.md authored with maintainer-only STOP-BEFORE-TAG block reproducing `git tag -a v0.5.0`, `git push origin v0.5.0`, `gh release create v0.5.0`, and STATE.md milestone roll-forward. Release-gate active checks (6) all OK; wheel-pricing-bundle + pytest SKIPped under executor env overrides for the maintainer to re-run at full strength. Full pytest suite 1011 passed, 3 skipped (identical to Phase 49). REL-10 complete. Three executor commits: 9a72af1 plan, ee22d98 version bump, 236945a CHANGELOG promotion; plus the state commit landing this update."
 
 ## Prior Milestones
 
@@ -35,6 +35,7 @@ Last activity: 2026-05-26 — Phase 49 shipped (3-OS install-smoke-plugin CI mat
 - **v0.2 Multi-Agent + Streaming** (Phases 12-21): SHIPPED 2026-05-23 as v0.2.0. 319 tests, 3-OS install-smoke green. Multi-agent runtime, streaming, adapter contract, HMAC webhook reference adapter, dashboard SSE + agents view.
 - **v0.3 Adapter Ecosystem** (Phases 22-31): SHIPPED 2026-05-24 as v0.3.0. 447 tests, 3-OS install-smoke green. Adapter lifecycle hooks, Discord + Slack + Email + Calendar adapters, AdapterRegistry, Dashboard Adapters tab, four per-adapter setup guides, four runnable examples, v0.2-to-v0.3 migration guide.
 - **v0.4 Observability** (Phases 32-39): SHIPPED 2026-05-26 as v0.4.0. ObservationBus + SQLitePersister, llm_calls + tool_invocations child tables, bundled pricing.json with cache-aware cost annotation, /observability dashboard tab + horus-os usage CLI, opt-in OtelAdapter behind [otel] extra with default-deny content capture + bounded shutdown, scripts/release_gate.py with pricing freshness + two-variant install-smoke matrix.
+- **v0.5 Plugin System** (Phases 40-50): SHIPPED 2026-05-26 (pending maintainer tag) as v0.5.0. 1011 tests green, 3-OS install-smoke green including the new install-smoke-plugin matrix. TOML manifest contract (pydantic v2), entry-point + filesystem discovery, default-deny capability grants pinned to manifest-hash with re-prompt on upgrade, two-phase `pip install` flow with sdist + `.pth` + runtime-dep-downgrade refusals, bounded `asyncio.wait_for(start, timeout=2.0)` failure isolation, `/plugins` dashboard tab + per-plugin observability attribution, reference plugin (`examples/horus-os-example-plugin/`) demonstrating four scenarios with the two-layer TID251 + source-tree-grep API surface lock, docs trio (`docs/PLUGINS.md` + `docs/PLUGIN-SECURITY.md` + `docs/MIGRATION-v0.4-to-v0.5.md`), `scripts/release_gate.py` extended from 4 to 8 checks. Two new base direct deps: `pydantic>=2.7,<3` + `packaging>=24.0`. v5->v6 schema migration additive only.
 
 ## v0.5 Plugin System — Milestone Plan
 
