@@ -124,11 +124,17 @@ def test_tool_reliability_last_error_type_and_timestamp(tmp_path: Path) -> None:
     # is unambiguous.
     newer = (datetime.now(UTC) - timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
     _insert_tool(
-        db, tool_name="read_file", status="error", error_type="FileNotFoundError",
+        db,
+        tool_name="read_file",
+        status="error",
+        error_type="FileNotFoundError",
         created_at=older,
     )
     _insert_tool(
-        db, tool_name="read_file", status="error", error_type="PermissionError",
+        db,
+        tool_name="read_file",
+        status="error",
+        error_type="PermissionError",
         created_at=newer,
     )
     # A subsequent success row should not change last_error_type.

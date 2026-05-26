@@ -201,9 +201,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         rollups = {row["agent"]: row for row in agent_totals(db, "7d")}
         agents = []
         for profile in profiles:
-            base = _profile_to_dict(
-                profile, last_activity_at=_last_activity_for(db, profile.name)
-            )
+            base = _profile_to_dict(profile, last_activity_at=_last_activity_for(db, profile.name))
             rollup = rollups.get(profile.name)
             if rollup is None:
                 base.update(

@@ -68,27 +68,19 @@ def parse_window(window: str) -> str:
     is actionable.
     """
     if not isinstance(window, str) or not window:
-        raise ValueError(
-            f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'"
-        )
+        raise ValueError(f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'")
     unit = window[-1]
     if unit not in ("h", "d"):
-        raise ValueError(
-            f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'"
-        )
+        raise ValueError(f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'")
     body = window[:-1]
     # Reject empty body, decimals, and any non-digit content. We accept
     # ONLY plain positive integers; bool's `isdigit` already excludes the
     # minus sign and the decimal point.
     if not body or not body.isdigit():
-        raise ValueError(
-            f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'"
-        )
+        raise ValueError(f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'")
     amount = int(body)
     if amount <= 0:
-        raise ValueError(
-            f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'"
-        )
+        raise ValueError(f"invalid window: {window!r}; expected forms like '24h', '7d', '30d'")
     delta = timedelta(hours=amount) if unit == "h" else timedelta(days=amount)
     threshold = datetime.now(UTC) - delta
     return threshold.isoformat().replace("+00:00", "Z")

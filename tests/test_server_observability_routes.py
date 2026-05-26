@@ -40,7 +40,9 @@ def _client(tmp_path: Path) -> TestClient:
     return TestClient(create_app(data_dir=tmp_path))
 
 
-def _insert_trace(db: Database, *, agent: str = "default", total_cost_usd: float | None = 0.001) -> str:
+def _insert_trace(
+    db: Database, *, agent: str = "default", total_cost_usd: float | None = 0.001
+) -> str:
     trace_id = uuid.uuid4().hex
     with sqlite3.connect(str(db.path)) as conn:
         conn.execute(
