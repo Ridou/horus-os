@@ -36,7 +36,12 @@ from horus_os.memory.tools import (
     read_note_tool,
     search_notes_tool,
 )
-from horus_os.observability import SQLitePersister, get_observation_bus
+from horus_os.observability import (
+    CostAnnotator,
+    PricingTable,
+    SQLitePersister,
+    get_observation_bus,
+)
 from horus_os.observability.bus import LLMCallEvent, RunEndEvent
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
@@ -112,14 +117,15 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
     # Phase 33 wiring: the ObservationBus is the central pub-sub for
-    # LLMCallEvent / ToolCallEvent / RunEndEvent. SQLitePersister is the
-    # default subscriber so v0.4 chat runs populate `llm_calls` and
-    # `tool_invocations` immediately. Phase 34 will subscribe a
-    # CostAnnotator BEFORE the persister; Phase 38 will subscribe an
-    # OtelExporter AFTER it. The persister holds a Database that resolves
-    # its path lazily on each write, so it stays correct even if the
-    # config file is rewritten between requests.
+    # LLMCallEvent / ToolCallEvent / RunEndEvent. Phase 34 CostAnnotator
+    # subscribes here BEFORE the persister so the persister writes
+    # mutated cost_usd / pricing_missing. Phase 38 will subscribe an
+    # OtelExporter AFTER the persister. The persister holds a Database
+    # that resolves its path lazily on each write, so it stays correct
+    # even if the config file is rewritten between requests.
     _bus = get_observation_bus()
+    _pricing_table = PricingTable(Config.load(_resolved_data_dir).pricing_path)
+    _bus.subscribe(CostAnnotator(_pricing_table).on_event)
     _bus.subscribe(SQLitePersister(Database(Config.load(_resolved_data_dir).db_path)).on_event)
     app.state.observation_bus = _bus
     app.add_middleware(

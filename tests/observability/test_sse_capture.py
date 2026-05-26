@@ -14,6 +14,8 @@ import sqlite3
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import pytest
+
 from horus_os import Database
 from horus_os._providers import _anthropic, _gemini
 from horus_os._providers._stream_types import _StreamUsage
@@ -119,7 +121,10 @@ def test_sse_anthropic_usage_persisted(tmp_path: Path, monkeypatch) -> None:
     assert row[4] >= 0
     assert rollup is not None
     assert rollup[0] == 250
-    assert rollup[1] is None  # cost stays NULL until Phase 34
+    # Phase 34: CostAnnotator now populates cost_usd for the bundled
+    # claude-sonnet-4-6 rates. 250*3 + 120*15 + 30*0.30 + 10*3.75 = 2596.5
+    # / 1_000_000 -> 0.0025965 -> round(6dp, banker's) -> 0.002596.
+    assert rollup[1] == pytest.approx(0.002596, abs=1e-9)
 
 
 def test_sse_gemini_usage_normalized(tmp_path: Path, monkeypatch) -> None:

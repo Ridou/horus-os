@@ -20,7 +20,9 @@ from horus_os.observability.bus import (
     RunEndEvent,
     ToolCallEvent,
 )
+from horus_os.observability.cost import CostAnnotator
 from horus_os.observability.persist import SQLitePersister
+from horus_os.observability.pricing import ModelPricing, PricingTable
 
 _BUS: ObservationBus | None = None
 
@@ -52,9 +54,12 @@ def reset_observation_bus_for_tests() -> ObservationBus:
 
 
 __all__ = [
+    "CostAnnotator",
     "LLMCallEvent",
+    "ModelPricing",
     "ObservationBus",
     "ObservationEvent",
+    "PricingTable",
     "RunEndEvent",
     "SQLitePersister",
     "ToolCallEvent",
