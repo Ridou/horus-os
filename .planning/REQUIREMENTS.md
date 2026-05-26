@@ -343,7 +343,7 @@
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
 | REFERENCE-01 | `examples/horus-os-example-plugin/` shipped as a separate package with its own `pyproject.toml` and `horus-plugin.toml`; demonstrates four scenarios (simple tool + capability check, config-reading tool, lifecycle adapter with start/stop, plugin registering both tool + adapter) | active | 48 |
-| REFERENCE-02 | `docs/PLUGINS.md` is the plugin-author guide; covers manifest, capabilities catalog, lifecycle hooks, testing, walkthrough of each reference plugin scenario in order; embedded `horus-plugin.toml` snippet diffs against the example plugin in CI | active | 47 |
+| REFERENCE-02 | `docs/PLUGINS.md` is the plugin-author guide; covers manifest, capabilities catalog, lifecycle hooks, testing, walkthrough of each reference plugin scenario in order; embedded `horus-plugin.toml` snippet diffs against the example plugin in CI | complete | 47 |
 
 ### Migration (continued from v0.4)
 
@@ -374,7 +374,7 @@
 |----|-------------|--------|-------|
 | REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | active | 50 |
 | REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | active | 49 |
-| REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | active | 47 |
+| REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | complete | 47 |
 
 ## Coverage summary
 
@@ -455,8 +455,8 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | OBSERVE-02 | 45 | Complete (2026-05-26) |
 | TEST-16 | 46 | Complete (2026-05-26) |
 | TEST-17 | 46 | Complete (2026-05-26) |
-| REFERENCE-02 | 47 | Pending |
-| REL-12 | 47 | Pending |
+| REFERENCE-02 | 47 | Complete (2026-05-26) |
+| REL-12 | 47 | Complete (2026-05-26) |
 | REFERENCE-01 | 48 | Pending |
 | TEST-21 | 48 | Pending |
 | TEST-20 | 49 | Pending |
