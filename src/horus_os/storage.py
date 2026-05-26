@@ -161,6 +161,25 @@ CREATE TABLE IF NOT EXISTS plugin_status (
     last_seen     TEXT,
     FOREIGN KEY (plugin_name) REFERENCES plugins(name) ON DELETE CASCADE
 );
+
+-- v6 additive: PERMISSION-02 audit log. Append-only audit trail of
+-- grant / revoke / pending_on_upgrade transitions. Schema version
+-- stays at 6 (this table is additive within v6); the v5 -> v6
+-- migration block in init() does not need a new ALTER TABLE because
+-- CREATE TABLE IF NOT EXISTS is idempotent on both fresh and
+-- upgraded databases.
+CREATE TABLE IF NOT EXISTS plugin_capability_grants_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    plugin_name    TEXT NOT NULL,
+    plugin_version TEXT NOT NULL,
+    capability     TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('granted', 'revoked', 'pending_on_upgrade')),
+    manifest_hash  TEXT NOT NULL,
+    actor          TEXT NOT NULL CHECK (actor IN ('cli', 'dashboard', 'system')),
+    timestamp      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_capability_grants_log_plugin
+    ON plugin_capability_grants_log(plugin_name, timestamp DESC);
 """
 
 

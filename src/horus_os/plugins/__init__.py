@@ -36,7 +36,13 @@ from horus_os.plugins.loader import (
     PluginLoader,
     PluginLoadResult,
 )
-from horus_os.plugins.permissions import CapabilityGuard
+from horus_os.plugins.permissions import (
+    DEFAULT_GRANT_POLICY,
+    CapabilityGuard,
+    PermissionDenied,
+    PermissionGate,
+    PermissionService,
+)
 from horus_os.plugins.registry import (
     PLUGIN_STATUS_DISABLED,
     PLUGIN_STATUS_ERROR,
@@ -48,6 +54,7 @@ from horus_os.plugins.registry import (
 
 __all__ = (
     "DEFAULT_FILESYSTEM_PLUGIN_DIR",
+    "DEFAULT_GRANT_POLICY",
     "LOAD_PHASE_ORDER",
     "PLUGIN_ENTRY_POINT_GROUP",
     "PLUGIN_STATUS_DISABLED",
@@ -56,6 +63,9 @@ __all__ = (
     "PLUGIN_STATUS_PENDING",
     "CapabilityGuard",
     "DiscoveryError",
+    "PermissionDenied",
+    "PermissionGate",
+    "PermissionService",
     "PluginEntry",
     "PluginLoadResult",
     "PluginLoader",
