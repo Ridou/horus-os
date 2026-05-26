@@ -28,9 +28,9 @@ Conventions baked into every function:
   the n-threshold render rule (Pitfall 10).
 - `tool_reliability` honors the status enum: `retry_then_success`
   rows are NOT counted as errors; `expected_no_result` rows are not
-  in the success-rate denominator. The `error_message` column is
-  never read here (Pitfalls 7 + 9); only `error_type` (exception
-  class name) is surfaced.
+  in the success-rate denominator. The text-content error column on
+  tool_invocations is never read here (Pitfalls 7 + 9); only
+  `error_type` (exception class name) is surfaced.
 - All filters use parameterized `?` placeholders; the window string
   is never substituted into SQL via Python string formatting.
 """
@@ -350,5 +350,99 @@ def latency_p50_p95(db: Database, window: str) -> dict[str, Any]:
 
 
 def tool_reliability(db: Database, window: str) -> list[dict[str, Any]]:
-    """Per-tool retry-aware status aggregation. Implemented in Task 4."""
-    raise NotImplementedError("tool_reliability ships in Task 4")
+    """Per-tool retry-aware status aggregation over the window.
+
+    Returns one dict per tool that has at least one invocation in the
+    window. The dict carries:
+
+        tool_name                : str
+        call_count               : int
+        success_count            : int   (status IN ('success',
+                                           'retry_then_success'))
+        error_count              : int   (status = 'error' only)
+        retry_then_success_count : int
+        expected_no_result_count : int
+        success_rate             : float | None
+                                   (success / (success + error), rounded
+                                   to 4dp; None when denominator is 0)
+        last_error_type          : str | None
+                                   (exception class name from MAX(created_at)
+                                   error row; never user input)
+        last_error_at            : str | None  (timestamp of that row)
+
+    Pitfall 9 contract: `retry_then_success` rows are NOT counted in
+    `error_count`. They count toward success (the call eventually
+    succeeded) and are surfaced separately as `retry_then_success_count`
+    so the dashboard can show flakiness as a distinct signal from
+    reliability. `expected_no_result` rows are informational and are
+    excluded from both numerator and denominator of `success_rate`.
+
+    The query NEVER references the column that carries error text
+    content; only `error_type` (exception class name) flows out. That
+    keeps any user-supplied path or URL embedded in an exception text
+    sealed inside the persister write path (Pitfalls 7 + 9).
+
+    Ordering: by `call_count` DESC; ties by `tool_name` ASC for
+    deterministic test output. Tools with zero in-window invocations
+    are excluded.
+    """
+    threshold = parse_window(window)
+    sql = """
+        WITH windowed AS (
+            SELECT tool_name, status, error_type, created_at
+            FROM tool_invocations
+            WHERE created_at >= ?
+        )
+        SELECT
+            tool_name,
+            COUNT(*) AS call_count,
+            SUM(CASE WHEN status IN ('success', 'retry_then_success') THEN 1 ELSE 0 END)
+                AS success_count,
+            SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count,
+            SUM(CASE WHEN status = 'retry_then_success' THEN 1 ELSE 0 END)
+                AS retry_then_success_count,
+            SUM(CASE WHEN status = 'expected_no_result' THEN 1 ELSE 0 END)
+                AS expected_no_result_count,
+            (
+                SELECT error_type
+                FROM windowed ti2
+                WHERE ti2.tool_name = w.tool_name AND ti2.status = 'error'
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) AS last_error_type,
+            (
+                SELECT created_at
+                FROM windowed ti3
+                WHERE ti3.tool_name = w.tool_name AND ti3.status = 'error'
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) AS last_error_at
+        FROM windowed w
+        GROUP BY tool_name
+        ORDER BY COUNT(*) DESC, tool_name ASC
+    """
+    rows: list[dict[str, Any]] = []
+    with db._connect() as conn:
+        for row in conn.execute(sql, (threshold,)).fetchall():
+            success = int(row["success_count"])
+            error = int(row["error_count"])
+            denominator = success + error
+            success_rate: float | None
+            if denominator > 0:
+                success_rate = round(success / denominator, 4)
+            else:
+                success_rate = None
+            rows.append(
+                {
+                    "tool_name": row["tool_name"],
+                    "call_count": int(row["call_count"]),
+                    "success_count": success,
+                    "error_count": error,
+                    "retry_then_success_count": int(row["retry_then_success_count"]),
+                    "expected_no_result_count": int(row["expected_no_result_count"]),
+                    "success_rate": success_rate,
+                    "last_error_type": row["last_error_type"],
+                    "last_error_at": row["last_error_at"],
+                }
+            )
+    return rows
