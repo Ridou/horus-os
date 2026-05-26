@@ -68,6 +68,20 @@
     .uncosted-tile { padding: 8px 12px; border: 1px dashed var(--border); border-radius: 6px; color: var(--text-muted); margin-bottom: 12px; font-size: 13px; }
     select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font: inherit; font-size: 13px; }
     select:focus { outline: none; border-color: var(--accent); }
+    /* Phase 45 Plugins tab */
+    .plugin-tile { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; background: var(--bg-elev); }
+    .plugin-tile h3 { margin: 0 0 4px 0; font-size: 14px; }
+    .plugin-tile .meta { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+    .plugin-tile .row { margin-top: 8px; }
+    .plugin-tile .field-label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 6px; }
+    .plugin-tile .err { color: var(--error); font-size: 12px; margin-top: 6px; }
+    .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 4px; margin-bottom: 4px; }
+    .chip.granted { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+    .chip.pending { background: rgba(210, 153, 34, 0.15); color: rgb(210, 153, 34); }
+    .chip.revoked { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+    .chip.tool { background: rgba(56, 139, 253, 0.15); color: var(--accent); }
+    .chip.adapter { background: rgba(177, 186, 196, 0.15); color: var(--text); }
+    .chip button { background: transparent; border: none; color: inherit; cursor: pointer; padding: 0 0 0 4px; font: inherit; font-size: 11px; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -82,6 +96,7 @@
     <button data-tab="writes">Writes</button>
     <button data-tab="adapters">Adapters</button>
     <button data-tab="observability">Observability</button>
+    <button data-tab="plugins">Plugins</button>
   </nav>
   <main>
     <section class="tab active" id="chat">
@@ -149,6 +164,18 @@
         <h3>Tool reliability</h3>
         <div id="obs-tools-body" class="empty">loading</div>
       </div>
+      <div class="obs-panel" id="obs-plugins-panel">
+        <h3>By plugin</h3>
+        <div id="obs-plugins-body" class="empty">loading</div>
+      </div>
+    </section>
+    <section class="tab" id="plugins">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Plugin status</h2>
+        <span class="grow"></span>
+        <button class="ghost" id="refresh-plugins">Refresh</button>
+      </div>
+      <div id="plugins-body"><div class="empty">loading</div></div>
     </section>
   </main>
   <script>
@@ -159,6 +186,8 @@
     let adaptersPoll = null;
     // Phase 36: poll interval for the Observability tab; cleared on tab switch.
     let observabilityPoll = null;
+    // Phase 45: poll interval for the Plugins tab; cleared on tab switch.
+    let pluginsPoll = null;
 
     async function fetchJson(url, opts = {}) {
       const r = await fetch(url, opts);
@@ -183,6 +212,11 @@
         clearInterval(observabilityPoll);
         observabilityPoll = null;
       }
+      // Phase 45: same contract for the Plugins tab poll.
+      if (pluginsPoll) {
+        clearInterval(pluginsPoll);
+        pluginsPoll = null;
+      }
       if (name === "traces") loadTraces();
       if (name === "agents") loadAgents();
       if (name === "writes") loadWrites();
@@ -193,6 +227,10 @@
       if (name === "observability") {
         loadObservability();
         observabilityPoll = setInterval(loadObservability, 5000);
+      }
+      if (name === "plugins") {
+        loadPlugins();
+        pluginsPoll = setInterval(loadPlugins, 10000);
       }
     }
     $$("nav button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -493,6 +531,7 @@
       const costBody = $("#obs-cost-body");
       const latencyBody = $("#obs-latency-body");
       const toolsBody = $("#obs-tools-body");
+      const pluginsBody = $("#obs-plugins-body");
       const fetches = [
         fetchJson("/api/observability/cost?since=" + encodeURIComponent(win))
           .then((d) => renderCostPanel(d, costBody))
@@ -503,6 +542,10 @@
         fetchJson("/api/observability/tools?since=" + encodeURIComponent(win))
           .then((d) => renderToolsPanel(d, toolsBody))
           .catch((e) => { toolsBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
+        // Phase 45: per-plugin rollup tile.
+        fetchJson("/api/observability/plugins?since=" + encodeURIComponent(win))
+          .then((d) => renderObservabilityPlugins(d, pluginsBody))
+          .catch((e) => { pluginsBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
       ];
       await Promise.all(fetches);
     }
@@ -587,6 +630,159 @@
     }
     $("#refresh-observability").addEventListener("click", loadObservability);
     $("#obs-window").addEventListener("change", loadObservability);
+
+    // Phase 45 Plugins tab.
+    //
+    // DASH-5-03 + T-45-02 mitigation: every manifest-sourced string in
+    // this tab MUST flow through escapeHtml() OR be assigned via
+    // textContent before reaching the DOM. The `safeUrl` helper gates
+    // homepage / issue_tracker URLs on http:// or https:// prefix; a
+    // `javascript:` URL falls through to plain-text rendering with no
+    // <a> tag (T-45-07). The regression contract is pinned at file
+    // level by tests/plugins/test_dashboard_hyperlinks_sanitized.py.
+    function safeUrl(u) {
+      if (!u || typeof u !== "string") return null;
+      if (u.startsWith("http://") || u.startsWith("https://")) return u;
+      return null;
+    }
+
+    function renderPluginTile(plugin) {
+      // Status badge.
+      let pillClass = "muted";
+      if (plugin.status === "loaded") pillClass = "success";
+      else if (plugin.status === "error") pillClass = "error";
+      const statusPill = '<span class="pill ' + pillClass + '">' + escapeHtml(plugin.status) + '</span>';
+
+      // Enable/Disable toggle.
+      const toggleAction = plugin.enabled ? "disable" : "enable";
+      const toggleLabel = plugin.enabled ? "Disable" : "Enable";
+      const toggleBtn = '<button class="ghost" data-action="' + toggleAction + '" data-name="' + escapeHtml(plugin.name) + '">' + toggleLabel + '</button>';
+
+      // Declared tools / adapters.
+      const tools = (plugin.declared_tools || []).map((t) =>
+        '<span class="chip tool">' + escapeHtml(t) + '</span>'
+      ).join("") || '<span class="meta">none</span>';
+      const adapters = (plugin.declared_adapters || []).map((a) =>
+        '<span class="chip adapter">' + escapeHtml(a) + '</span>'
+      ).join("") || '<span class="meta">none</span>';
+
+      // Granted / pending capability chips with grant/revoke buttons.
+      const grantedChips = (plugin.granted_capabilities || []).map((c) =>
+        '<span class="chip granted">' + escapeHtml(c) +
+        '<button data-cap-action="revoke" data-name="' + escapeHtml(plugin.name) +
+        '" data-capability="' + escapeHtml(c) + '">revoke</button></span>'
+      ).join("");
+      const pendingChips = (plugin.pending_capabilities || []).map((c) =>
+        '<span class="chip pending">' + escapeHtml(c) +
+        '<button data-cap-action="grant" data-name="' + escapeHtml(plugin.name) +
+        '" data-capability="' + escapeHtml(c) + '">grant</button></span>'
+      ).join("");
+      const caps = (grantedChips + pendingChips) || '<span class="meta">none</span>';
+
+      // Author + homepage + issue_tracker links. URL fields gate on safeUrl.
+      const authorText = escapeHtml(plugin.manifest_author || "");
+      const homepageUrl = safeUrl(plugin.manifest_homepage);
+      const trackerUrl = safeUrl(plugin.manifest_issue_tracker);
+      const homepageHtml = homepageUrl
+        ? '<a href="' + escapeHtml(homepageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(homepageUrl) + '</a>'
+        : escapeHtml(plugin.manifest_homepage || "");
+      const trackerHtml = trackerUrl
+        ? '<a href="' + escapeHtml(trackerUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(trackerUrl) + '</a>'
+        : escapeHtml(plugin.manifest_issue_tracker || "");
+
+      // Last error preview (truncated to 200 chars at the API layer).
+      const errHtml = plugin.last_error
+        ? '<div class="err" title="' + escapeHtml(plugin.last_error) + '">' + escapeHtml(plugin.last_error) + '</div>'
+        : "";
+
+      return '<div class="plugin-tile">' +
+        '<h3>' + escapeHtml(plugin.name) + ' <span class="meta">v' + escapeHtml(plugin.version || "?") + '</span> ' + statusPill + '</h3>' +
+        '<div class="meta">by ' + authorText + '</div>' +
+        '<div class="row"><span class="field-label">tools</span>' + tools + '</div>' +
+        '<div class="row"><span class="field-label">adapters</span>' + adapters + '</div>' +
+        '<div class="row"><span class="field-label">capabilities</span>' + caps + '</div>' +
+        (homepageHtml ? '<div class="row"><span class="field-label">homepage</span>' + homepageHtml + '</div>' : "") +
+        (trackerHtml ? '<div class="row"><span class="field-label">issues</span>' + trackerHtml + '</div>' : "") +
+        errHtml +
+        '<div class="row">' + toggleBtn + '</div>' +
+        '</div>';
+    }
+
+    async function loadPlugins() {
+      const body = $("#plugins-body");
+      try {
+        const data = await fetchJson("/api/plugins");
+        if (!data.plugins.length) {
+          body.innerHTML = '<div class="empty">no plugins discovered</div>';
+          return;
+        }
+        body.innerHTML = data.plugins.map(renderPluginTile).join("");
+        body.querySelectorAll("button[data-action]").forEach((btn) => {
+          btn.addEventListener("click", () => togglePluginEnable(btn.dataset.name, btn.dataset.action));
+        });
+        body.querySelectorAll("button[data-cap-action]").forEach((btn) => {
+          btn.addEventListener("click", () => grantOrRevokeCapability(btn.dataset.name, btn.dataset.capability, btn.dataset.capAction));
+        });
+      } catch (e) {
+        body.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>';
+      }
+    }
+    $("#refresh-plugins").addEventListener("click", loadPlugins);
+
+    async function togglePluginEnable(name, action) {
+      try {
+        await fetchJson("/api/plugins/" + encodeURIComponent(name) + "/" + action, { method: "POST" });
+        loadPlugins();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function grantOrRevokeCapability(name, capability, action) {
+      try {
+        if (action === "grant") {
+          await fetchJson("/api/plugins/" + encodeURIComponent(name) + "/grant", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ capability: capability }),
+          });
+        } else {
+          await fetchJson(
+            "/api/plugins/" + encodeURIComponent(name) + "/grant/" + encodeURIComponent(capability),
+            { method: "DELETE" }
+          );
+        }
+        loadPlugins();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    // Phase 45: by-plugin obs tile. Mirrors renderToolsPanel's em-dash
+    // treatment for null cells; total_cost_usd === null renders the
+    // em-dash (Pitfall 11 honesty, never $0).
+    function renderObservabilityPlugins(data, container) {
+      if (!data.plugins || !data.plugins.length) {
+        container.innerHTML = '<div class="empty">no plugin activity in window</div>';
+        return;
+      }
+      const rows = data.plugins.map((p) => {
+        const errCell = p.error_rate === null
+          ? '<td title="no success or error rows in window">—</td>'
+          : '<td>' + (p.error_rate * 100).toFixed(1) + '%</td>';
+        const p50Cell = p.latency_p50_ms === null
+          ? '<td title="need at least 10 invocations for percentile">—</td>'
+          : '<td>' + p.latency_p50_ms + 'ms</td>';
+        const p95Cell = p.latency_p95_ms === null
+          ? '<td title="need at least 10 invocations for percentile">—</td>'
+          : '<td>' + p.latency_p95_ms + 'ms</td>';
+        const costCell = p.total_cost_usd === null
+          ? '<td title="no cost data in window">—</td>'
+          : '<td>$' + p.total_cost_usd.toFixed(6) + '</td>';
+        return '<tr><td>' + escapeHtml(p.plugin_name) + '</td><td>' + p.total_invocations + '</td>' + errCell + p50Cell + p95Cell + costCell + '</tr>';
+      }).join("");
+      container.innerHTML = '<table><thead><tr><th>plugin_name</th><th>invocations</th><th>error_rate</th><th>p50</th><th>p95</th><th>cost</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({
