@@ -232,14 +232,22 @@ class Database:
         prompt: str,
         result: AgentResult,
         *,
+        trace_id: str | None = None,
         parent_trace_id: str | None = None,
         agent_profile_name: str | None = None,
         latency_ms: int | None = None,
         status: str = "success",
         error_message: str | None = None,
     ) -> str:
-        """Write one trace row. Returns the generated trace_id (UUID4)."""
-        trace_id = uuid.uuid4().hex
+        """Write one trace row. Returns the generated trace_id (UUID4).
+
+        Phase 33: `trace_id` is now an optional keyword. When supplied,
+        the row uses that id verbatim so the caller can pre-generate one
+        and pass the same id into observability events whose RUN_END
+        rollup UPDATEs the matching traces row. When omitted, a fresh
+        uuid4 is generated (Phase 32 behavior).
+        """
+        trace_id = trace_id if trace_id is not None else uuid.uuid4().hex
         created_at = _now_iso()
         tool_uses_json = json.dumps(
             [{"id": u.id, "name": u.name, "input": u.input} for u in result.tool_uses]
