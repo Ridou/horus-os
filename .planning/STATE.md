@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: Phase 42 complete; proceeding to Phase 43
-last_updated: "2026-05-26T12:30:00.000Z"
-last_activity: 2026-05-26 — Phase 42 shipped (discovery + loading + failure isolation, 33 new tests, 793 total passing)
+status: Phase 44 complete; proceeding to Phase 45
+last_updated: "2026-05-26T20:00:00.000Z"
+last_activity: 2026-05-26 — Phase 44 shipped (two-phase installer + 9 CLI subcommands + upgrade-diff, 47 new tests, 888 total passing)
 progress:
   total_phases: 32
-  completed_phases: 24
-  total_plans: 24
-  completed_plans: 24
-  percent: 75
+  completed_phases: 27
+  total_plans: 27
+  completed_plans: 27
+  percent: 84
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42 shipped. Next phase: 43 (PermissionGate + CapabilityGuard real enforcement; bounded asyncio.wait_for(start, timeout=2.0); plugin disable short-circuit).
+**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44 shipped. Next phase: 45 (REST API + /plugins dashboard tab + per-plugin observability).
 
 ## Current Position
 
-Phase: 43: PermissionGate + CapabilityGuard enforcement
+Phase: 45: REST API + /plugins dashboard tab + per-plugin observability
 Plan: —
-Status: Ready for `/gsd-plan-phase 43`
-Last activity: 2026-05-26 — Phase 42 shipped (discovery + loading + failure isolation)
+Status: Ready for `/gsd-plan-phase 45`
+Last activity: 2026-05-26 — Phase 44 shipped (two-phase installer + 9 CLI subcommands + upgrade-diff)
 
 ## Prior Milestones
 
@@ -53,6 +53,6 @@ Last activity: 2026-05-26 — Phase 42 shipped (discovery + loading + failure is
 
 ## Last Activity
 
-2026-05-26, Phase 42 shipped. Discovery + loading + failure isolation substrate landed: `discover_plugins()` (entry_points + filesystem walk with structured DiscoveryError side-channel), `PluginLoader` with rollback-on-error, `PluginRegistry` mirroring AdapterRegistry shape and persisting to Phase 41 plugins + plugin_status tables, `CapabilityGuard` stub (Phase 43 swap site), FastAPI lifespan integration (`app.state.plugin_registry`), and ruff banned-api lint rule for `pkg_resources`. Six requirements complete: DISCOVERY-01, DISCOVERY-02, ISOLATE-01, ISOLATE-04, TEST-18, TEST-19. 33 new tests; suite total 793 passed (760 baseline + 33). Cold-start median 0.056ms vs 100ms threshold. Two commits: a481b0b (modules + ruff ban) and a444045 (lifespan + broken-plugin fixtures).
+2026-05-26, Phase 44 shipped. Two-phase installer + horus-os plugins CLI subcommand surface landed. `installer.py` exports a 5-phase pipeline (download → validate → grant → install → verify) with rollback and a single `subprocess.run` chokepoint (`grep -c` returns 1). Four refusal gates fire before Phase D ever runs: venv check, sdist refusal, `.pth`-in-RECORD refusal, runtime-dep downgrade refusal. The capability grant prompt enforces INSTALL-05's no-half-grant rule. `update_plugin` classifies upgrades as unchanged/reduced/expanded by set-equality on capability names and routes expansions through `PermissionService.pending_on_upgrade`. `plugins_cmd.py` dispatches 9 subcommands (install/uninstall/list/info/enable/disable/update/grant/revoke). Six requirements complete: INSTALL-01..06. 47 new tests across 10 files; suite total 888 passed (was 841). Installer subset runtime 0.13s (every test mocks `run_pip`; zero real pip invocations in CI per the "real install lands in Phase 49" deferral). Two commits: f31c627 (installer + 7 test files + fixture wheels) and 4cb186d (CLI dispatcher + 3 test files + argparse wiring).
 
-Prior: 2026-05-26 Phase 41 shipped (manifest schema + public API + persistence migration; 39 new tests, 760 total); 2026-05-26 v0.5 roadmap landed (11 phases 40-50, 100% requirement coverage).
+Prior: 2026-05-26 Phase 43 shipped (PermissionGate + CapabilityGuard real enforcement + bounded asyncio.wait_for); 2026-05-26 Phase 42 shipped (discovery + loading + failure isolation); 2026-05-26 Phase 41 shipped (manifest schema + public API + persistence migration); 2026-05-26 v0.5 roadmap landed (11 phases 40-50, 100% requirement coverage).

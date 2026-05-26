@@ -298,12 +298,12 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| INSTALL-01 | `horus-os plugins install <pip-spec>` wraps `pip install --require-virtualenv` via `subprocess.check_call([sys.executable, "-m", "pip", ...])`; refuses outside a venv (`sys.prefix == sys.base_prefix` check) with `--allow-system-python` escape hatch | active | 44 |
-| INSTALL-02 | Two-phase install: phase A `pip download --no-deps` → phase B validate manifest + show requested capabilities + grant prompt → phase C `pip install --no-deps --no-build-isolation <wheel>`; aborts cleanly on phase B refusal | active | 44 |
-| INSTALL-03 | Sdist (`*.tar.gz`) refused by default; `--allow-sdist` flag required to bypass; wheels containing `.pth` files in RECORD also refused | active | 44 |
-| INSTALL-04 | Installer refuses any spec that would downgrade horus-os runtime deps (pydantic, packaging, fastapi, etc.); `pip freeze` hash captured pre/post install for rollback verification | active | 44 |
-| INSTALL-05 | First-install grant prompt lists each requested capability with plain-English `capability_catalog.py` description; user types `y` to grant all or per-capability tokens; refusing any capability aborts install (no half-grant state) | active | 44 |
-| INSTALL-06 | `horus-os plugins {uninstall,list,info,enable,disable,update}` subcommands; `update` runs the upgrade-diff (PERMISSION-02) | active | 44 |
+| INSTALL-01 | `horus-os plugins install <pip-spec>` wraps `pip install --require-virtualenv` via `subprocess.run([sys.executable, "-m", "pip", ...])` (single chokepoint in `run_pip`); refuses outside a venv (`sys.prefix == sys.base_prefix` check) with `--allow-system-python` escape hatch | complete | 44 |
+| INSTALL-02 | Two-phase install: phase A `pip download --no-deps` → phase B validate manifest + show requested capabilities + grant prompt → phase C `pip install --no-deps --no-build-isolation <wheel>`; aborts cleanly on phase B refusal | complete | 44 |
+| INSTALL-03 | Sdist (`*.tar.gz`) refused by default; `--allow-sdist` flag required to bypass; wheels containing `.pth` files in RECORD also refused | complete | 44 |
+| INSTALL-04 | Installer refuses any spec that would downgrade horus-os runtime deps (pydantic, packaging); `pip freeze` sha256 captured pre/post install for rollback verification (silent_rollback + runtime_dep_changed branches) | complete | 44 |
+| INSTALL-05 | First-install grant prompt lists each requested capability with plain-English `capability_catalog.py` description; user types `y` to grant all or per-capability tokens; refusing any capability aborts install (no half-grant state) | complete | 44 |
+| INSTALL-06 | `horus-os plugins {uninstall,list,info,enable,disable,update,grant,revoke}` subcommands; `update` runs the upgrade-diff (PERMISSION-02) | complete | 44 |
 
 ### Permission model (PERMISSION)
 
@@ -443,12 +443,12 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | ISOLATE-01 | 43 | Complete |
 | ISOLATE-02 | 43 | Complete |
 | ISOLATE-03 | 43 | Complete |
-| INSTALL-01 | 44 | Pending |
-| INSTALL-02 | 44 | Pending |
-| INSTALL-03 | 44 | Pending |
-| INSTALL-04 | 44 | Pending |
-| INSTALL-05 | 44 | Pending |
-| INSTALL-06 | 44 | Pending |
+| INSTALL-01 | 44 | Complete (2026-05-26) |
+| INSTALL-02 | 44 | Complete (2026-05-26) |
+| INSTALL-03 | 44 | Complete (2026-05-26) |
+| INSTALL-04 | 44 | Complete (2026-05-26) |
+| INSTALL-05 | 44 | Complete (2026-05-26) |
+| INSTALL-06 | 44 | Complete (2026-05-26) |
 | DASH-5-01 | 45 | Pending |
 | DASH-5-02 | 45 | Pending |
 | DASH-5-03 | 45 | Pending |
