@@ -52,12 +52,9 @@ Bookmark that file. The rest of this post is a snapshot.
 
 ## When this changes
 
-The project opens for outside contributions once a contributor
-vetting and automated PR-review pipeline (private) is in place.
-Tracked in
-[`.planning/seeds/SEED-001-contributor-pipeline.md`](https://github.com/Ridou/horus-os/blob/main/.planning/seeds/SEED-001-contributor-pipeline.md).
-When it ships, STATUS.md flips first, and a follow-up reply
-lands on this thread.
+The project opens for outside contributions once an internal
+readiness gate is met. When it ships, STATUS.md flips first, and
+a follow-up reply lands on this thread.
 
 Until then: keep the bar high, keep it transparent, keep it
 honest. Thanks for being patient with the cadence.

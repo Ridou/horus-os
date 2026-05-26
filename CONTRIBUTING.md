@@ -27,11 +27,9 @@ What is not currently accepted:
   maintainer keeps the issue queue and assigns work to themselves.
 - Scope-expansion proposals via PR. Use Discussions instead.
 
-The maintainer will update this banner when an automated
-contributor-vetting and PR-review pipeline (covered briefly under
-"Future contribution flow" below and tracked in
-`.planning/seeds/`) is in place. Most likely milestone for that is
-**v0.6 or later**; not promised, not scheduled.
+The maintainer will update this banner once the internal
+readiness gate is met. Most likely milestone for that is **v0.6
+or later**; not promised, not scheduled.
 
 If anything in this guide is wrong, unclear, or out of date, open an
 issue.
@@ -44,11 +42,9 @@ When the project opens up, every incoming PR will go through:
    prior public work. First-time contributors get a small intro task
    (typo fix, doc tweak) before any code review on substantive
    changes.
-2. **Automated review.** The maintainer's private security agent
-   ("private") will clone the PR into a sandbox and run static
-   analysis, secret scanning, dependency-provenance checks, and a
-   test-behavior diff against `main`. Verdict posts to the
-   maintainer's private channel before any human review.
+2. **Automated review.** Incoming PRs go through a private
+   pre-review process before any human review. Details are
+   intentionally not published.
 3. **Sandboxed CI.** Forked-PR CI runs with restricted tokens. No
    repository secrets are exposed to fork builds.
 4. **Maintainer review.** Human review only after the above gates

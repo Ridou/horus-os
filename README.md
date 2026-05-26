@@ -18,7 +18,7 @@ The full timeline, the gate for when this changes, and the canonical "what's shi
 The short version:
 
 - `horus-os` was open-sourced out of a working private command center. The repo is public for transparency, not because the contribution flow is open.
-- Pull requests from forks are acknowledged and closed without review until the **private PR-review pipeline** ships. Earliest milestone for private: **v0.6**. Not promised, not scheduled.
+- Pull requests from forks are acknowledged and closed without review until the project formally opens for outside contributions. Earliest milestone for that: **v0.6**. Not promised, not scheduled.
 - Issue claim comments ("on it", "working on this", "claim this", "assign to me") are not honored. The maintainer holds the queue and assigns all work internally. An automation will reply to common claim phrasing pointing you at [STATUS.md](STATUS.md); apologies in advance for the canned tone.
 - Star or watch to follow along. File bug reports when you hit one. Open Discussions for design questions. Run `horus-os` locally and write up real-use feedback. That feedback is the single most valuable outside contribution today.
 

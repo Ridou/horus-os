@@ -16,8 +16,8 @@ For release contents, read `CHANGELOG.md`.
 - Outside pull requests are **not being merged**. Issue claim
   comments ("on it", "claim this", "assign to me") are **not
   honored**.
-- The project opens for outside contributions once the **private
-  PR-review pipeline** lands. Earliest milestone: **v0.6**. Not
+- The project opens for outside contributions once an internal
+  readiness gate is met. Earliest milestone: **v0.6**. Not
   promised. Not scheduled.
 - You can: file bug reports, open Discussions, star or watch the
   repo, run horus-os locally and report what worked.
@@ -33,7 +33,7 @@ For release contents, read `CHANGELOG.md`.
 | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
 | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **PLANNING** | `v0.4.0` (target) | TBD |
 | v0.5 Plugin system | Third-party tools and agents load from a manifest. Shape decided in flight. | **NOT PLANNED** | TBD | TBD |
-| v0.6+ Contribution gate | Earliest possible window for opening outside contributions. Tied to the private pipeline landing. | **NOT PLANNED** | TBD | TBD |
+| v0.6+ Contribution gate | Earliest possible window for opening outside contributions. Tied to internal readiness. | **NOT PLANNED** | TBD | TBD |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
 **PLANNING** means roadmap drafted, plan or execution in progress.
@@ -65,28 +65,16 @@ list, read `.planning/REQUIREMENTS.md`.
 
 ## When collaboration opens
 
-The project opens for outside contributions once the **private
-PR-review pipeline** is in place. The seed is tracked publicly at
-`.planning/seeds/SEED-001-contributor-pipeline.md`.
-
-private is the private security agent that will:
-
-1. Vet contributor identity and prior public work before any PR
-   review.
-2. Run every incoming PR through static analysis, secret
-   scanning, dependency-provenance checks, and a behavior diff
-   against `main`, inside a sandbox, before any human review.
-3. Surface a verdict to the maintainer's private channel.
-4. Never auto-merge. The human decides.
-
-**Earliest milestone for this to land: v0.6.** Possibly later.
-Not scheduled, not promised. When it ships, this page flips
-first, and the pinned Discussion gets a follow-up reply.
+The project opens for outside contributions once an internal
+readiness gate is met. **Earliest milestone for this: v0.6.**
+Possibly later. Not scheduled, not promised. When it ships, this
+page flips first, and the pinned Discussion gets a follow-up
+reply.
 
 Why the gate exists: horus-os was open-sourced from a working
 private command center that runs against the maintainer's real
 data and home PC. One bad merge could compromise that PC, the
-downstream package, or both. The private gate is the precondition
+downstream package, or both. A readiness gate is the precondition
 for any open contribution model.
 
 Until then, the most valuable outside contribution is **real-use

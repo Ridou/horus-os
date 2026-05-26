@@ -17,8 +17,7 @@ body:
         See
         [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
         for the project timeline and the gate for when outside
-        contributions open (private PR-review pipeline; earliest
-        v0.6, not promised).
+        contributions open (earliest v0.6, not promised).
 
         Open-ended design questions belong in a Discussion, not
         an issue. Use this template only for concrete proposals

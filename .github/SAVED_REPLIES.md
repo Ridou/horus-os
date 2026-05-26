@@ -24,8 +24,8 @@ Thanks for the offer, but the repo isn't accepting issue claims
 right now. horus-os is in solo development mode and the
 maintainer holds the queue. See
 https://github.com/Ridou/horus-os/blob/main/STATUS.md for the
-timeline and the gate for when that changes (private PR-review
-pipeline; earliest v0.6, not promised).
+timeline and the gate for when that changes (earliest v0.6, not
+promised).
 
 If you want to make a real dent today, run horus-os against a
 real workload and write up what worked and what didn't in

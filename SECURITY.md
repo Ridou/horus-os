@@ -60,18 +60,8 @@ the reporter unless the reporter prefers to remain anonymous.
 `horus-os` is in a solo development phase and **does not currently
 accept outside pull requests** (see `CONTRIBUTING.md` for the full
 notice). When the project opens for contributions, every incoming
-PR will be screened by an automated review pipeline before any human
-review:
-
-- Static analysis and secret scanning on the PR diff.
-- Dependency-provenance check for any added packages.
-- Test-behavior diff against `main`.
-- Sandboxed CI for forked-PR builds; no repository secrets are
-  exposed to fork builds.
-- Maintainer review only after the above gates pass. No auto-merge.
-
-The design is captured in `.planning/seeds/` and will land in a
-future milestone. Until then, treat the existing surface area as
+PR will pass through a private pre-review process before any human
+review. Until then, treat the existing surface area as
 single-maintainer code with no third-party PR exposure.
 
 ## Operational security guidance for users

@@ -70,7 +70,7 @@ jobs:
               '<!-- horus-os-claim-watcher -->',
               'Hey, thanks for the offer.',
               '',
-              `horus-os is in solo development mode right now and the issue queue is not open for claims. The README and [STATUS.md](https://github.com/${owner}/${repo}/blob/main/STATUS.md) cover the gate (private PR-review pipeline; earliest v0.6, not promised). I am leaving this issue open for tracking, but it is not assigned to you, and a fork PR against it will not be merged until the contribution gate opens.`,
+              `horus-os is in solo development mode right now and the issue queue is not open for claims. The README and [STATUS.md](https://github.com/${owner}/${repo}/blob/main/STATUS.md) cover the gate (earliest v0.6, not promised). I am leaving this issue open for tracking, but it is not assigned to you, and a fork PR against it will not be merged until the contribution gate opens.`,
               '',
               'The most useful thing you can do today: run horus-os locally and write up what worked and what did not in a Discussion. Real-use feedback shapes the roadmap.',
               '',
