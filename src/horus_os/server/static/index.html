@@ -57,6 +57,17 @@
     .tree-row th { background: transparent; }
     .stream-tool { display: block; color: var(--text-muted); font-size: 12px; padding: 4px 0; }
     .stream-error { color: var(--error); }
+    /* Phase 36 Observability tab */
+    .obs-panel { margin-bottom: 24px; }
+    .obs-panel h3 { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0; }
+    .obs-banner { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .obs-banner.yellow { background: rgba(210, 153, 34, 0.15); border: 1px solid rgb(210, 153, 34); color: rgb(210, 153, 34); }
+    .obs-banner.red { background: rgba(248, 81, 73, 0.15); border: 1px solid var(--error); color: var(--error); }
+    .cost-bar { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 13px; }
+    .cost-bar-fill { background: var(--accent); height: 18px; border-radius: 3px; min-width: 1px; }
+    .uncosted-tile { padding: 8px 12px; border: 1px dashed var(--border); border-radius: 6px; color: var(--text-muted); margin-bottom: 12px; font-size: 13px; }
+    select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font: inherit; font-size: 13px; }
+    select:focus { outline: none; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -70,6 +81,7 @@
     <button data-tab="agents">Agents</button>
     <button data-tab="writes">Writes</button>
     <button data-tab="adapters">Adapters</button>
+    <button data-tab="observability">Observability</button>
   </nav>
   <main>
     <section class="tab active" id="chat">
@@ -112,6 +124,31 @@
       </div>
       <div id="adapters-body"><div class="empty">loading</div></div>
     </section>
+    <section class="tab" id="observability">
+      <div class="row">
+        <h2 style="margin: 0; font-size: 14px;">Observability</h2>
+        <span class="grow"></span>
+        <select id="obs-window">
+          <option value="24h">24h</option>
+          <option value="7d" selected>7d</option>
+          <option value="30d">30d</option>
+        </select>
+        <button class="ghost" id="refresh-observability">Refresh</button>
+      </div>
+      <div id="obs-banner-container"></div>
+      <div class="obs-panel" id="obs-cost-panel">
+        <h3>Cost by agent</h3>
+        <div id="obs-cost-body" class="empty">loading</div>
+      </div>
+      <div class="obs-panel" id="obs-latency-panel">
+        <h3>Latency p50 / p95</h3>
+        <div id="obs-latency-body" class="empty">loading</div>
+      </div>
+      <div class="obs-panel" id="obs-tools-panel">
+        <h3>Tool reliability</h3>
+        <div id="obs-tools-body" class="empty">loading</div>
+      </div>
+    </section>
   </main>
   <script>
     const $ = (sel) => document.querySelector(sel);
@@ -119,6 +156,8 @@
 
     // Phase 27: poll interval for the Adapters tab; cleared on tab switch.
     let adaptersPoll = null;
+    // Phase 36: poll interval for the Observability tab; cleared on tab switch.
+    let observabilityPoll = null;
 
     async function fetchJson(url, opts = {}) {
       const r = await fetch(url, opts);
@@ -138,12 +177,21 @@
         clearInterval(adaptersPoll);
         adaptersPoll = null;
       }
+      // Phase 36: same contract for the Observability tab poll.
+      if (observabilityPoll) {
+        clearInterval(observabilityPoll);
+        observabilityPoll = null;
+      }
       if (name === "traces") loadTraces();
       if (name === "agents") loadAgents();
       if (name === "writes") loadWrites();
       if (name === "adapters") {
         loadAdapters();
         adaptersPoll = setInterval(loadAdapters, 5000);
+      }
+      if (name === "observability") {
+        loadObservability();
+        observabilityPoll = setInterval(loadObservability, 5000);
       }
     }
     $$("nav button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -394,6 +442,88 @@
         alert(e.message);
       }
     }
+
+    // Phase 36 Observability tab: 3-panel loader + render helpers.
+    // Pitfall 10 (small sample): percentile cells render the em-dash
+    // when sample_count < 10, never a number, never 0ms. Pitfall 11
+    // (NULL): agents with total_cost_usd === null render em-dash for
+    // cost (same honesty rule the /agents tab uses).
+    async function loadObservability() {
+      const win = $("#obs-window").value;
+      const costBody = $("#obs-cost-body");
+      const latencyBody = $("#obs-latency-body");
+      const toolsBody = $("#obs-tools-body");
+      const fetches = [
+        fetchJson("/api/observability/cost?since=" + encodeURIComponent(win))
+          .then((d) => renderCostPanel(d, costBody))
+          .catch((e) => { costBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
+        fetchJson("/api/observability/latency?since=" + encodeURIComponent(win))
+          .then((d) => renderLatencyPanel(d, latencyBody))
+          .catch((e) => { latencyBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
+        fetchJson("/api/observability/tools?since=" + encodeURIComponent(win))
+          .then((d) => renderToolsPanel(d, toolsBody))
+          .catch((e) => { toolsBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
+      ];
+      await Promise.all(fetches);
+    }
+
+    function renderCostPanel(data, container) {
+      if (!data.agents || !data.agents.length) {
+        container.innerHTML = '<div class="empty">no cost data in window</div>';
+        return;
+      }
+      const costs = data.agents.map((a) => a.total_cost_usd || 0);
+      const maxCost = Math.max(...costs, 0);
+      const bars = data.agents.map((a) => {
+        if (a.total_cost_usd === null) {
+          // Pitfall 11: NULL cost renders as em-dash, not as $0.
+          return '<div class="cost-bar"><div class="cost-bar-fill" style="width: 0%"></div><span>' + escapeHtml(a.agent) + ' —</span></div>';
+        }
+        const pct = maxCost > 0 ? (a.total_cost_usd / maxCost * 100).toFixed(1) : 0;
+        const label = escapeHtml(a.agent) + ' $' + a.total_cost_usd.toFixed(6);
+        return '<div class="cost-bar"><div class="cost-bar-fill" style="width: ' + pct + '%"></div><span>' + label + '</span></div>';
+      }).join("");
+      container.innerHTML = bars;
+    }
+
+    function renderLatencyPanel(data, container) {
+      if (!data || data.sample_count === 0) {
+        container.innerHTML = '<div class="empty">no latency data in window</div>';
+        return;
+      }
+      // Pitfall 10 contract: sample_count < 10 hides the percentile
+      // behind the em-dash with a hover explaining why. Never 0ms,
+      // never a percentile over a sample that small.
+      let p50Cell, p95Cell;
+      if (data.sample_count < 10) {
+        p50Cell = '<td title="need at least 10 runs for percentile">—</td>';
+        p95Cell = '<td title="need at least 10 runs for percentile">—</td>';
+      } else {
+        p50Cell = '<td>' + data.p50_ms + 'ms</td>';
+        p95Cell = '<td>' + data.p95_ms + 'ms</td>';
+      }
+      container.innerHTML = '<table><thead><tr><th>sample_count</th><th>p50</th><th>p95</th></tr></thead><tbody><tr><td>' + data.sample_count + '</td>' + p50Cell + p95Cell + '</tr></tbody></table>';
+    }
+
+    function renderToolsPanel(data, container) {
+      if (!data.tools || !data.tools.length) {
+        container.innerHTML = '<div class="empty">no tool calls in window</div>';
+        return;
+      }
+      const rows = data.tools.map((t) => {
+        let rateCell;
+        if (t.success_rate === null) {
+          rateCell = '<td title="insufficient data (no success or error rows in window)">—</td>';
+        } else {
+          rateCell = '<td>' + (t.success_rate * 100).toFixed(1) + '%</td>';
+        }
+        const lastErr = t.last_error_type ? escapeHtml(t.last_error_type) : '';
+        return '<tr><td>' + escapeHtml(t.tool_name) + '</td><td>' + t.call_count + '</td>' + rateCell + '<td class="muted">' + lastErr + '</td></tr>';
+      }).join("");
+      container.innerHTML = '<table><thead><tr><th>tool_name</th><th>call_count</th><th>success_rate</th><th>last_error_type</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+    $("#refresh-observability").addEventListener("click", loadObservability);
+    $("#obs-window").addEventListener("change", loadObservability);
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({
