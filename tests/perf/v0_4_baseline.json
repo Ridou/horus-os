@@ -1,0 +1,48 @@
+{
+  "samples": [
+    {
+      "os": "darwin",
+      "python": "3.12",
+      "horus_os_version": "0.4.0",
+      "wall_clock_ms": 339.261,
+      "agent_loop_3_iter_ms": 0.034,
+      "cold_import_ms": 95.193,
+      "entry_points_discovery_ms": 1.909,
+      "n_samples": 20,
+      "captured_at": "2026-05-26T11:08:23.714629Z"
+    },
+    {
+      "os": "linux",
+      "python": "3.11",
+      "horus_os_version": "0.4.0",
+      "wall_clock_ms": null,
+      "agent_loop_3_iter_ms": null,
+      "cold_import_ms": null,
+      "entry_points_discovery_ms": null,
+      "n_samples": 20,
+      "captured_at": "placeholder"
+    },
+    {
+      "os": "linux",
+      "python": "3.12",
+      "horus_os_version": "0.4.0",
+      "wall_clock_ms": null,
+      "agent_loop_3_iter_ms": null,
+      "cold_import_ms": null,
+      "entry_points_discovery_ms": null,
+      "n_samples": 20,
+      "captured_at": "placeholder"
+    },
+    {
+      "os": "win32",
+      "python": "3.11",
+      "horus_os_version": "0.4.0",
+      "wall_clock_ms": null,
+      "agent_loop_3_iter_ms": null,
+      "cold_import_ms": null,
+      "entry_points_discovery_ms": null,
+      "n_samples": 20,
+      "captured_at": "placeholder"
+    }
+  ]
+}
