@@ -52,7 +52,22 @@ import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from horus_os._observability.semconv import (
+    ERROR_TYPE,
+    GEN_AI_OPERATION_NAME,
+    GEN_AI_REQUEST_MODEL,
+    GEN_AI_SYSTEM,
+    GEN_AI_USAGE_CACHED_TOKENS,
+    GEN_AI_USAGE_INPUT_TOKENS,
+    GEN_AI_USAGE_OUTPUT_TOKENS,
+    HORUS_OS_COST_USD,
+)
 from horus_os.adapters.base import AdapterContext
+from horus_os.observability import (
+    LLMCallEvent,
+    ObservationEvent,
+    get_observation_bus,
+)
 
 if TYPE_CHECKING:
     # Type-only imports never execute at runtime; bare `pip install
@@ -63,6 +78,12 @@ OTEL_EXTRA_HINT = "OTel adapter requires 'pip install horus-os[otel]'"
 OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT"
 CAPTURE_CONTENT_ENV = "HORUS_OS_OTEL_CAPTURE_CONTENT"
 FORCE_FLUSH_TIMEOUT_MS = 2000
+# Per-export timeout (seconds) for the OTLP HTTP exporter. The OTel
+# OTLPSpanExporter does its own internal retry loop (1s, 2s, 4s
+# backoff) on transient errors which would otherwise blow past the
+# 2-second force_flush budget; capping per-attempt at 1 second keeps
+# worst-case shutdown bounded (Pitfall 6 / TEST-14).
+OTLP_EXPORT_TIMEOUT_S = 1.0
 
 
 def _import_version() -> str:
@@ -70,6 +91,21 @@ def _import_version() -> str:
     from horus_os import __version__
 
     return __version__
+
+
+def _normalize_provider(provider: str) -> str:
+    """Normalize an LLMCallEvent provider string to the OTel GenAI value list.
+
+    horus_os v0.3 short-form "gemini" maps to the canonical
+    "google_genai" per the OTel GenAI value list. "anthropic" is
+    already canonical and passes through unchanged. Unknown providers
+    pass through verbatim so a future provider name does not silently
+    rewrite to something wrong; the dashboard surfaces the unknown
+    value and a follow-up phase teaches the normalizer.
+    """
+    if provider == "gemini":
+        return "google_genai"
+    return provider
 
 
 class OtelAdapter:
@@ -139,8 +175,11 @@ class OtelAdapter:
             {"service.name": "horus-os", "service.version": _import_version()}
         )
         # OTLPSpanExporter reads OTEL_EXPORTER_OTLP_ENDPOINT and
-        # OTEL_EXPORTER_OTLP_HEADERS from os.environ directly; no kwargs.
-        exporter = OTLPSpanExporter()
+        # OTEL_EXPORTER_OTLP_HEADERS from os.environ directly. The
+        # explicit timeout caps each export attempt so the exporter's
+        # internal retry loop cannot blow past the force_flush budget
+        # (Pitfall 6 / TEST-14 contract).
+        exporter = OTLPSpanExporter(timeout=OTLP_EXPORT_TIMEOUT_S)
         provider = TracerProvider(resource=resource)
         # Pitfall 6: BatchSpanProcessor ALWAYS in production. The
         # synchronous-export variant is banned in this source file;
@@ -149,8 +188,11 @@ class OtelAdapter:
         provider.add_span_processor(BatchSpanProcessor(exporter))
         self._provider = provider
 
-        # Task 4 wires the bus subscription here:
-        # self._unsubscribe = get_observation_bus().subscribe(self._on_event)
+        # Subscribe AFTER the provider is mounted so an event arriving
+        # between subscribe and provider-set cannot find a None
+        # self._provider in _on_event. The unsubscribe callable is
+        # stashed so stop() can unwire cleanly.
+        self._unsubscribe = get_observation_bus().subscribe(self._on_event)
 
         context.registry.mark_running(self.name)
 
@@ -177,3 +219,60 @@ class OtelAdapter:
             self._provider = None
         if self._context is not None:
             self._context.registry.mark_stopped(self.name)
+
+    def _on_event(self, event: ObservationEvent) -> None:
+        """Map an LLMCallEvent to one OTel span; ignore other event kinds.
+
+        Phase 38 emits spans for LLMCallEvent ONLY. ToolCallEvent and
+        RunEndEvent stay SQLite-only for v0.4; v0.5 may extend.
+
+        Attribute mapping is governed by the 8 canonical constants in
+        `_observability/semconv.py`. Unknown-cost events (cost_usd is
+        None) omit the `horus_os.cost_usd` attribute entirely; Pitfall 5
+        unknown-model honesty says absence carries the meaning, never
+        set the attribute to 0.
+
+        Default-deny content capture (Pitfall 7) is enforced by what
+        is NOT in this method: there is no `set_attribute` call for
+        the deprecated GenAI body-capture attribute keys (prompt /
+        completion / input messages / output messages) in the
+        default-mode path. The opt-in body-capture branch lands in
+        Task 5 and uses an inline string literal inside the
+        env-var-gated branch (the grep gate in
+        `test_adapters_otel_pii_redaction.py` pins the structural
+        position so the literal cannot drift out of the gate).
+        """
+        if not isinstance(event, LLMCallEvent):
+            return
+        if self._provider is None:
+            # Defensive: stop() unsubscribes before clearing provider,
+            # but a slow dispatcher could deliver one event after stop
+            # begins. Drop it on the floor; the next start cycle gets
+            # a fresh subscription.
+            return
+        tracer = self._provider.get_tracer("horus_os.otel_adapter")
+        # Span name follows OTel GenAI convention: "{operation} {model}".
+        span_name = f"chat {event.model}"
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute(GEN_AI_SYSTEM, _normalize_provider(event.provider))
+            span.set_attribute(GEN_AI_OPERATION_NAME, "chat")
+            span.set_attribute(GEN_AI_REQUEST_MODEL, event.model)
+            span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, int(event.input_tokens))
+            span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, int(event.output_tokens))
+            # cache_read_input_tokens is the OTel-equivalent of "cached
+            # tokens". cache_creation_input_tokens stays SQLite-only;
+            # it is not in the OTel GenAI semconv table.
+            if event.cache_read_input_tokens:
+                span.set_attribute(GEN_AI_USAGE_CACHED_TOKENS, int(event.cache_read_input_tokens))
+            # cost_usd: when None (Pitfall 5 unknown-model honesty),
+            # OMIT the attribute entirely. NEVER set to 0; absence
+            # carries the meaning.
+            if event.cost_usd is not None:
+                span.set_attribute(HORUS_OS_COST_USD, float(event.cost_usd))
+            # error.type only on failure; class name only, NEVER
+            # error_message which can carry user content per Phase 33
+            # capture contract.
+            if event.status == "error" and event.error_type is not None:
+                span.set_attribute(ERROR_TYPE, event.error_type)
+            if self._context is not None:
+                self._context.registry.touch(self.name)
