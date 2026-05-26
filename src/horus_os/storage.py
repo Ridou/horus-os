@@ -25,7 +25,7 @@ from typing import Any
 
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     latency_ms                    INTEGER NOT NULL,
     status                        TEXT NOT NULL DEFAULT 'success',
     error_message                 TEXT,
-    error_type                    TEXT
+    error_type                    TEXT,
+    plugin_name                   TEXT  -- v6 OBSERVE-01: NULL = horus-os core
 );
 
 CREATE INDEX IF NOT EXISTS idx_llm_calls_trace_id ON llm_calls(trace_id);
@@ -121,7 +122,8 @@ CREATE TABLE IF NOT EXISTS tool_invocations (
     error_message   TEXT,
     error_type      TEXT,
     retry_count     INTEGER,
-    output_size     INTEGER
+    output_size     INTEGER,
+    plugin_name     TEXT  -- v6 OBSERVE-01: NULL = horus-os core
 );
 
 CREATE INDEX IF NOT EXISTS idx_tool_invocations_trace_id ON tool_invocations(trace_id);
@@ -129,6 +131,36 @@ CREATE INDEX IF NOT EXISTS idx_tool_invocations_tool_name
     ON tool_invocations(tool_name, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tool_invocations_created_at
     ON tool_invocations(created_at DESC);
+
+-- v6: plugin runtime tables
+CREATE TABLE IF NOT EXISTS plugins (
+    name          TEXT PRIMARY KEY,
+    version       TEXT NOT NULL,
+    manifest_hash TEXT NOT NULL,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    installed_at  TEXT NOT NULL,
+    source        TEXT NOT NULL CHECK (source IN ('entry_point', 'filesystem'))
+);
+
+CREATE TABLE IF NOT EXISTS plugin_capabilities (
+    plugin_name    TEXT NOT NULL,
+    plugin_version TEXT NOT NULL,
+    capability     TEXT NOT NULL,
+    manifest_hash  TEXT NOT NULL,
+    state          TEXT NOT NULL CHECK (state IN ('granted', 'pending', 'revoked')),
+    granted_at     TEXT,
+    PRIMARY KEY (plugin_name, plugin_version, capability),
+    FOREIGN KEY (plugin_name) REFERENCES plugins(name) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS plugin_status (
+    plugin_name   TEXT PRIMARY KEY,
+    status        TEXT NOT NULL CHECK (status IN ('loaded', 'pending', 'error', 'disabled')),
+    error_phase   TEXT,
+    error_message TEXT,
+    last_seen     TEXT,
+    FOREIGN KEY (plugin_name) REFERENCES plugins(name) ON DELETE CASCADE
+);
 """
 
 
@@ -210,11 +242,39 @@ class Database:
                     except sqlite3.OperationalError:
                         # Column already exists; safe to ignore.
                         pass
+            # v5 -> v6: two NULLABLE plugin_name columns on llm_calls and
+            # tool_invocations. ADD COLUMN is not idempotent; guard with
+            # OperationalError. New columns stay NULL on existing v0.4 rows
+            # (NULL = "horus-os core" per OBSERVE-01). Fresh databases get
+            # plugin_name via the SCHEMA_SQL CREATE TABLE blocks above, so
+            # the ALTER TABLE here only runs on the v5 -> v6 upgrade path.
+            # The plugins / plugin_capabilities / plugin_status tables are
+            # created via CREATE TABLE IF NOT EXISTS in SCHEMA_SQL above.
+            if stored_version is not None and stored_version < 6:
+                for ddl in (
+                    "ALTER TABLE llm_calls ADD COLUMN plugin_name TEXT",
+                    "ALTER TABLE tool_invocations ADD COLUMN plugin_name TEXT",
+                ):
+                    try:
+                        conn.execute(ddl)
+                    except sqlite3.OperationalError:
+                        # Column already exists; safe to ignore.
+                        pass
             # The parent_trace_id index lives outside SCHEMA_SQL so it only runs
             # after the column is guaranteed to exist (either via fresh CREATE
             # TABLE or via the v3 -> v4 ALTER TABLE block above).
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_traces_parent_trace_id ON traces(parent_trace_id)"
+            )
+            # The plugin_name index lives outside SCHEMA_SQL for the same reason
+            # as idx_traces_parent_trace_id: on an upgraded v5 database the
+            # column did not exist when SCHEMA_SQL was authored. We rely on the
+            # v5 -> v6 ALTER TABLE block above guaranteeing the column exists
+            # on upgrade, and on the SCHEMA_SQL CREATE TABLE block declaring it
+            # on a fresh database.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_invocations_plugin "
+                "ON tool_invocations(plugin_name, created_at)"
             )
             now = _now_iso()
             conn.execute(

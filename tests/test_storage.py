@@ -40,7 +40,7 @@ def test_init_creates_schema_on_fresh_db(tmp_path: Path) -> None:
         assert "note_writes" in tables
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:
@@ -217,7 +217,7 @@ def test_schema_v1_database_upgrades_to_current(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -291,7 +291,7 @@ def test_schema_v2_database_upgrades_to_v3(tmp_path: Path) -> None:
         }
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
     record = db.get_trace("abc123")
     assert record is not None
     assert record.prompt == "hello"
@@ -445,7 +445,7 @@ def test_migration_v3_to_v4(tmp_path: Path) -> None:
     # Version is bumped to 5.
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
         cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
         assert "parent_trace_id" in cols
         assert "agent_profile_name" in cols
@@ -546,7 +546,7 @@ def test_schema_v4_database_upgrades_to_v5(tmp_path: Path) -> None:
 
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -584,7 +584,7 @@ def test_v5_init_is_idempotent(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db.path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
         llm_count = conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0]
         assert llm_count == 0
         tool_count = conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0]

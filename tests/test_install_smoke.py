@@ -54,8 +54,8 @@ def test_install_smoke_runs(tmp_path: Path) -> None:
         )
 
     assert "All install-smoke checks passed." in proc.stdout, proc.stdout
-    # Schema-on-disk check ran (v0.4 surface).
-    assert "schema_version==5" in proc.stdout, proc.stdout
+    # Schema-on-disk check ran (v0.5 surface).
+    assert "schema_version==6" in proc.stdout, proc.stdout
     # agents CRUD round-trip ran.
     assert "agents create smoke_test" in proc.stdout, proc.stdout
     assert "agents delete smoke_test" in proc.stdout, proc.stdout
