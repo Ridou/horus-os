@@ -321,10 +321,10 @@ Plans:
   3. **TEST-14 bounded-shutdown:** `OtelAdapter` pointed at `http://127.0.0.1:1` (closed port), one event published, `await adapter.stop()` completes in less than 3 seconds wall clock; `BatchSpanProcessor` (never `SimpleSpanProcessor`) is used; `force_flush(timeout_millis=2000)` precedes `shutdown()` (OTEL-02, OTEL-06, Pitfall 6)
   4. **TEST-15 two-variant install-smoke:** parallel CI jobs run on the 3-OS matrix; the `[dev]` job (no otel) asserts the import-plus-clean-RuntimeError contract from criterion 1; the `[dev,otel]` job asserts `start(ctx)` succeeds when `OTEL_EXPORTER_OTLP_ENDPOINT` is set and spans appear in a local `InMemorySpanExporter` (OTEL-07, Pitfall 12)
   5. Span attribute names come from `horus_os/_observability/semconv.py` constants; emitted attributes are exactly `gen_ai.system`, `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cached_tokens`, `horus_os.cost_usd`, `error.type`; never the deprecated `gen_ai.prompt` / `gen_ai.completion`; never `gen_ai.input.messages` / `gen_ai.output.messages` in default mode (OTEL-05)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 38-01: OtelAdapter, lazy imports, default-deny content, redactor allowlist, three non-negotiable tests
+- [ ] 38-01-PLAN.md: OtelAdapter (lazy import + RuntimeError contract), BatchSpanProcessor + bounded shutdown, 8 canonical GenAI attrs from semconv module, redactor allowlist + default-deny content capture, three non-negotiable tests (TEST-13 PII / TEST-14 bounded-shutdown / TEST-15 two-variant install-smoke), docs/OTEL.md with Threat model section
 
 ### Phase 39: Three-OS gate, release, migration doc
 **Goal**: The release-quality gate. Document the v0.3-to-v0.4 migration, the observability surface, and the OTel threat model. Ship `scripts/release_gate.py` carrying both the pricing freshness check and the two-variant install-smoke matrix as a release-blocking gate. Three-OS CI green on the full test suite plus all v0.4 tests. Tag v0.4.0 and publish the GitHub Release.
