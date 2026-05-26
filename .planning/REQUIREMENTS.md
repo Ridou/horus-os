@@ -309,18 +309,18 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| PERMISSION-01 | Default-deny posture enforced by `DEFAULT_GRANT_POLICY = "deny"` constant; helper shims (`ctx.filesystem`, `ctx.secrets`, `ctx.net`, `ctx.process`, `ctx.env`) raise `PermissionDenied` if grant row missing | active | 43 |
-| PERMISSION-02 | Grants persisted in `plugin_capabilities` table keyed on `(plugin_name, plugin_version, capability)` AND tied to `manifest_hash = sha256(capabilities_set)`; manifest-hash diff on upgrade flips previously-granted rows to `pending` and triggers re-prompt | active | 43 |
-| PERMISSION-03 | Grants revocable from `/plugins` dashboard tab and via `horus-os plugins revoke <name> <capability>`; revocation takes effect on next plugin run (no in-flight cancellation needed) | active | 43 |
-| PERMISSION-04 | `capability_catalog.py` is the single source of truth for the closed enum of capability strings; v0.5 ships at minimum `filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`; each entry carries a plain-English description surfaced at the prompt | active | 43 |
+| PERMISSION-01 | Default-deny posture enforced by `DEFAULT_GRANT_POLICY = "deny"` constant; helper shims (`ctx.filesystem`, `ctx.secrets`, `ctx.net`, `ctx.process`, `ctx.env`) raise `PermissionDenied` if grant row missing | complete | 43 |
+| PERMISSION-02 | Grants persisted in `plugin_capabilities` table keyed on `(plugin_name, plugin_version, capability)` AND tied to `manifest_hash = sha256(capabilities_set)`; manifest-hash diff on upgrade flips previously-granted rows to `pending` and triggers re-prompt | complete | 43 |
+| PERMISSION-03 | Grants revocable from `/plugins` dashboard tab and via `horus-os plugins revoke <name> <capability>`; revocation takes effect on next plugin run (no in-flight cancellation needed) | complete | 43 |
+| PERMISSION-04 | `capability_catalog.py` is the single source of truth for the closed enum of capability strings; v0.5 ships at minimum `filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`; each entry carries a plain-English description surfaced at the prompt | complete | 43 |
 
 ### Failure isolation (ISOLATE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| ISOLATE-01 | Plugin import failure, manifest validation failure, or `start()` exception NEVER crashes horus-os; failed plugin appears in `/api/plugins` with `status="error"` and structured `error_phase` (discover/validate/permission/load/start), lifespan continues | complete (42); start variants pending 43 | 42, 43 |
-| ISOLATE-02 | Plugin `start()` and `stop()` wrapped in `asyncio.wait_for(..., timeout=2.0)` matching v0.4 Phase 38 OtelAdapter shape; timeout or exception → `status="error", error_phase="start"`, lifespan continues | active | 43 |
-| ISOLATE-03 | Per-plugin enable/disable persisted in `plugins.enabled` column; disabled plugins skip discovery (no half-loaded state); `--disable-all-plugins` CLI flag as escape hatch | active | 43 |
+| ISOLATE-01 | Plugin import failure, manifest validation failure, or `start()` exception NEVER crashes horus-os; failed plugin appears in `/api/plugins` with `status="error"` and structured `error_phase` (discover/validate/permission/load/start), lifespan continues | complete | 42, 43 |
+| ISOLATE-02 | Plugin `start()` and `stop()` wrapped in `asyncio.wait_for(..., timeout=2.0)` matching v0.4 Phase 38 OtelAdapter shape; timeout or exception → `status="error", error_phase="start"`, lifespan continues | complete | 43 |
+| ISOLATE-03 | Per-plugin enable/disable persisted in `plugins.enabled` column; disabled plugins skip discovery (no half-loaded state); `--disable-all-plugins` CLI flag as escape hatch | complete | 43 |
 | ISOLATE-04 | Plugin runtime exceptions inside tool invocations absorbed by existing `ObservationBus.publish` exception-swallow at `observability/bus.py:174-181`; per-plugin error rate surfaced in `/api/plugins/{name}.health` and `/observability` | complete | 42 |
 
 ### Plugins dashboard tab (DASH-5)
@@ -408,12 +408,12 @@
 | MANIFEST | 5 | 5 | 0 |
 | DISCOVERY | 2 | 2 | 0 |
 | INSTALL | 6 | 6 | 0 |
-| PERMISSION | 4 | 4 | 0 |
-| ISOLATE | 4 | 4 | 0 |
+| PERMISSION | 4 | 4 | 4 |
+| ISOLATE | 4 | 4 | 4 |
 | DASH-5 | 3 | 3 | 0 |
 | OBSERVE | 2 | 2 | 0 |
 | REFERENCE | 2 | 2 | 0 |
-| **Total** | **141** | **141** | **107** |
+| **Total** | **141** | **141** | **114** |
 
 "Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
 
@@ -436,13 +436,13 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | ISOLATE-04 | 42 | Complete |
 | TEST-18 | 42 | Complete |
 | TEST-19 | 42 | Complete |
-| PERMISSION-01 | 43 | Pending |
-| PERMISSION-02 | 43 | Pending |
-| PERMISSION-03 | 43 | Pending |
-| PERMISSION-04 | 43 | Pending |
-| ISOLATE-01 | 43 | Partial (substrate complete in 42; start() variants pending 43) |
-| ISOLATE-02 | 43 | Pending |
-| ISOLATE-03 | 43 | Pending |
+| PERMISSION-01 | 43 | Complete |
+| PERMISSION-02 | 43 | Complete |
+| PERMISSION-03 | 43 | Complete |
+| PERMISSION-04 | 43 | Complete |
+| ISOLATE-01 | 43 | Complete |
+| ISOLATE-02 | 43 | Complete |
+| ISOLATE-03 | 43 | Complete |
 | INSTALL-01 | 44 | Pending |
 | INSTALL-02 | 44 | Pending |
 | INSTALL-03 | 44 | Pending |
