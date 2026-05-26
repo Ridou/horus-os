@@ -302,6 +302,10 @@ No stubs. Every line of the reference plugin's source compiles, runs,
 and is exercised by at least one test (tier-1 in-process for tools +
 adapter, tier-3 installer-e2e for the manifest + entry-point shape).
 
-## Self-Check
+## Self-Check: PASSED
 
-(See bottom of file after final commit.)
+All 11 claimed files exist on disk. All 3 commits (30b7e95, fc96184,
+b1dce5b) exist in the git log. Full pytest suite green (986 passed, 3
+skipped). Host-wide ruff clean. Phase 47's docs-anatomy test still
+green (4 passed); Phase 42's pkg_resources guard still green (2
+passed). `grep -c "horus-os-example-plugin" CHANGELOG.md` returns 1.
