@@ -76,7 +76,7 @@
 - [x] **Phase 36: Observability dashboard tab** - New `/observability` tab (cost-by-agent, latency p50/p95, tool reliability) with window selector, small-sample handling, pricing-staleness banner, and graceful pre-v0.4 trace rendering. (completed 2026-05-26)
 - [x] **Phase 37: `horus-os usage` CLI subcommand** - `horus-os usage --since 7d --format json|csv|table --by model|tool|agent`; JSON schema pinned and documented. (completed 2026-05-26)
 - [x] **Phase 38: OpenTelemetry adapter** - Opt-in `OtelAdapter` behind a `[otel]` extra; lifecycle adapter pattern; default-deny content capture; bounded shutdown; three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke). (completed 2026-05-26)
-- [ ] **Phase 39: Three-OS gate, release, migration doc** - `docs/MIGRATION-v0.3-to-v0.4.md`, `docs/OBSERVABILITY.md`, `docs/OTEL.md` (with explicit Threat model section), `scripts/release_gate.py` (pricing freshness + two-variant install-smoke), 3-OS CI green, v0.4.0 tag and GitHub Release.
+- [x] **Phase 39: Three-OS gate, release, migration doc** - `docs/MIGRATION-v0.3-to-v0.4.md`, `docs/OBSERVABILITY.md`, `docs/OTEL.md` (with explicit Threat model section), `scripts/release_gate.py` (pricing freshness + two-variant install-smoke), 3-OS CI green, v0.4.0 tag and GitHub Release. (completed 2026-05-26)
 
 ## Phase Details
 
@@ -338,7 +338,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 39-01-PLAN.md: Docs trio (MIGRATION + OBSERVABILITY + OTEL polish + RELEASE), scripts/release_gate.py + tests, version bump to 0.4.0, CHANGELOG promotion (STOP-BEFORE-TAG; maintainer runs git tag + gh release after approval)
+- [x] 39-01-PLAN.md: Docs trio (MIGRATION + OBSERVABILITY + OTEL polish + RELEASE), scripts/release_gate.py + tests, version bump to 0.4.0, CHANGELOG promotion (STOP-BEFORE-TAG; maintainer runs git tag + gh release after approval)
 
 ## Progress
 
@@ -366,4 +366,4 @@ Plans:
 | 36. Observability dashboard tab | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 37. `horus-os usage` CLI subcommand | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 38. OpenTelemetry adapter | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 39. Three-OS gate, release, migration doc | v0.4 | 0/1 | Not started | - |
+| 39. Three-OS gate, release, migration doc | v0.4 | 1/1 | Complete   | 2026-05-26 |

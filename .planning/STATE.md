@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: observability
-status: in_progress
-last_updated: "2026-05-26T06:54:34.555Z"
-last_activity: 2026-05-26, Phase 38 shipped (7 of 8 v0.4 phases complete)
+status: milestone_complete
+last_updated: "2026-05-26T07:23:00.619Z"
+last_activity: 2026-05-26, v0.4 Observability milestone shipped (8 of 8 phases). Awaiting maintainer tag + GitHub Release per STOP-BEFORE-TAG.
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 8
-  completed_plans: 7
-  percent: 87
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +20,22 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.4 Observability milestone — 6 of 8 shipped (75%). Phase 37 (horus-os usage CLI) shipped 2026-05-26. Next: Phase 38 (OpenTelemetry adapter — highest risk; opt-in [otel] extra, default-deny content, bounded shutdown, TEST-13/14/15 non-negotiable tests).
+**Current focus:** v0.4 Observability milestone SHIPPED 2026-05-26. All 8 phases complete (32-39). Release gate green on all 4 checks. Version bumped to 0.4.0 in pyproject.toml + __init__.py. CHANGELOG [0.4.0] section finalized. **Awaiting maintainer to run STOP-BEFORE-TAG block** (`git tag -a v0.4.0` + `git push origin v0.4.0` + `gh release create v0.4.0`) to publish the v0.4.0 tag and GitHub Release.
 
 ## Current Position
 
-Phase: 38 — COMPLETE
-Plan: 1 of 1 in Phase 37
-Status: Phase 38 complete
-Last activity: 2026-05-26 -- Phase 38 marked complete
+v0.4 Observability: ALL PHASES COMPLETE
+- Phase 32 (schema + persistence + baseline)
+- Phase 33 (capture at runner + SSE)
+- Phase 34 (pricing + CostAnnotator)
+- Phase 35 (queries.py + read APIs)
+- Phase 36 (/observability dashboard tab)
+- Phase 37 (horus-os usage CLI)
+- Phase 38 (OTel adapter)
+- Phase 39 (release gate + docs trio + version bump)
+
+Status: Ready for maintainer to ship v0.4.0 (see .planning/phases/39-three-os-gate-release-migration-doc/39-01-SUMMARY.md ## STOP-BEFORE-TAG section).
+Last activity: 2026-05-26, release gate ran live with all 4 checks green; wheel built as horus_os-0.4.0-py3-none-any.whl shipping bundled pricing.json; 718 tests passing.
 
 ## Prior Milestones
 
