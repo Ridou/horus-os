@@ -461,10 +461,10 @@ Plans:
   3. Tier 3 fixture: `clean_venv` pytest fixture opt-in via `@pytest.mark.installer_e2e`; creates a fresh `venv` via `python -m venv`, runs `pip install -e .` for horus-os plus the test plugin path, asserts plugin appears in `/api/plugins`; marked off in the default `pytest` invocation; the default `pytest -m "not installer_e2e"` invocation never installs anything into the runner venv (TEST-16 tier 3, Pitfall 11)
   4. `tests/test_plugin_pitfalls/` directory contains at minimum 12 regression test files, one per pitfall in `.planning/research/PITFALLS.md`; filenames match `test_pitfall_<N>_<slug>.py` 1:1 to pitfall numbers (`test_pitfall_1_default_allow.py`, `test_pitfall_2_manifest_schema_drift.py`, ... `test_pitfall_12_docs_drift.py`); each test cites the pitfall number in its docstring (TEST-17)
   5. Default pytest run (excluding tier 3) maintains or exceeds the v0.4 baseline test count (520+) and stays under 90s wall clock on the Ubuntu CI runner; ruff clean across the new `tests/test_plugin_pitfalls/` directory
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 46-01: three-tier fixtures + 12+ pitfall regression tests + @pytest.mark.installer_e2e isolation
+- [ ] 46-01-PLAN.md — three-tier fixtures (tier-1 in-process unit helper, tier-2 monkeypatched entry_points, tier-3 opt-in clean_venv via @pytest.mark.installer_e2e) + 12 pitfall regression tests in tests/test_plugin_pitfalls/ mapping 1:1 to PITFALLS.md
 
 ### Phase 47: Documentation refresh (docs trio)
 **Goal**: Ship the three documentation files that v0.5 needs for plugin authors and existing v0.4 users. `docs/PLUGINS.md` is the plugin-author guide: manifest schema, capability catalog, lifecycle hooks, testing harness, walkthrough of each reference-plugin scenario in order. `docs/PLUGIN-SECURITY.md` carries an explicit "Threat model" section with the literal sentence `plugins execute in the horus-os Python process` and enumerates the capability-grant trust contract; linked from the install-prompt screen. `docs/MIGRATION-v0.4-to-v0.5.md` documents the v5→v6 schema migration plus the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`). Embedded `horus-plugin.toml` snippet in `docs/PLUGINS.md` diffs against the reference plugin in CI (docs-drift trip wire for Phase 49's gate).
