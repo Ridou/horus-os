@@ -87,7 +87,7 @@
 5. **v5→v6 migration is additive only** (MIG-05). Three new tables (`plugins`, `plugin_capabilities`, `plugin_status`) + two NULLABLE columns (`llm_calls.plugin_name`, `tool_invocations.plugin_name`) + one index (`idx_tool_invocations_plugin`). Lands in Phase 41. v0.4 fixture round-trip is mandatory in Phase 41 and re-asserted in Phase 49's release gate.
 6. **Two new direct deps** in `pyproject.toml` base `[project.dependencies]` (not an optional extra): `pydantic>=2.7,<3` and `packaging>=24.0`. Lands in Phase 41. v0.4 shipped with `dependencies = []`; this is the deliberate first runtime-dep addition called out in REL-10.
 
-- [ ] **Phase 40: v0.5 baseline artifact** - Mirror of v0.4 Phase 32. Commit `tests/perf/v0_4_baseline.json` snapshotting v0.4 cold-start + zero-plugin discovery overhead on the 3-OS matrix so Phase 42's <100ms cold-start benchmark has a pinned reference. Pure infrastructure; no behavior change for users.
+- [x] **Phase 40: v0.5 baseline artifact** - Mirror of v0.4 Phase 32. Commit `tests/perf/v0_4_baseline.json` snapshotting v0.4 cold-start + zero-plugin discovery overhead on the 3-OS matrix so Phase 42's <100ms cold-start benchmark has a pinned reference. Pure infrastructure; no behavior change for users. (completed 2026-05-26)
 - [ ] **Phase 41: Manifest schema, public API, persistence migration** - Define `PluginSpec`, `MANIFEST_V1_SCHEMA` (pydantic v2), `plugins/api.py` single-public-surface module, `capability_catalog.py` closed enum. Land v5→v6 additive SQLite migration (three new tables + two NULLABLE plugin_name columns + one index). Add `pydantic>=2.7,<3` and `packaging>=24.0` to base `[project.dependencies]`. v0.4 fixture round-trip green.
 - [ ] **Phase 42: Discovery + loading + failure isolation** - `plugins/discovery.py` (entry-points + filesystem walk), `plugins/loader.py` (guard stubbed pass-through; CapabilityGuard wraps land in Phase 43), `plugins/registry.py`. Ban `pkg_resources` via ruff custom rule. Cold-start <100ms benchmark vs Phase 40 baseline. Broken-plugin fixtures (invalid TOML, schema-failing manifest, import-raising module) surface as `status="error"` without crashing host.
 - [ ] **Phase 43: Permission model + bounded lifecycle** - `plugins/permissions.py` with `PermissionGate` + `CapabilityGuard`; helper shims (`ctx.filesystem`, `ctx.secrets`, `ctx.net`); per-version grants keyed on `(plugin_name, plugin_version, capability)` AND tied to `manifest_hash`; `DEFAULT_GRANT_POLICY = "deny"` constant; bounded `asyncio.wait_for(start, timeout=2.0)` / `asyncio.wait_for(stop, timeout=2.0)` lifecycle wrappers. `--disable-all-plugins` CLI escape hatch.
@@ -373,7 +373,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 40-01-PLAN.md — Capture script + seeded v0_4_baseline.json (maintainer row + linux/win32 placeholders) + schema-shape pytest
+- [x] 40-01-PLAN.md — Capture script + seeded v0_4_baseline.json (maintainer row + linux/win32 placeholders) + schema-shape pytest
 
 ### Phase 41: Manifest schema, public API, persistence migration
 **Goal**: Pure infrastructure phase landing the entire schema substrate that every later v0.5 phase consumes. Ship `PluginSpec` (frozen dataclass), `MANIFEST_V1_SCHEMA` (pydantic v2 model with `manifest_version: int` required from day one), `plugins/api.py` as the single public re-export surface, `capability_catalog.py` closed enum with plain-English descriptions. Land the v5→v6 additive SQLite migration: three new tables (`plugins`, `plugin_capabilities`, `plugin_status`) + two NULLABLE columns (`llm_calls.plugin_name`, `tool_invocations.plugin_name`) + one index (`idx_tool_invocations_plugin`). Add the two new base direct deps (`pydantic>=2.7,<3` and `packaging>=24.0`) to `[project.dependencies]`. No discovery, no loader, no behavior change yet.
@@ -553,7 +553,7 @@ Plans:
 | 37. `horus-os usage` CLI subcommand | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 38. OpenTelemetry adapter | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 39. Three-OS gate, release, migration doc | v0.4 | 1/1 | Complete   | 2026-05-26 |
-| 40. v0.5 baseline artifact | v0.5 | 0/1 | Pending | — |
+| 40. v0.5 baseline artifact | v0.5 | 1/1 | Complete   | 2026-05-26 |
 | 41. Manifest schema, public API, persistence migration | v0.5 | 0/1 | Pending | — |
 | 42. Discovery + loading + failure isolation | v0.5 | 0/1 | Pending | — |
 | 43. Permission model + bounded lifecycle | v0.5 | 0/1 | Pending | — |
