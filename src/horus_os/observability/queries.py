@@ -198,8 +198,104 @@ def agent_totals(db: Database, window: str) -> list[dict[str, Any]]:
 
 
 def cost_by_agent(db: Database, window: str) -> list[dict[str, Any]]:
-    """Per-agent cost breakdown over the window. Implemented in Task 2."""
-    raise NotImplementedError("cost_by_agent ships in Task 2")
+    """Per-agent cost breakdown over the window.
+
+    Returns one dict per agent that has at least one trace in the
+    window. The dict carries:
+
+        agent                              : str
+        total_cost_usd                     : float  (SUM of non-NULL
+                                                     traces.total_cost_usd,
+                                                     rounded to 6dp in Python)
+        total_input_tokens                 : int
+        total_output_tokens                : int
+        total_cache_read_input_tokens      : int  (sum across llm_calls)
+        total_cache_creation_input_tokens  : int  (sum across llm_calls)
+        run_count                          : int  (every trace row)
+        uncosted_runs                      : int  (rows where total_cost_usd
+                                                   IS NULL; pre-v0.4 plus
+                                                   Pitfall 5 unknown-model rows)
+
+    Cache token totals come from llm_calls because the traces rollup
+    columns only carry the non-cache `total_input_tokens` and
+    `total_output_tokens`. Rounding happens in Python (`round(value, 6)`)
+    rather than via SQLite `ROUND` because SQLite's banker rounding
+    behavior is platform-variable; Python is stable across the 3-OS CI
+    matrix.
+
+    Ordering: by `total_cost_usd` DESC; ties by `agent` ASC for
+    deterministic test output. Agents with zero in-window traces are
+    excluded (not returned with all-zero rows).
+    """
+    threshold = parse_window(window)
+    sql = """
+        WITH windowed_traces AS (
+            SELECT trace_id, agent_profile_name, total_input_tokens,
+                   total_output_tokens, total_cost_usd
+            FROM traces
+            WHERE created_at >= ?
+              AND agent_profile_name IS NOT NULL
+        ),
+        windowed_calls AS (
+            SELECT lc.trace_id, lc.cache_read_input_tokens,
+                   lc.cache_creation_input_tokens, t.agent_profile_name
+            FROM llm_calls lc
+            JOIN windowed_traces t ON t.trace_id = lc.trace_id
+            WHERE lc.created_at >= ?
+        ),
+        per_agent_cache AS (
+            SELECT agent_profile_name,
+                   SUM(cache_read_input_tokens)     AS total_cache_read,
+                   SUM(cache_creation_input_tokens) AS total_cache_create
+            FROM windowed_calls
+            GROUP BY agent_profile_name
+        ),
+        per_agent_traces AS (
+            SELECT agent_profile_name,
+                   COUNT(*) AS run_count,
+                   SUM(total_input_tokens)  AS total_input_tokens,
+                   SUM(total_output_tokens) AS total_output_tokens,
+                   SUM(total_cost_usd)      AS total_cost_usd,
+                   SUM(CASE WHEN total_cost_usd IS NULL THEN 1 ELSE 0 END)
+                       AS uncosted_runs
+            FROM windowed_traces
+            GROUP BY agent_profile_name
+        )
+        SELECT t.agent_profile_name AS agent,
+               t.run_count,
+               t.total_input_tokens,
+               t.total_output_tokens,
+               t.total_cost_usd,
+               t.uncosted_runs,
+               COALESCE(c.total_cache_read, 0)   AS total_cache_read_input_tokens,
+               COALESCE(c.total_cache_create, 0) AS total_cache_creation_input_tokens
+        FROM per_agent_traces t
+        LEFT JOIN per_agent_cache c
+               ON c.agent_profile_name = t.agent_profile_name
+        WHERE t.run_count >= 1
+        ORDER BY COALESCE(t.total_cost_usd, 0) DESC, t.agent_profile_name ASC
+    """
+    rows: list[dict[str, Any]] = []
+    with db._connect() as conn:
+        for row in conn.execute(sql, (threshold, threshold)).fetchall():
+            total_cost = row["total_cost_usd"]
+            rows.append(
+                {
+                    "agent": row["agent"],
+                    "total_cost_usd": (
+                        round(float(total_cost), 6) if total_cost is not None else 0.0
+                    ),
+                    "total_input_tokens": int(row["total_input_tokens"] or 0),
+                    "total_output_tokens": int(row["total_output_tokens"] or 0),
+                    "total_cache_read_input_tokens": int(row["total_cache_read_input_tokens"]),
+                    "total_cache_creation_input_tokens": int(
+                        row["total_cache_creation_input_tokens"]
+                    ),
+                    "run_count": int(row["run_count"]),
+                    "uncosted_runs": int(row["uncosted_runs"]),
+                }
+            )
+    return rows
 
 
 def latency_p50_p95(db: Database, window: str) -> dict[str, Any]:
