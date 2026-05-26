@@ -291,11 +291,11 @@ Plans:
   3. Pre-v0.4 trace rows in the agents table render "—" for new cost and latency columns with hover text "no cost data captured before v0.4"; a separate small tile shows "N runs from before v0.4 with no cost data" so the missing dollars are explained, not hidden (DASH-4-05, Pitfall 11)
   4. Pricing-staleness banner renders when `pricing.json.updated_at` is more than 30 days old; yellow at 30-60 days, red at 90+; copy includes the user override path (Pitfall 5)
   5. Existing `/agents` tab shows the new `total_cost_usd`, `latency_p50`, `latency_p95` columns sourced from the Phase 35 `/api/agents` extension; v0.3 surfaces (trace explorer, SSE chat, Adapters tab) keep working unchanged
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
 
 Plans:
-- [ ] 36-01: /observability tab, /agents tab extension, staleness banner, small-sample render
+- [ ] 36-01-PLAN.md: /observability tab + /agents extension + pricing-staleness banner + small-sample + NULL render contracts
 
 ### Phase 37: `horus-os usage` CLI subcommand
 **Goal**: Ship `horus-os usage --since 7d --format json|csv|table --by model|tool|agent` as an argparse subparser. Reuses `observability/queries.py` from Phase 35 so the CLI and dashboard cannot disagree. Stdlib `json` and `csv`; no new dependencies.
