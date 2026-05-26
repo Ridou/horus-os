@@ -44,6 +44,13 @@ jobs:
       - name: Run pytest
         run: pytest -v
 
+      # METRIC-05 + TEST-12: asserts Phase 33 capture overhead stays within
+      # 50ms of the v0.3 baseline (tests/perf/v0_3_baseline.json). Skips
+      # when no matching (os, python) baseline entry exists so CI does not
+      # block on unseeded combos.
+      - name: capture-overhead benchmark (METRIC-05 / TEST-12)
+        run: pytest tests/perf/test_capture_overhead.py -v
+
       - name: CLI smoke check
         run: python -m horus_os --version
 
