@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: horus-example-downgrade
+Version: 0.1.0
+Summary: Example plugin that would downgrade pydantic (should be refused).
+License: Apache-2.0
+Requires-Python: >=3.12
+Requires-Dist: pydantic<2.0

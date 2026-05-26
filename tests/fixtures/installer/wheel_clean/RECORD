@@ -1,0 +1,4 @@
+horus_example_clean/__init__.py,sha256=abc123,42
+horus_example_clean/horus-plugin.toml,sha256=def456,256
+horus_example_clean-0.1.0.dist-info/METADATA,sha256=ghi789,128
+horus_example_clean-0.1.0.dist-info/RECORD,,

@@ -1,0 +1,4 @@
+horus_example_pth/__init__.py,sha256=abc123,42
+horus_example_pth/__path_hack__.pth,sha256=baddead,84
+horus_example_pth-0.1.0.dist-info/METADATA,sha256=ghi789,128
+horus_example_pth-0.1.0.dist-info/RECORD,,

@@ -1,0 +1,12 @@
+manifest_version = 1
+name = "horus-example-downgrade"
+version = "0.1.0"
+description = "Example plugin that would downgrade pydantic (should be refused)."
+author = "horus-os tests"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["filesystem.read"]
+
+[contributions]
+tools = []
+adapters = []

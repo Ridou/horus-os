@@ -1,0 +1,17 @@
+manifest_version = 1
+name = "horus-example-clean"
+version = "0.1.0"
+description = "Clean example plugin that passes every installer gate."
+author = "horus-os tests"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = [
+  "filesystem.read",
+  "filesystem.write",
+  "net.outbound",
+  "secrets.read",
+]
+
+[contributions]
+tools = []
+adapters = []

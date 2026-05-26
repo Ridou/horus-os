@@ -191,3 +191,30 @@ def clean_plugin_registry(tmp_path: Path) -> tuple[Database, PluginRegistry]:
     db.init()
     registry = PluginRegistry(db=db)
     return db, registry
+
+
+@pytest.fixture(scope="session")
+def installer_fixture_wheels(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Build the four synthetic installer fixture archives once per session.
+
+    Returns a dict keyed by template directory name
+    (``wheel_clean``, ``wheel_with_pth``, ``wheel_downgrades_pydantic``,
+    ``sdist_only``) → ``Path`` to the built artifact. Wheel templates
+    produce ``.whl`` files; the sdist template produces ``.tar.gz``.
+
+    Built lazily on first request so test sessions that do not exercise
+    the installer pay zero cost.
+    """
+    from tests.fixtures.installer.build_fixture_wheels import build_fixture_wheels
+
+    dest_dir = tmp_path_factory.mktemp("installer_wheels")
+    return build_fixture_wheels(dest_dir)
+
+
+@pytest.fixture
+def installed_db(tmp_path: Path) -> Database:
+    """Return a fresh Database with the v6 schema applied (no plugins yet)."""
+    db_path = tmp_path / "horus.sqlite3"
+    db = Database(db_path)
+    db.init()
+    return db

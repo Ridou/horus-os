@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: horus-example-clean
+Version: 0.1.0
+Summary: Clean example plugin that passes every installer gate.
+License: Apache-2.0
+Requires-Python: >=3.12
+Requires-Dist: pydantic>=2.7,<3
