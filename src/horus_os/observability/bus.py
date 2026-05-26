@@ -63,6 +63,12 @@ class LLMCallEvent(ObservationEvent):
     `cost_usd` is None until Phase 34's CostAnnotator subscriber populates
     it before SQLitePersister sees the event. `pricing_missing` flips True
     when the bundled pricing table has no row for (provider, model).
+
+    NOTE on Pitfall 4 (PITFALLS.md): latency_ms is wall-clock end to end
+    including SDK retries, backoff, queueing, and stream drain. It does NOT
+    include time-to-first-token (TTFT) which is the actual UX number for
+    streaming chat. A `ttft_ms` column is a future v0.5 consideration and
+    is intentionally NOT a Phase 33 deliverable.
     """
 
     kind: Literal["LLM_CALL", "TOOL_CALL", "RUN_END"] = "LLM_CALL"

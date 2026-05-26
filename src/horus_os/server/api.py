@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from horus_os import __version__
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.adapters.base import AdapterContext, AdapterRegistry, discover_adapters
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
@@ -34,6 +36,8 @@ from horus_os.memory.tools import (
     read_note_tool,
     search_notes_tool,
 )
+from horus_os.observability import SQLitePersister, get_observation_bus
+from horus_os.observability.bus import LLMCallEvent, RunEndEvent
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -107,6 +111,17 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     app.state.adapter_registry = _registry
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
+    # Phase 33 wiring: the ObservationBus is the central pub-sub for
+    # LLMCallEvent / ToolCallEvent / RunEndEvent. SQLitePersister is the
+    # default subscriber so v0.4 chat runs populate `llm_calls` and
+    # `tool_invocations` immediately. Phase 34 will subscribe a
+    # CostAnnotator BEFORE the persister; Phase 38 will subscribe an
+    # OtelExporter AFTER it. The persister holds a Database that resolves
+    # its path lazily on each write, so it stays correct even if the
+    # config file is rewritten between requests.
+    _bus = get_observation_bus()
+    _bus.subscribe(SQLitePersister(Database(Config.load(_resolved_data_dir).db_path)).on_event)
+    app.state.observation_bus = _bus
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -286,6 +301,11 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         notes_store = NotesStore(cfg.notes_dir, on_write=lambda w: _persist_write(db, w))
         registry = _build_default_registry(cfg, notes_store)
         tool_log: list[ToolResult] = []
+        # Phase 33: pre-generate the trace_id so the same id flows into
+        # the LLMCallEvents published inside run_agent_loop, the traces
+        # row record_trace writes, and the RunEndEvent that triggers the
+        # rollup UPDATE.
+        _trace_id = uuid.uuid4().hex
         start = time.perf_counter()
         try:
             result = run_agent_loop(
@@ -295,24 +315,32 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 model=model,
                 max_iterations=max_iterations,
                 on_tool_result=tool_log.append,
+                trace_id=_trace_id,
             )
         except Exception as exc:
             latency_ms = int((time.perf_counter() - start) * 1000)
-            trace_id = db.record_trace(
+            db.record_trace(
                 prompt,
                 AgentResult(text="", provider=provider, model=model),
                 latency_ms=latency_ms,
                 status="error",
                 error_message=f"{type(exc).__name__}: {exc}",
+                trace_id=_trace_id,
             )
+            # RunEndEvent fires AFTER record_trace so the persister's
+            # UPDATE matches the row we just inserted.
+            get_observation_bus().publish(RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms))
             raise HTTPException(
-                500, detail={"error": f"{type(exc).__name__}: {exc}", "trace_id": trace_id}
+                500, detail={"error": f"{type(exc).__name__}: {exc}", "trace_id": _trace_id}
             ) from exc
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        trace_id = db.record_trace(prompt, result, latency_ms=latency_ms)
+        db.record_trace(prompt, result, latency_ms=latency_ms, trace_id=_trace_id)
+        # RunEndEvent fires AFTER record_trace so the persister's UPDATE
+        # matches the row we just inserted.
+        get_observation_bus().publish(RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms))
         return {
-            "trace_id": trace_id,
+            "trace_id": _trace_id,
             "result": _agent_result_to_dict(result),
             "tool_log": [asdict(r) for r in tool_log],
             "latency_ms": latency_ms,
@@ -348,8 +376,16 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         )
         system_prompt = profile.system_prompt if profile else None
 
+        # Phase 33 SSE capture: pre-generate trace_id so LLMCallEvent +
+        # RunEndEvent and the traces row all share the same id. Track
+        # text_parts for the (Pitfall 2) char-count fallback when the
+        # provider does not surface terminal usage.
+        _trace_id = uuid.uuid4().hex
+        _bus = get_observation_bus()
+
         async def _event_stream() -> AsyncGenerator[bytes, None]:
             text_parts: list[str] = []
+            terminal_usage: dict[str, Any] = {}
             start = time.perf_counter()
             try:
                 async for chunk in run_agent_stream(
@@ -358,6 +394,10 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                     model=model,
                     system=system_prompt,
                 ):
+                    if isinstance(chunk, _StreamUsage):
+                        # private: consume, never forward to the wire.
+                        terminal_usage = chunk.usage
+                        continue
                     if isinstance(chunk, ToolCallEvent):
                         yield _sse(
                             {
@@ -371,7 +411,30 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                     yield _sse({"type": "token", "text": chunk})
             except Exception as exc:
                 latency_ms = int((time.perf_counter() - start) * 1000)
-                trace_id = db.record_trace(
+                # Pitfall 2: never persist 0 output_tokens for a
+                # non-empty stream even on mid-flight error. Estimate
+                # from text accumulated so far via the 4-char-per-token
+                # heuristic. estimated=True flag is on the event status.
+                est_in, est_out, est_cc, est_cr = _resolve_stream_usage(
+                    provider, terminal_usage, text_parts
+                )
+                _bus.publish(
+                    LLMCallEvent(
+                        trace_id=_trace_id,
+                        iteration_idx=0,
+                        provider=provider,
+                        model=model or "",
+                        input_tokens=est_in,
+                        output_tokens=est_out,
+                        cache_creation_input_tokens=est_cc,
+                        cache_read_input_tokens=est_cr,
+                        latency_ms=max(0, latency_ms),
+                        status="error",
+                        error_type=type(exc).__name__,
+                        error_message=type(exc).__name__,
+                    )
+                )
+                db.record_trace(
                     prompt,
                     AgentResult(
                         text="".join(text_parts),
@@ -384,17 +447,41 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                     status="error",
                     error_message=f"{type(exc).__name__}: {exc}",
                     agent_profile_name=agent_name,
+                    trace_id=_trace_id,
                 )
+                _bus.publish(RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms))
                 yield _sse(
                     {
                         "type": "error",
                         "message": f"{type(exc).__name__}: {exc}",
-                        "trace_id": trace_id,
+                        "trace_id": _trace_id,
                     }
                 )
                 return
             latency_ms = int((time.perf_counter() - start) * 1000)
-            trace_id = db.record_trace(
+            # Success path: extract terminal usage with provider-specific
+            # key normalization. When usage is empty (provider did not
+            # surface it) and the stream produced text, fall back to a
+            # char-count estimate. NEVER persist 0 tokens for a
+            # non-empty stream (Pitfall 2).
+            est_in, est_out, est_cc, est_cr = _resolve_stream_usage(
+                provider, terminal_usage, text_parts
+            )
+            _bus.publish(
+                LLMCallEvent(
+                    trace_id=_trace_id,
+                    iteration_idx=0,
+                    provider=provider,
+                    model=model or "",
+                    input_tokens=est_in,
+                    output_tokens=est_out,
+                    cache_creation_input_tokens=est_cc,
+                    cache_read_input_tokens=est_cr,
+                    latency_ms=max(0, latency_ms),
+                    status="success",
+                )
+            )
+            db.record_trace(
                 prompt,
                 AgentResult(
                     text="".join(text_parts),
@@ -405,8 +492,10 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 ),
                 latency_ms=latency_ms,
                 agent_profile_name=agent_name,
+                trace_id=_trace_id,
             )
-            yield _sse({"type": "done", "trace_id": trace_id, "latency_ms": latency_ms})
+            _bus.publish(RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms))
+            yield _sse({"type": "done", "trace_id": _trace_id, "latency_ms": latency_ms})
 
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
@@ -589,3 +678,44 @@ def _last_activity_for(db: Database, name: str) -> str | None:
 def _sse(payload: dict[str, Any]) -> bytes:
     """Encode one SSE frame as bytes."""
     return f"data: {json.dumps(payload)}\n\n".encode()
+
+
+def _resolve_stream_usage(
+    provider: str,
+    terminal_usage: dict[str, Any],
+    text_parts: list[str],
+) -> tuple[int, int, int, int]:
+    """Normalize provider usage into LLMCallEvent token fields with fallback.
+
+    Returns (input_tokens, output_tokens, cache_creation_input_tokens,
+    cache_read_input_tokens).
+
+    When the provider surfaced terminal usage, returns the canonical
+    values. When the dict is empty AND the stream produced text, falls
+    back to a char-count estimate via the 4-char-per-token heuristic
+    (PITFALLS.md Pitfall 2 line 55) so non-empty streams never persist
+    output_tokens=0. When the dict is empty AND no text was produced
+    (a degenerate or aborted stream), returns all zeros.
+    """
+    if terminal_usage:
+        if provider == "gemini":
+            return (
+                int(terminal_usage.get("prompt_token_count", 0) or 0),
+                int(terminal_usage.get("candidates_token_count", 0) or 0),
+                0,
+                0,
+            )
+        return (
+            int(terminal_usage.get("input_tokens", 0) or 0),
+            int(terminal_usage.get("output_tokens", 0) or 0),
+            int(terminal_usage.get("cache_creation_input_tokens", 0) or 0),
+            int(terminal_usage.get("cache_read_input_tokens", 0) or 0),
+        )
+    accumulated = "".join(text_parts)
+    if accumulated:
+        # Pitfall 2: never persist 0 output_tokens for a non-empty
+        # stream; estimate via 4-char-per-token heuristic per
+        # PITFALLS.md line 55.
+        est_out = max(1, len(accumulated) // 4)
+        return (0, est_out, 0, 0)
+    return (0, 0, 0, 0)

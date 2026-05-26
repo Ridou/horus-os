@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from horus_os._providers._stream_types import _StreamUsage
 from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult, ToolUse
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -122,13 +123,21 @@ async def stream_anthropic_async(
     model: str,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     system: str | None = None,
-) -> AsyncGenerator[str | ToolCallEvent, None]:
+) -> AsyncGenerator[str | ToolCallEvent | _StreamUsage, None]:
     """Stream incremental text tokens from Anthropic, then any tool-call events.
 
     Yields each text delta as a `str`. After the text stream completes, the
     final message is inspected and any `tool_use` blocks are emitted as
     `ToolCallEvent` values so consumers can observe them. This function does
     not execute tools, by design. See `run_agent_loop` for tool dispatch.
+
+    Phase 33: after the tool_use blocks (or the last text chunk when no
+    tool_use is present), yields a terminal `_StreamUsage` sentinel
+    carrying `final_msg.usage` so the SSE handler can persist non-zero
+    token counts (PITFALLS.md Pitfall 2). Existing consumers that
+    iterate only for str / ToolCallEvent will see the sentinel as an
+    unknown chunk type, which they should ignore; the SSE handler
+    isinstance-checks for it explicitly.
     """
     from anthropic import AsyncAnthropic
 
@@ -150,6 +159,23 @@ async def stream_anthropic_async(
                     name=getattr(block, "name", ""),
                     input=dict(getattr(block, "input", {}) or {}),
                 )
+        # Phase 33 terminal sentinel: extract the Anthropic usage shape
+        # off the final message so the SSE handler can persist real
+        # token counts. Empty dict signals "no usage available" and the
+        # consumer falls back to a char-count estimate.
+        usage_dict: dict[str, Any] = {}
+        usage_obj = getattr(final_msg, "usage", None)
+        if usage_obj is not None:
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cache_creation_input_tokens",
+                "cache_read_input_tokens",
+            ):
+                value = getattr(usage_obj, key, None)
+                if value is not None:
+                    usage_dict[key] = value
+        yield _StreamUsage(usage=usage_dict)
 
 
 class Conversation:
