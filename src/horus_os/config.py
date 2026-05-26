@@ -36,6 +36,12 @@ class Config:
     default_provider: str = "anthropic"
     anthropic_model: str = "claude-sonnet-4-6"
     gemini_model: str = "gemini-2.5-flash"
+    # Phase 34: optional override path for the bundled pricing.json.
+    # None signals "use bundled package data via importlib.resources".
+    # Precedence (highest first): HORUS_OS_PRICING_PATH env var, then the
+    # [pricing] path key in config.toml, then None. PricingTable consumes
+    # this value at create_app boot.
+    pricing_path: Path | None = None
 
     @classmethod
     def default_data_dir(cls) -> Path:
@@ -65,17 +71,24 @@ class Config:
 
     @classmethod
     def load(cls, data_dir: Path | None = None) -> Config:
-        """Load config from `data_dir/config.toml` or return defaults."""
+        """Load config from `data_dir/config.toml` or return defaults.
+
+        Phase 34: HORUS_OS_PRICING_PATH env var, when set, overrides any
+        [pricing] table value in the TOML file. The env var wins.
+        """
         base = cls.with_defaults(data_dir)
         config_path = base.data_dir / CONFIG_FILENAME
-        if not config_path.exists():
-            return base
-        try:
-            with config_path.open("rb") as fh:
-                data = tomllib.load(fh)
-        except (OSError, tomllib.TOMLDecodeError):
-            return base
-        return _apply_toml(base, data)
+        if config_path.exists():
+            try:
+                with config_path.open("rb") as fh:
+                    data = tomllib.load(fh)
+                base = _apply_toml(base, data)
+            except (OSError, tomllib.TOMLDecodeError):
+                pass
+        env_pricing = os.environ.get("HORUS_OS_PRICING_PATH")
+        if env_pricing:
+            base = replace(base, pricing_path=Path(env_pricing).expanduser())
+        return base
 
     def save(self) -> None:
         """Persist this config to `data_dir/config.toml` atomically."""
@@ -101,6 +114,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     providers = data.get("providers", {}) or {}
     storage = data.get("storage", {}) or {}
     notes = data.get("notes", {}) or {}
+    pricing = data.get("pricing", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -112,11 +126,13 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["anthropic_model"] = str(providers["anthropic_model"])
     if "gemini_model" in providers:
         overrides["gemini_model"] = str(providers["gemini_model"])
+    if "path" in pricing:
+        overrides["pricing_path"] = Path(pricing["path"]).expanduser()
     return replace(base, **overrides)
 
 
 def _dump_toml(config: Config) -> str:
-    return (
+    base = (
         "# horus-os configuration\n"
         "# Edit by hand or via `horus-os init --force`.\n"
         "\n"
@@ -131,3 +147,6 @@ def _dump_toml(config: Config) -> str:
         "[notes]\n"
         f'notes_dir = "{config.notes_dir.as_posix()}"\n'
     )
+    if config.pricing_path is not None:
+        base += f'\n[pricing]\npath = "{config.pricing_path.as_posix()}"\n'
+    return base

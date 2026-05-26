@@ -31,7 +31,7 @@ def test_pricing_path_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 def test_pricing_path_toml_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HORUS_OS_PRICING_PATH", raising=False)
     toml_pricing = tmp_path / "from_toml.json"
-    contents = "[pricing]\n" f'path = "{toml_pricing.as_posix()}"\n'
+    contents = f'[pricing]\npath = "{toml_pricing.as_posix()}"\n'
     (tmp_path / CONFIG_FILENAME).write_text(contents)
     cfg = Config.load(tmp_path)
     assert cfg.pricing_path == toml_pricing
@@ -41,7 +41,7 @@ def test_pricing_path_env_beats_toml(tmp_path: Path, monkeypatch: pytest.MonkeyP
     env_pricing = tmp_path / "from_env.json"
     toml_pricing = tmp_path / "from_toml.json"
     monkeypatch.setenv("HORUS_OS_PRICING_PATH", str(env_pricing))
-    contents = "[pricing]\n" f'path = "{toml_pricing.as_posix()}"\n'
+    contents = f'[pricing]\npath = "{toml_pricing.as_posix()}"\n'
     (tmp_path / CONFIG_FILENAME).write_text(contents)
     cfg = Config.load(tmp_path)
     assert cfg.pricing_path == env_pricing
@@ -55,9 +55,7 @@ def test_save_omits_pricing_table_when_none(tmp_path: Path) -> None:
     assert "[pricing]" not in dumped
 
 
-def test_save_round_trips_pricing_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_save_round_trips_pricing_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HORUS_OS_PRICING_PATH", raising=False)
     custom = tmp_path / "round_trip_pricing.json"
     cfg = Config.with_defaults(tmp_path)
