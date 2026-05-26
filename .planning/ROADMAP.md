@@ -246,10 +246,10 @@ Plans:
   3. Every `llm_calls` and `tool_invocations` row uses `time.perf_counter()` for `latency_ms`; a ruff/grep CI rule fails the build if `time.time()` appears inside `horus_os/observability/`, `agent.py`, or `tools/loop.py`; `SQLitePersister` asserts `latency_ms >= 0` and refuses to insert negatives (Pitfall 3)
   4. Tool invocations persist `status` (success / error), `retry_count` (best-effort, NULL allowed if SDK does not surface it), and `last_error_text` (exception class name only, never user-supplied content) (Pitfall 9 substrate)
   5. Capture-overhead benchmark in CI runs the fixture 5-iteration / 3-tool-call loop on the 3-OS matrix and asserts total wall-clock is within 50ms of the Phase 32 baseline (METRIC-05, Pitfall 8 guard)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 33-01: Runner + SSE capture sites, lint rule, capture-overhead benchmark
+- [ ] 33-01-PLAN.md: Runner + SSE capture sites with trace_id threading, Pitfall 1/2/3/9 regression tests, lint guard extension, 3-OS capture-overhead benchmark
 
 ### Phase 34: Pricing table and cost annotation
 **Goal**: Ship `pricing.json` as package data plus the `PricingTable` and `CostAnnotator` that turn token counts into USD costs. Cost annotation subscribes BEFORE the persister so each `LLM_CALL` event is mutated in place. Unknown models persist with `pricing_missing=1, cost_usd=NULL` (NULL is honest, zero is a lie).
