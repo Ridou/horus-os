@@ -231,10 +231,10 @@ Plans:
   3. SQLite pragmas read back as `journal_mode=wal` and `synchronous=NORMAL` after init; never `synchronous=FULL` (Pitfall 8 guard)
   4. `tests/perf/v0_3_baseline.json` artifact committed before Phase 33 starts; captures wall-clock latency for the same fixture 3-iteration agent loop on Ubuntu, macOS, Windows under Python 3.11 + 3.12
   5. Unit tests publish synthetic `ObservationEvent`s directly to `ObservationBus`; `SQLitePersister` inserts one row per event into the right table; no runner code touched yet
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 32-01: v4-to-v5 migration, ObservationBus + SQLitePersister, v0.3 baseline artifact
+- [ ] 32-01-PLAN.md: v4-to-v5 migration, ObservationBus + SQLitePersister, v0.3 baseline artifact, lint guard
 
 ### Phase 33: Capture at the runner + SSE branch
 **Goal**: Wire the bus into the runner so real agent runs publish `LLM_CALL` and `TOOL_CALL` events that the SQLitePersister writes. Fix two confirmed v0.3 correctness bugs: per-iteration token undercount (Pitfall 1) and the streaming path silently recording $0 (Pitfall 2). Cost still NULL at this point; pricing lands in Phase 34.
