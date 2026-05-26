@@ -361,8 +361,8 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | active | 46 |
-| TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | active | 46 |
+| TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | complete | 46 |
+| TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | complete | 46 |
 | TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
 | TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete (42); start variants pending 43 | 42, 43 |
 | TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | active | 49 |
@@ -453,8 +453,8 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | DASH-5-02 | 45 | Complete (2026-05-26) |
 | DASH-5-03 | 45 | Complete (2026-05-26) |
 | OBSERVE-02 | 45 | Complete (2026-05-26) |
-| TEST-16 | 46 | Pending |
-| TEST-17 | 46 | Pending |
+| TEST-16 | 46 | Complete (2026-05-26) |
+| TEST-17 | 46 | Complete (2026-05-26) |
 | REFERENCE-02 | 47 | Pending |
 | REL-12 | 47 | Pending |
 | REFERENCE-01 | 48 | Pending |

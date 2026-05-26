@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: Phase 45 complete; proceeding to Phase 46
-last_updated: "2026-05-26T13:35:00.000Z"
-last_activity: 2026-05-26 — Phase 45 shipped (six /api/plugins routes + /api/observability/plugins + /plugins dashboard tab + by-plugin obs tile + DASH-5-03 sanitation regression, 28 new tests, 916 total passing)
+status: Phase 46 complete; proceeding to Phase 47
+last_updated: "2026-05-26T21:08:00.000Z"
+last_activity: 2026-05-26 — Phase 46 shipped (three-tier fixture strategy + 12 pitfall regression test files mapping 1:1 to PITFALLS.md; 42 new tests, 958 total passing in 27s wall clock)
 progress:
   total_phases: 32
-  completed_phases: 28
-  total_plans: 28
-  completed_plans: 28
-  percent: 88
+  completed_phases: 29
+  total_plans: 29
+  completed_plans: 29
+  percent: 91
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44, 45 shipped. Next phase: 46 (three-tier test fixtures + pitfall regression suite).
+**Current focus:** v0.5 Plugin System milestone — Phases 40, 41, 42, 43, 44, 45, 46 shipped. Next phase: 47 (documentation refresh — docs trio).
 
 ## Current Position
 
-Phase: 46: Test surface (three-tier fixtures + pitfall regression suite)
+Phase: 47: Documentation refresh (docs trio)
 Plan: —
-Status: Ready for `/gsd-plan-phase 46`
-Last activity: 2026-05-26 — Phase 45 shipped (six /api/plugins routes + /api/observability/plugins + /plugins dashboard tab + by-plugin obs tile + DASH-5-03 sanitation, 28 new tests, 916 total passing)
+Status: Ready for `/gsd-plan-phase 47`
+Last activity: 2026-05-26 — Phase 46 shipped (three-tier fixture strategy + 12 pitfall regression test files mapping 1:1 to PITFALLS.md; 42 new tests, 958 total passing in 27s wall clock; 8 deviations auto-fixed against plan/production drift)
 
 ## Prior Milestones
 
