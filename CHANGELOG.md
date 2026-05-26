@@ -4,11 +4,116 @@ All notable changes to horus-os are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - YYYY-MM-DD
+
+Fifth alpha. Adds a third-party plugin system on top of the v0.4
+observability substrate. Plugins are Python packages that ship a
+`horus-plugin.toml` manifest, contribute tools and/or adapters, and
+run with default-deny capability grants. A new `/plugins` dashboard
+tab visualizes the state; a `horus-os plugins` CLI subcommand family
+manages installs; per-plugin observability attribution lands on
+every LLM call and every tool invocation.
+
+See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
 
 ### Added
 
+- **Plugin manifest contract.** `MANIFEST_V1_SCHEMA` in
+  `horus_os.plugins.manifest` (pydantic v2). Required fields:
+  `manifest_version`, `name`, `version`, `description`, `author`,
+  `license`, `horus_os_compat`. Optional: `contributions.tools`,
+  `contributions.adapters`, `capabilities`, `homepage`,
+  `issue_tracker`. Unknown top-level keys emit `UserWarning`
+  (forward-compat: a v2-authored manifest still loads under v0.5
+  with warnings). `validate_manifest(toml_bytes)` is the single
+  entry point; `format_validation_error(exc)` turns pydantic
+  failures into plain-English multi-line error strings.
+- **Two-phase installer.** `horus-os plugins install <spec>` runs
+  `pip download --no-deps` into a tmpdir, refuses sdists by default
+  (`--allow-sdist` to override), refuses any wheel that ships a
+  `.pth` file in RECORD (Checkmarx command-jacking defense), refuses
+  any wheel whose `Requires-Dist` would downgrade `pydantic` or
+  `packaging`, prompts for capability grants, then runs
+  `pip install --no-deps --no-build-isolation` against the wheel.
+  Any failure post-Phase-D rolls back via `pip uninstall -y` plus
+  a `DELETE FROM plugins`. The single `subprocess.run` chokepoint
+  inside `run_pip` is the only audit point — a grep for the literal
+  invocation token returns 1.
+- **Default-deny capability grants.** Four-capability v1 catalog:
+  `filesystem.read`, `filesystem.write`, `net.outbound`,
+  `secrets.read`. The `Capability` StrEnum and `DESCRIPTIONS`
+  mapping live in `horus_os.plugins.capability_catalog`. Grants
+  pinned to `(plugin_name, plugin_version, manifest_hash)` where
+  `manifest_hash = sha256(sorted(set(capabilities)))`. Every grant
+  transition (issue, revoke, expire, re-grant under a new version)
+  appends one row to `plugin_capability_grants_log`. The audit log
+  survives plugin uninstall. The `PermissionService` is the only
+  writer; `CapabilityGuard` shims (`ctx.filesystem`, `ctx.secrets`,
+  `ctx.net`) enforce at every call site.
+- **Bounded lifecycle.** `asyncio.wait_for(start, timeout=2.0)`
+  wraps every plugin adapter's `start(ctx)` hook (ISOLATE-02). A
+  hung `start` becomes a load-time `PluginLoadError`. Same bound
+  on `stop()` at shutdown. Mirrors the v0.4 OtelAdapter shape.
+- **`/plugins` dashboard tab.** Sixth nav tab. One row per
+  discovered plugin: manifest metadata, granted-capability pills,
+  status (pending / running / error / disabled), error message,
+  per-plugin Enable / Disable / Revoke buttons. Polls
+  `GET /api/plugins` every five seconds.
+- **Per-plugin observability.** Two new NULLABLE columns
+  (`tool_invocations.plugin_name`, `llm_calls.plugin_name`). The
+  runner publishes these on every event. Pre-v0.5 rows stay NULL;
+  the dashboard renders these as "horus-os core" attribution.
+- **`horus-os plugins` CLI surface.** Nine subcommands:
+  `install`, `uninstall`, `list`, `info`, `enable`, `disable`,
+  `update`, `grant`, `revoke`. `update` runs the upgrade-diff
+  classifier (unchanged / reduced / expanded) and re-prompts only
+  for new caps on the expanded path.
+- **`--disable-all-plugins` boot flag.** Escape hatch wired in
+  `src/horus_os/__main__.py` and consumed in
+  `src/horus_os/cli/serve_cmd.py`. Skips entry-point and
+  local-directory discovery entirely; the server starts with only
+  v0.4 first-party adapters. Settable via `HORUS_OS_DISABLE_ALL_PLUGINS=1`.
+- **Three-tier test fixtures.** Tier 1 `make_synthetic_plugin`
+  (in-process unit tests, no pip), tier 2
+  `fake_plugin_entry_points` (discovery-walk monkeypatch), tier 3
+  `clean_venv` (throwaway venv real-pip tests, gated by
+  `--run-installer-e2e`). The Phase 49 install-smoke matrix is the
+  primary tier-3 consumer.
+- **12-pitfall regression suite.** `tests/test_plugin_pitfalls/`
+  maps 1:1 to `PITFALLS.md`. Each pitfall has one or more tests
+  that pin the prevention pattern.
+- **Reference plugin scaffold (forward reference).** Phase 48 lands
+  `examples/horus-os-example-plugin/` demonstrating the four
+  scenarios enumerated in `docs/PLUGINS.md` § Walkthrough.
+- **Three new docs files.** `docs/PLUGINS.md` (plugin author
+  guide), `docs/PLUGIN-SECURITY.md` (threat model + trust contract
+  + out-of-scope defenses + recommended user practices), and
+  `docs/MIGRATION-v0.4-to-v0.5.md` (mirrors the v0.3→v0.4 shape).
+- **`docs/manifest-v1.schema.json`.** JSON-Schema mirror of
+  `MANIFEST_V1_SCHEMA.model_json_schema()`. Phase 49 release-gate
+  diff target. Regenerated via
+  `python scripts/build_manifest_schema.py`.
+
 ### Changed
+
+- **Base `[project.dependencies]` gained two new direct deps.**
+  `pydantic>=2.7,<3` powers manifest validation and the JSON-Schema
+  export. `packaging>=24.0` powers PEP 440 `horus_os_compat` parsing
+  via `SpecifierSet` and `Requires-Dist` parsing via
+  `Requirement`. Both are pure-Python wheels with universal install
+  surface — no 3-OS install-smoke impact.
+
+### Migration
+
+- **v5 → v6 schema migration.** Additive only: three new tables
+  (`plugins`, `plugin_capabilities`, `plugin_status`) + two new
+  NULLABLE columns (`tool_invocations.plugin_name`,
+  `llm_calls.plugin_name`) + one new index on `(plugin_name,
+  plugin_version)`. v0.4 databases continue to read byte-identical.
+  Pre-v0.5 rows have `plugin_name = NULL`, surfaced as
+  "horus-os core" attribution. Roll back via the
+  `--disable-all-plugins` boot flag; no downgrade path. See
+  `docs/MIGRATION-v0.4-to-v0.5.md`.
 
 ## [0.4.0] - 2026-05-26
 

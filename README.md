@@ -94,6 +94,23 @@ third-party adapters keep working byte-identical.
   `examples/slack_adapter.py`, `examples/email_adapter.py`,
   `examples/calendar_adapter.py`
 
+## What is new in v0.5
+
+The v0.5 milestone ships a third-party plugin system. Plugins are
+Python packages that ship a `horus-plugin.toml` manifest, contribute
+tools and/or adapters, and run with default-deny capability grants
+pinned to `(plugin_name, plugin_version, manifest_hash)`. The
+lifecycle is bounded via `asyncio.wait_for(timeout=2.0)`. The
+`horus-os plugins` CLI surface lands 9 subcommands (`install`,
+`uninstall`, `list`, `info`, `enable`, `disable`, `update`, `grant`,
+`revoke`); a new `/plugins` dashboard tab visualizes the same state;
+and per-plugin observability attribution lands on every LLM call
+and tool invocation via two new NULLABLE `plugin_name` columns.
+
+- Migration guide: `docs/MIGRATION-v0.4-to-v0.5.md`
+- Plugin author guide: `docs/PLUGINS.md`
+- Security model: `docs/PLUGIN-SECURITY.md`
+
 ## Documents
 
 - `CHANGELOG.md`, release notes
@@ -102,6 +119,9 @@ third-party adapters keep working byte-identical.
 - `ARCHITECTURE.md`, technical shape
 - `docs/MIGRATION-v0.1-to-v0.2.md`, upgrade notes for v0.1 users
 - `docs/MIGRATION-v0.2-to-v0.3.md`, upgrade notes for v0.2 users
+- `docs/MIGRATION-v0.4-to-v0.5.md`, upgrade notes for v0.4 users
+- `docs/PLUGIN-SECURITY.md`, plugin security model and threat statement
+- `docs/PLUGINS.md`, plugin author guide
 - `docs/adapters/`, per-adapter setup guides (Discord, Slack, Email, Calendar)
 - `examples/`, runnable scripts for multi-agent, streaming, and the shipped adapters
 - `CONTRIBUTING.md`, dev setup, workflow, and code style
