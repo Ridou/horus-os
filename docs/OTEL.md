@@ -66,41 +66,106 @@ so when the spec stabilizes one file changes.
 
 ## Threat model
 
-What an OTel collector receives in DEFAULT mode:
+The threat model under Pitfall 7 (`PITFALLS.md Pitfall 7`) breaks the
+adapter's runtime behavior into three explicit subsections: what the
+collector receives by default, what changes under opt-in content
+capture, and the trust statement the operator accepts when enabling
+either mode.
 
-- Numerical metadata: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cached_tokens`, `horus_os.cost_usd`
-- Structural metadata: `gen_ai.system`, `gen_ai.operation.name`, `gen_ai.request.model`
-- On failure: `error.type` (exception CLASS NAME ONLY, never the message)
-- Span name (e.g. `chat claude-sonnet-4-6`)
-- Resource attributes: `service.name`, `service.version`
+### Default mode: what your collector receives
 
-What the collector DOES NOT receive in default mode:
+In default mode (`HORUS_OS_OTEL_CAPTURE_CONTENT` unset, or set to
+anything other than the exact lowercase literal `true`), the adapter
+emits the eight canonical attribute keys defined in
+`src/horus_os/_observability/semconv.py`. The schema is the source of
+truth; the lists below mirror it so the threat model and the schema
+cannot drift.
 
-- Prompt content (NEVER)
-- Completion content (NEVER)
-- User identifiers (NEVER)
-- Tool input args (NEVER)
-- Tool output content (NEVER)
-- Error messages (NEVER; only exception class names)
+The collector receives:
 
-What changes when `HORUS_OS_OTEL_CAPTURE_CONTENT=true` (opt-in mode):
+- Numerical metadata: `gen_ai.usage.input_tokens`,
+  `gen_ai.usage.output_tokens`, `gen_ai.usage.cached_tokens`
+  (omitted when 0), `horus_os.cost_usd` (omitted when NULL on unknown
+  models).
+- Structural metadata: `gen_ai.system`, `gen_ai.operation.name`,
+  `gen_ai.request.model`.
+- On failure: `error.type` (exception CLASS NAME ONLY, never the
+  formatted message which can carry user content).
+- Span name (for example `chat claude-sonnet-4-6`).
+- Resource attributes: `service.name`, `service.version`.
 
-- The adapter MAY attach a redacted `gen_ai.output.messages` attribute carrying the `LLMCallEvent.error_message` (which today is class-name-only per Phase 33's capture contract, so the redactor runs as a defence-in-depth layer rather than the primary safety guarantee).
-- The redactor allowlist (defined in `src/horus_os/observability/redact.py`) strips these patterns BEFORE attribute attachment:
-  - `AKIA[A-Z0-9]{16}` (AWS access key IDs)
-  - `sk-[A-Za-z0-9_-]{20,}` (Anthropic / OpenAI keys)
-  - `ghp_[A-Za-z0-9]{36,}` (GitHub personal tokens)
-  - `xox[abpre]-[A-Za-z0-9_-]+` (Slack tokens)
-  - email-shaped strings
-  - E.164 phone numbers
-  - `gcp-[A-Za-z0-9_-]+` (GCP API key prefix)
-- Matched secrets are replaced with the literal `[REDACTED]`.
+The collector DOES NOT receive:
 
-Trust statement: if you cannot trust your OTel collector AND any
-backend it forwards to with the metadata listed above, do NOT enable
-the OTel adapter. If you enable opt-in content capture you accept that
-the redactor is a best-effort allowlist; novel secret formats may slip
-past until the allowlist is extended.
+- Prompt content (NEVER).
+- Completion content (NEVER).
+- User identifiers (NEVER).
+- Tool input arguments (NEVER).
+- Tool output content (NEVER).
+- Error messages (NEVER; only exception class names).
+
+The eight canonical attribute keys above are listed in the
+`## Attribute schema` table earlier in this doc; the threat model
+mirrors that table by reference rather than re-stating it.
+
+### Opt-in mode: what changes when you set HORUS_OS_OTEL_CAPTURE_CONTENT=true
+
+The opt-in flag is checked for EXACT lowercase equality. Only the
+literal string `true` enables body content capture; `1`, `yes`,
+`TRUE`, `True`, `on`, `enabled`, and every other variant stay
+default-deny. The regression
+`test_capture_content_env_value_other_than_true_stays_default_deny`
+(Phase 38) pins this contract; a future contributor relaxing the
+parser surfaces in code review immediately.
+
+The primary safety guarantee is NOT the redactor allowlist; it is the
+constants-layer absence. The deprecated GenAI body-capture attribute
+names are NOT defined in `_observability/semconv.py`. A contributor
+who wants to add body capture has to write the literal string by
+hand, which surfaces in code review where the threat model can
+re-assert itself. The redactor below is defence-in-depth on top of
+that primary guarantee.
+
+When opt-in mode is active, the adapter MAY attach a redacted
+`gen_ai.output.messages` attribute carrying
+`LLMCallEvent.error_message`. Per Phase 33's capture contract that
+field is class-name-only today, so the redactor runs as a
+defence-in-depth layer rather than the primary safety guarantee.
+
+The redactor allowlist (`src/horus_os/observability/redact.py`,
+source of truth) strips these seven patterns BEFORE attribute
+attachment:
+
+- `AKIA[A-Z0-9]{16}` (AWS access key IDs).
+- `sk-[A-Za-z0-9_-]{20,}` (Anthropic and OpenAI keys).
+- `ghp_[A-Za-z0-9]{36,}` (GitHub personal tokens).
+- `xox[abpre]-[A-Za-z0-9_-]+` (Slack tokens).
+- Email-shaped strings.
+- `gcp-[A-Za-z0-9_-]+` (GCP API key prefix).
+- E.164 phone numbers (`\+?[1-9]\d{1,14}`; deliberately
+  over-matches bare integers per Pitfall 7).
+
+Matched secrets are replaced with the literal `[REDACTED]`.
+
+### Trust statement and operator guidance
+
+If you cannot trust your OTel collector AND any backend it forwards
+to with the default-mode metadata listed above, do NOT enable the
+OTel adapter.
+
+If you enable opt-in content capture, you accept that the redactor is
+a best-effort allowlist; novel secret formats may slip past until the
+allowlist is extended in `src/horus_os/observability/redact.py`.
+
+Recommendation: leave default-deny enabled UNLESS you specifically
+need body content for replay debugging AND your OTel collector plus
+downstream backends are locked down to your trust boundary.
+
+The OTel adapter holds its OWN `TracerProvider`; it does NOT call
+`trace.set_tracer_provider()`. Disabling the adapter cleanly drops
+its provider without touching other tracers a user may add separately
+(for example `opentelemetry-instrumentation-*` auto-patchers). The
+entry-point-based discovery (no hardcoded wiring in `server/api.py`)
+means uninstalling the `[otel]` extra fully detaches the adapter.
 
 ## Bounded shutdown
 
@@ -134,8 +199,3 @@ contributors can find the regression coverage quickly):
 - You do not run a collector. SQLite + `/observability` dashboard + `horus-os usage` CLI is the local-first path.
 - You want prompt / completion archival without trust in the collector. SQLite is the source of truth; v0.4 does not export bodies.
 - You need auth on the adapter itself. The adapter binds the user's OTel env vars verbatim; auth is configured at the collector.
-
-Phase 39 (REL-09) will polish this doc as part of the v0.4.0 release
-docs trio (`MIGRATION-v0.3-to-v0.4.md`, `OBSERVABILITY.md`, `OTEL.md`).
-The Threat model section above already meets the REL-09 contract from
-ROADMAP §Phase 39.
