@@ -106,6 +106,7 @@
         <span class="grow"></span>
         <button class="ghost" id="refresh-agents">Refresh</button>
       </div>
+      <div id="agents-uncosted-tile" class="uncosted-tile" style="display: none;"></div>
       <div id="agents-body"><div class="empty">loading</div></div>
     </section>
     <section class="tab" id="writes">
@@ -355,13 +356,20 @@
 
     async function loadAgents() {
       const body = $("#agents-body");
+      const tile = $("#agents-uncosted-tile");
       body.innerHTML = '<div class="empty">loading</div>';
       try {
         const data = await fetchJson("/api/agents");
         if (!data.agents.length) {
           body.innerHTML = '<div class="empty">no agent profiles yet</div>';
+          tile.style.display = "none";
           return;
         }
+        // Phase 36 Task 3: Pitfall 11 contract for /agents.
+        // total_cost_usd === null marks pre-v0.4 traces; render the
+        // em-dash with the documented hover, never $0 or "null". The
+        // tile aggregates uncosted_runs across all rows so the missing
+        // dollars are explained, not hidden.
         const rows = data.agents.map((a) => {
           const model = a.default_model || "(default)";
           const tools = a.allowed_tools === null
@@ -371,11 +379,40 @@
           const prompt = (a.system_prompt || "").length > 60
             ? a.system_prompt.slice(0, 60) + "..."
             : (a.system_prompt || "");
-          return `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(model)}</td><td>${escapeHtml(tools)}</td><td class="muted">${escapeHtml(last)}</td><td class="muted">${escapeHtml(prompt)}</td></tr>`;
+          let costCell, p50Cell, p95Cell;
+          if (a.total_cost_usd === null) {
+            // Pitfall 11: no cost was captured before v0.4. Cost AND
+            // latency both render em-dash with the same hover so the
+            // root cause is unambiguous (no data, not a bug).
+            costCell = '<td title="no cost data captured before v0.4">—</td>';
+            p50Cell = '<td title="no cost data captured before v0.4">—</td>';
+            p95Cell = '<td title="no cost data captured before v0.4">—</td>';
+          } else {
+            costCell = '<td>$' + a.total_cost_usd.toFixed(6) + '</td>';
+            // Cost was captured but no llm_calls row landed yet for
+            // the percentile: render em-dash with a different hover so
+            // operators do not confuse "no data yet" with "pre-v0.4".
+            p50Cell = a.latency_p50_ms === null
+              ? '<td title="need at least 1 llm_calls row">—</td>'
+              : '<td>' + a.latency_p50_ms + 'ms</td>';
+            p95Cell = a.latency_p95_ms === null
+              ? '<td title="need at least 1 llm_calls row">—</td>'
+              : '<td>' + a.latency_p95_ms + 'ms</td>';
+          }
+          const uncostedCell = '<td>' + (a.uncosted_runs || 0) + '</td>';
+          return `<tr><td>${escapeHtml(a.name)}</td>${costCell}${p50Cell}${p95Cell}${uncostedCell}<td>${escapeHtml(model)}</td><td>${escapeHtml(tools)}</td><td class="muted">${escapeHtml(last)}</td><td class="muted">${escapeHtml(prompt)}</td></tr>`;
         }).join("");
-        body.innerHTML = `<table><thead><tr><th>name</th><th>default_model</th><th>allowed_tools</th><th>last_activity_at</th><th>system_prompt</th></tr></thead><tbody>${rows}</tbody></table>`;
+        body.innerHTML = `<table><thead><tr><th>name</th><th>cost</th><th>p50 ms</th><th>p95 ms</th><th>uncosted</th><th>default_model</th><th>allowed_tools</th><th>last_activity_at</th><th>system_prompt</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const totalUncosted = data.agents.reduce((sum, a) => sum + (a.uncosted_runs || 0), 0);
+        if (totalUncosted > 0) {
+          tile.innerHTML = totalUncosted + ' runs from before v0.4 (no cost data)';
+          tile.style.display = "block";
+        } else {
+          tile.style.display = "none";
+        }
       } catch (e) {
         body.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+        tile.style.display = "none";
       }
     }
     $("#refresh-agents").addEventListener("click", loadAgents);
