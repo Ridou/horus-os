@@ -370,10 +370,10 @@ Plans:
   2. Baseline artifact captures discovery overhead with zero installed plugins (no entry points in `horus_os.plugins` group; empty `~/.horus-os/plugins/` directory); v4 baseline carries `version`, `captured_at`, `platform`, `python_version`, `cold_start_ms`, `discovery_ms` fields per OS/Python combination
   3. A 3-OS CI workflow step captures the baseline numbers in a reproducible manner (same fixture as v0.3 baseline pattern); committed values match the workflow output within float tolerance so a future re-capture diffs cleanly
   4. No runtime code touched in this phase; pure `tests/perf/` artifact + the `scripts/capture_v0_4_baseline.py` capture script if one is needed for reproducibility; `pip install -e .` continues to work unchanged
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 40-01: v0.4 baseline artifact + capture script + 3-OS workflow step
+- [ ] 40-01-PLAN.md — Capture script + seeded v0_4_baseline.json (maintainer row + linux/win32 placeholders) + schema-shape pytest
 
 ### Phase 41: Manifest schema, public API, persistence migration
 **Goal**: Pure infrastructure phase landing the entire schema substrate that every later v0.5 phase consumes. Ship `PluginSpec` (frozen dataclass), `MANIFEST_V1_SCHEMA` (pydantic v2 model with `manifest_version: int` required from day one), `plugins/api.py` as the single public re-export surface, `capability_catalog.py` closed enum with plain-English descriptions. Land the v5→v6 additive SQLite migration: three new tables (`plugins`, `plugin_capabilities`, `plugin_status`) + two NULLABLE columns (`llm_calls.plugin_name`, `tool_invocations.plugin_name`) + one index (`idx_tool_invocations_plugin`). Add the two new base direct deps (`pydantic>=2.7,<3` and `packaging>=24.0`) to `[project.dependencies]`. No discovery, no loader, no behavior change yet.
