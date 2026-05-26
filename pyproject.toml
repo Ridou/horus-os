@@ -33,6 +33,10 @@ calendar = [
     "google-api-python-client>=2.110",
     "google-auth-oauthlib>=1.2",
 ]
+otel = [
+    "opentelemetry-sdk>=1.42,<2.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
+]
 all = [
     "anthropic>=0.40",
     "google-genai>=0.3",
@@ -42,6 +46,8 @@ all = [
     "slack-sdk>=3.27",
     "google-api-python-client>=2.110",
     "google-auth-oauthlib>=1.2",
+    "opentelemetry-sdk>=1.42,<2.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
 ]
 dev = [
     "fastapi>=0.110",
@@ -60,6 +66,7 @@ discord = "horus_os.adapters.discord_adapter:DiscordAdapter"
 slack = "horus_os.adapters.slack_adapter:SlackAdapter"
 email = "horus_os.adapters.email_adapter:EmailAdapter"
 calendar = "horus_os.adapters.calendar_adapter:CalendarAdapter"
+otel = "horus_os.adapters.otel_adapter:OtelAdapter"
 
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"
