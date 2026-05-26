@@ -365,7 +365,7 @@
 | TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | complete | 46 |
 | TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
 | TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete (42); start variants pending 43 | 42, 43 |
-| TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | active | 49 |
+| TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | complete | 49 |
 | TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff `flake8-tidy-imports.banned-api` (layer 1) + pytest source-tree backstop at `tests/plugins/test_reference_plugin_public_api_only.py` (layer 2) | complete | 48 |
 
 ### Release (continued from v0.4)
@@ -373,7 +373,7 @@
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
 | REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | active | 50 |
-| REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | active | 49 |
+| REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | complete | 49 |
 | REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | complete | 47 |
 
 ## Coverage summary
@@ -459,8 +459,8 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | REL-12 | 47 | Complete (2026-05-26) |
 | REFERENCE-01 | 48 | Complete (2026-05-26) |
 | TEST-21 | 48 | Complete (2026-05-26) |
-| TEST-20 | 49 | Pending |
-| REL-11 | 49 | Pending |
+| TEST-20 | 49 | Complete (2026-05-26) |
+| REL-11 | 49 | Complete (2026-05-26) |
 | REL-10 | 50 | Pending |
 
 **Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.

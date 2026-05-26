@@ -12,7 +12,8 @@ released.
 1. Verify CI is green on `main` for the latest commit:
    `gh run list --branch main --limit 1`.
    Expect SUCCESS for the full 3-OS x 2-Python matrix including
-   the `install-smoke-no-otel` and `install-smoke-with-otel` jobs.
+   the `install-smoke-no-otel`, `install-smoke-with-otel`, and
+   `install-smoke-plugin` jobs.
 2. Confirm no open PRs need merging before the tag.
 3. Confirm all phase SUMMARY files for the milestone are committed
    under `.planning/phases/`.
@@ -23,9 +24,9 @@ released.
 ## Release gate
 
 `scripts/release_gate.py` is a local pre-tag quality gate. It runs
-four checks and exits 0 only when all enabled checks pass.
+eight checks and exits 0 only when all enabled checks pass.
 
-The four checks:
+The four v0.4 checks:
 
 - `pricing-freshness`: `src/horus_os/observability/pricing.json`
   `updated_at` is within 14 days of today. The default 14-day
@@ -39,6 +40,18 @@ The four checks:
   member. Catches regression in the
   `[tool.setuptools.package-data]` wiring.
 - `pytest`: `python -m pytest -q` from the repo root exits 0.
+
+v0.5 extends the gate with four additional checks: `docs-drift`
+(between `MANIFEST_V1_SCHEMA` and `docs/manifest-v1.schema.json`),
+`plugin-install-smoke-ci` (asserts the `install-smoke-plugin` job is
+present in `ci.yml`), `reference-plugin-manifest-valid` (runtime
+`validate_manifest()` accepts
+`examples/horus-os-example-plugin/horus-plugin.toml` with zero
+errors), and `v0-4-fixture-roundtrip`
+(`tests/fixtures/v0_4_database.sqlite3` survives the v5 to v6
+migration with all three new plugin tables, two new `plugin_name`
+columns, and one new index present). Default invocation runs all
+EIGHT checks (4 v0.4 + 4 v0.5).
 
 Exit semantics: 0 on full pass; 1 if any check fails. The runner
 prints one diagnostic per failing check rather than
@@ -55,7 +68,8 @@ Environment overrides:
 
 CLI flags:
 
-- `--check pricing|wheel|ci|tests` runs only the named check.
+- `--check pricing|wheel|ci|tests|docs-drift|plugin-install|reference-manifest|fixture-roundtrip`
+  runs only the named check.
 - `--skip-build` is the alias for `HORUS_OS_RELEASE_GATE_SKIP_BUILD=1`.
 
 If `pricing-freshness` fails, follow the refreshing-pricing
@@ -87,14 +101,32 @@ Procedure:
 
 The 5-minute mechanical task that closes Pitfall 5.
 
+## Refreshing docs/manifest-v1.schema.json
+
+The runtime pydantic schema (`MANIFEST_V1_SCHEMA` in
+`src/horus_os/plugins/manifest.py`) and the bundled JSON Schema
+(`docs/manifest-v1.schema.json`) must stay byte-identical. The
+release gate's `docs-drift` check refuses to tag when they diverge.
+
+Procedure:
+
+1. Run `python scripts/build_manifest_schema.py`. The script is
+   idempotent; running it twice in a row produces no diff.
+2. If `git diff docs/manifest-v1.schema.json` shows changes, commit
+   them with `chore(release): regenerate docs/manifest-v1.schema.json`.
+
 ## Release procedure
 
 The full sequence:
 
 1. Refresh `pricing.json` if its `updated_at` is older than 14
    days (per the refreshing-pricing section above).
+1b. Regenerate `docs/manifest-v1.schema.json` via
+   `python scripts/build_manifest_schema.py` and commit the result
+   if there is a diff. The `docs-drift` gate refuses to tag
+   otherwise.
 2. Run `python scripts/release_gate.py`. Confirm exit 0 and all
-   four checks pass.
+   eight checks pass.
 3. Bump the version to `N.M.P` in TWO places:
    - `pyproject.toml` line 7: `version = "N.M.P"`.
    - `src/horus_os/__init__.py`: `__version__ = "N.M.P"`.
