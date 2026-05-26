@@ -1,6 +1,6 @@
-"""Pre-tag release-quality gate for horus-os (Phase 39, REL-08, Pitfall 5 + 12).
+"""Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49).
 
-Runs FOUR checks before the maintainer cuts a tag:
+Runs EIGHT checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5):
 
 1. pricing-freshness: src/horus_os/observability/pricing.json
    `updated_at` is within HORUS_OS_PRICING_MAX_AGE_DAYS (default 14)
@@ -20,6 +20,32 @@ Runs FOUR checks before the maintainer cuts a tag:
 
 4. pytest: `python -m pytest -q` from the repo root exits 0.
 
+5. docs-drift (v0.5): the runtime ``MANIFEST_V1_SCHEMA`` (pydantic
+   model in ``src/horus_os/plugins/manifest.py``) dumped via
+   ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` is
+   byte-identical to the committed ``docs/manifest-v1.schema.json``.
+   Catches the case where a maintainer edits the runtime model but
+   forgets to regenerate the docs file via
+   ``scripts/build_manifest_schema.py``.
+
+6. plugin-install-smoke-ci (v0.5): the literal string
+   ``install-smoke-plugin`` appears in ``.github/workflows/ci.yml``.
+   Asserts the Phase 49 TEST-20 3-OS install-smoke matrix is wired.
+
+7. reference-plugin-manifest-valid (v0.5):
+   ``examples/horus-os-example-plugin/horus-plugin.toml`` parses
+   cleanly through ``validate_manifest()``. The reference plugin is
+   the contract surface plugin authors copy from; if it does not
+   validate, the documentation is broken.
+
+8. v0-4-fixture-roundtrip (v0.5):
+   ``tests/fixtures/v0_4_database.sqlite3`` survives the v5 -> v6
+   migration with the three plugin tables, two plugin_name columns,
+   and the ``idx_tool_invocations_plugin`` index present, and a
+   second ``init()`` call is idempotent. T-49-01 mitigation: the
+   committed fixture is NEVER mutated — the check copies to a
+   tempfile and unlinks in a finally block.
+
 Exit semantics: 0 only when all enabled checks pass; 1 when any
 check fails. The runner does NOT short-circuit on the first
 failure; it prints one diagnostic per failing check so the
@@ -35,10 +61,18 @@ Environment overrides:
   (used by tests/test_release_gate.py to stay hermetic).
 - HORUS_OS_CI_YML_PATH_OVERRIDE: substitute ci.yml path (used by
   tests/test_release_gate.py to stay hermetic).
+- HORUS_OS_DOCS_SCHEMA_PATH_OVERRIDE: substitute docs schema path
+  (v0.5; used by tests/test_release_gate_v0_5_checks.py for
+  mutation-driven negative-path coverage).
+- HORUS_OS_REFERENCE_PLUGIN_MANIFEST_PATH_OVERRIDE: substitute
+  reference plugin manifest path (v0.5).
+- HORUS_OS_V0_4_FIXTURE_PATH_OVERRIDE: substitute v0.4 fixture
+  path (v0.5).
 
 CLI flags:
 
-- --check {pricing,wheel,ci,tests}: run only the named check.
+- --check {pricing,wheel,ci,tests,docs-drift,plugin-install,
+  reference-manifest,fixture-roundtrip}: run only the named check.
 - --skip-build: skip the wheel build (alias for
   HORUS_OS_RELEASE_GATE_SKIP_BUILD=1).
 
@@ -49,15 +83,23 @@ docs/RELEASE.md `## Release procedure` and are user-confirmation
 gates.
 
 Pure stdlib (json, datetime, pathlib, subprocess, sys, os,
-argparse, zipfile, tempfile). The `build` package is invoked via
-subprocess so this script imports cleanly without it.
+argparse, zipfile, tempfile, difflib, shutil, sqlite3, importlib).
+The `build` package is invoked via subprocess so this script
+imports cleanly without it. The runtime ``horus_os`` package is
+lazy-imported only inside the v0.5 check functions that need it,
+mirroring the ``scripts/build_manifest_schema.py`` sys.path-insert
+idiom so the script runs from a clean checkout without an
+editable install.
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -71,10 +113,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PRICING_PATH = REPO_ROOT / "src" / "horus_os" / "observability" / "pricing.json"
 DEFAULT_CI_YML_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
+# v0.5 default paths
+DEFAULT_DOCS_SCHEMA_PATH = REPO_ROOT / "docs" / "manifest-v1.schema.json"
+DEFAULT_REFERENCE_PLUGIN_MANIFEST_PATH = (
+    REPO_ROOT / "examples" / "horus-os-example-plugin" / "horus-plugin.toml"
+)
+DEFAULT_V0_4_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "v0_4_database.sqlite3"
+
 DEFAULT_MAX_AGE_DAYS = 14
 
 CI_LITERAL_NO_OTEL = "install-smoke-no-otel"
 CI_LITERAL_WITH_OTEL = "install-smoke-with-otel"
+CI_LITERAL_PLUGIN_INSTALL_SMOKE = "install-smoke-plugin"
 
 PRICING_WHEEL_MEMBER_SUFFIX = "horus_os/observability/pricing.json"
 
@@ -105,6 +155,19 @@ def _read_max_age_days() -> int:
         return int(raw)
     except ValueError:
         return DEFAULT_MAX_AGE_DAYS
+
+
+def _ensure_src_on_path() -> None:
+    """Lazy sys.path insert mirroring scripts/build_manifest_schema.py:31-37.
+
+    The v0.5 checks lazy-import from ``horus_os.*`` so the script can
+    run on a clean checkout without an editable install. We avoid
+    inserting at module import time so the v0.4 checks (which never
+    touch horus_os) stay byte-identical to the v0.4 ImportTime profile.
+    """
+    src = REPO_ROOT / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
 
 
 def check_pricing_freshness(
@@ -262,6 +325,307 @@ def check_pytest_pass(repo_root: Path) -> CheckResult:
     )
 
 
+# ----------------------------------------------------------------------
+# v0.5 checks (Phase 49, REL-11)
+# ----------------------------------------------------------------------
+
+
+def check_docs_manifest_schema_drift(
+    schema_path: Path,
+    *,
+    runtime_schema_factory=None,
+) -> CheckResult:
+    """Pass when docs/manifest-v1.schema.json matches MANIFEST_V1_SCHEMA.
+
+    The runtime pydantic schema is dumped via
+    ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` —
+    byte-identical to the serializer in
+    ``scripts/build_manifest_schema.py:44`` so a maintainer running the
+    build script to fix drift produces a file the gate accepts.
+
+    The optional ``runtime_schema_factory`` kw lets tests inject a mock
+    runtime schema dict; production callers always pass it as None and
+    we lazy-import the real ``MANIFEST_V1_SCHEMA`` via the same
+    sys.path-insert idiom ``build_manifest_schema.py`` uses.
+    """
+    if not schema_path.exists():
+        return CheckResult(
+            name="docs-drift",
+            ok=False,
+            diagnostic=f"docs/manifest-v1.schema.json not found at {schema_path}",
+        )
+    try:
+        if runtime_schema_factory is not None:
+            schema = runtime_schema_factory()
+        else:
+            _ensure_src_on_path()
+            from horus_os.plugins.manifest import (
+                MANIFEST_V1_SCHEMA,
+            )
+
+            schema = MANIFEST_V1_SCHEMA.model_json_schema()
+    except Exception as exc:
+        return CheckResult(
+            name="docs-drift",
+            ok=False,
+            diagnostic=(f"could not load runtime MANIFEST_V1_SCHEMA: {type(exc).__name__}: {exc}"),
+        )
+    runtime_text = json.dumps(schema, indent=2, sort_keys=True) + "\n"
+    try:
+        committed_text = schema_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return CheckResult(
+            name="docs-drift",
+            ok=False,
+            diagnostic=f"could not read {schema_path}: {type(exc).__name__}: {exc}",
+        )
+    if committed_text == runtime_text:
+        return CheckResult(
+            name="docs-drift",
+            ok=True,
+            diagnostic=(
+                f"docs schema matches runtime MANIFEST_V1_SCHEMA ({len(runtime_text)} bytes)"
+            ),
+        )
+    diff_lines = list(
+        difflib.unified_diff(
+            committed_text.splitlines(),
+            runtime_text.splitlines(),
+            fromfile="committed",
+            tofile="runtime",
+            lineterm="",
+        )
+    )[:10]
+    return CheckResult(
+        name="docs-drift",
+        ok=False,
+        diagnostic=(
+            "docs/manifest-v1.schema.json drifted from MANIFEST_V1_SCHEMA; "
+            "regen via scripts/build_manifest_schema.py. Diff: " + " | ".join(diff_lines)
+        ),
+    )
+
+
+def check_plugin_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
+    """Pass when ci.yml literally contains 'install-smoke-plugin'.
+
+    Single grep — same shape as check_ci_two_variant_smoke_present but
+    for the Phase 49 TEST-20 contract. The job name MUST appear in the
+    YAML; if a future maintainer drops the matrix to "speed up CI," the
+    gate catches it before tagging.
+    """
+    if not ci_yml_path.exists():
+        return CheckResult(
+            name="plugin-install-smoke-ci",
+            ok=False,
+            diagnostic=f"ci.yml not found at {ci_yml_path}",
+        )
+    text = ci_yml_path.read_text(encoding="utf-8")
+    if CI_LITERAL_PLUGIN_INSTALL_SMOKE not in text:
+        return CheckResult(
+            name="plugin-install-smoke-ci",
+            ok=False,
+            diagnostic=(
+                f"install-smoke-plugin job missing from {ci_yml_path}; TEST-20 contract violated"
+            ),
+        )
+    return CheckResult(
+        name="plugin-install-smoke-ci",
+        ok=True,
+        diagnostic="install-smoke-plugin job present",
+    )
+
+
+def check_reference_plugin_manifest_valid(manifest_path: Path) -> CheckResult:
+    """Pass when the reference plugin's horus-plugin.toml parses cleanly.
+
+    Lazy-imports ``validate_manifest`` so the script imports without an
+    editable install. Catches ANY exception (not just the pydantic
+    ValidationError shape) so the gate is robust to future
+    refactors of the manifest module.
+    """
+    if not manifest_path.exists():
+        return CheckResult(
+            name="reference-plugin-manifest-valid",
+            ok=False,
+            diagnostic=f"reference plugin manifest not found at {manifest_path}",
+        )
+    try:
+        toml_bytes = manifest_path.read_bytes()
+    except OSError as exc:
+        return CheckResult(
+            name="reference-plugin-manifest-valid",
+            ok=False,
+            diagnostic=f"could not read {manifest_path}: {type(exc).__name__}: {exc}",
+        )
+    try:
+        _ensure_src_on_path()
+        from horus_os.plugins.manifest import validate_manifest
+
+        spec = validate_manifest(toml_bytes)
+    except Exception as exc:
+        return CheckResult(
+            name="reference-plugin-manifest-valid",
+            ok=False,
+            diagnostic=(f"reference plugin manifest invalid: {type(exc).__name__}: {exc}"),
+        )
+    return CheckResult(
+        name="reference-plugin-manifest-valid",
+        ok=True,
+        diagnostic=f"manifest validates as plugin={spec.name} v{spec.version}",
+    )
+
+
+def check_v0_4_fixture_roundtrip(fixture_path: Path) -> CheckResult:
+    """Pass when the v0.4 fixture survives the v5 -> v6 migration.
+
+    T-49-01 mitigation: copies the committed fixture to a tempfile
+    BEFORE calling Database.init(); the source file is read-only and
+    byte-identical pre/post check. The tempfile is unlinked in a
+    finally block.
+
+    The check asserts five v6 invariants after init():
+      * llm_calls.plugin_name column exists
+      * tool_invocations.plugin_name column exists
+      * plugins table exists
+      * plugin_capabilities table exists
+      * plugin_status table exists
+      * idx_tool_invocations_plugin index exists
+
+    Plus one idempotency invariant: a second init() call must not
+    raise.
+    """
+    if not fixture_path.exists():
+        return CheckResult(
+            name="v0-4-fixture-roundtrip",
+            ok=False,
+            diagnostic=f"v0.4 fixture not found at {fixture_path}",
+        )
+    tmp_path: Path | None = None
+    try:
+        # Create a tempfile + copy; never mutate the source.
+        with tempfile.NamedTemporaryFile(
+            suffix=".sqlite3", delete=False, prefix="release-gate-v0-4-"
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            shutil.copy(fixture_path, tmp_path)
+        except OSError as exc:
+            return CheckResult(
+                name="v0-4-fixture-roundtrip",
+                ok=False,
+                diagnostic=f"could not copy fixture: {type(exc).__name__}: {exc}",
+            )
+
+        try:
+            _ensure_src_on_path()
+            from horus_os.storage import Database
+
+            db = Database(tmp_path)
+            db.init()
+        except Exception as exc:
+            return CheckResult(
+                name="v0-4-fixture-roundtrip",
+                ok=False,
+                diagnostic=(
+                    f"Database.init() raised on v0.4 fixture copy: {type(exc).__name__}: {exc}"
+                ),
+            )
+
+        # Introspect the upgraded schema.
+        try:
+            conn = sqlite3.connect(str(tmp_path))
+            conn.row_factory = sqlite3.Row
+            llm_cols = {r["name"] for r in conn.execute("PRAGMA table_info(llm_calls)").fetchall()}
+            ti_cols = {
+                r["name"] for r in conn.execute("PRAGMA table_info(tool_invocations)").fetchall()
+            }
+            tables = {
+                r["name"]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            indexes = {
+                r["name"]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index'"
+                ).fetchall()
+            }
+            conn.close()
+        except sqlite3.DatabaseError as exc:
+            return CheckResult(
+                name="v0-4-fixture-roundtrip",
+                ok=False,
+                diagnostic=(
+                    f"sqlite introspection failed on upgraded fixture: {type(exc).__name__}: {exc}"
+                ),
+            )
+
+        missing: list[str] = []
+        if "plugin_name" not in llm_cols:
+            missing.append("llm_calls.plugin_name column")
+        if "plugin_name" not in ti_cols:
+            missing.append("tool_invocations.plugin_name column")
+        for required_table in ("plugins", "plugin_capabilities", "plugin_status"):
+            if required_table not in tables:
+                missing.append(f"{required_table} table")
+        if "idx_tool_invocations_plugin" not in indexes:
+            missing.append("idx_tool_invocations_plugin index")
+        # Also assert llm_calls / tool_invocations themselves exist
+        # (the fixture must have had them at v5; a SQLite file lacking
+        # them is not a v0.4 baseline at all).
+        if "llm_calls" not in tables:
+            missing.append("llm_calls table (fixture is not a v0.4 baseline)")
+        if "tool_invocations" not in tables:
+            missing.append("tool_invocations table (fixture is not a v0.4 baseline)")
+
+        if missing:
+            return CheckResult(
+                name="v0-4-fixture-roundtrip",
+                ok=False,
+                diagnostic=(
+                    f"v5 -> v6 migration left fixture incomplete; missing: {', '.join(missing)}"
+                ),
+            )
+
+        # Idempotency: second init() must not raise.
+        try:
+            Database(tmp_path).init()
+        except Exception as exc:
+            return CheckResult(
+                name="v0-4-fixture-roundtrip",
+                ok=False,
+                diagnostic=(
+                    f"second Database.init() raised (idempotency broken): "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            )
+
+        return CheckResult(
+            name="v0-4-fixture-roundtrip",
+            ok=True,
+            diagnostic=(
+                "v5->v6 migration green: 2 plugin_name cols + "
+                "3 plugin tables + 1 plugin index present; "
+                "second init idempotent"
+            ),
+        )
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            # WAL companions (sqlite leaves -wal and -shm files).
+            for suffix in ("-wal", "-shm"):
+                companion = tmp_path.with_suffix(tmp_path.suffix + suffix)
+                try:
+                    companion.unlink()
+                except OSError:
+                    pass
+
+
 def _print_result(result: CheckResult) -> None:
     if result.ok is True:
         print(f"OK    {result.name}: {result.diagnostic}")
@@ -285,14 +649,44 @@ def _resolved_ci_yml_path() -> Path:
     return DEFAULT_CI_YML_PATH
 
 
+def _resolved_docs_schema_path() -> Path:
+    override = os.environ.get("HORUS_OS_DOCS_SCHEMA_PATH_OVERRIDE")
+    if override:
+        return Path(override)
+    return DEFAULT_DOCS_SCHEMA_PATH
+
+
+def _resolved_reference_plugin_manifest_path() -> Path:
+    override = os.environ.get("HORUS_OS_REFERENCE_PLUGIN_MANIFEST_PATH_OVERRIDE")
+    if override:
+        return Path(override)
+    return DEFAULT_REFERENCE_PLUGIN_MANIFEST_PATH
+
+
+def _resolved_v0_4_fixture_path() -> Path:
+    override = os.environ.get("HORUS_OS_V0_4_FIXTURE_PATH_OVERRIDE")
+    if override:
+        return Path(override)
+    return DEFAULT_V0_4_FIXTURE_PATH
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Run the four release-gate checks. Return 0 on full pass, 1 on any fail."""
+    """Run the eight release-gate checks. Return 0 on full pass, 1 on any fail."""
     parser = argparse.ArgumentParser(
         description="Pre-tag release-quality gate for horus-os.",
     )
     parser.add_argument(
         "--check",
-        choices=("pricing", "wheel", "ci", "tests"),
+        choices=(
+            "pricing",
+            "wheel",
+            "ci",
+            "tests",
+            "docs-drift",
+            "plugin-install",
+            "reference-manifest",
+            "fixture-roundtrip",
+        ),
         default=None,
         help="Run only the named check.",
     )
@@ -309,6 +703,9 @@ def main(argv: list[str] | None = None) -> int:
     selected = args.check
     pricing_path = _resolved_pricing_path()
     ci_yml_path = _resolved_ci_yml_path()
+    docs_schema_path = _resolved_docs_schema_path()
+    reference_plugin_manifest_path = _resolved_reference_plugin_manifest_path()
+    v0_4_fixture_path = _resolved_v0_4_fixture_path()
     max_age = _read_max_age_days()
 
     results: list[CheckResult] = []
@@ -342,6 +739,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             results.append(check_pytest_pass(REPO_ROOT))
+
+    # v0.5 checks
+    if selected in (None, "docs-drift"):
+        results.append(check_docs_manifest_schema_drift(docs_schema_path))
+
+    if selected in (None, "plugin-install"):
+        results.append(check_plugin_install_smoke_ci_present(ci_yml_path))
+
+    if selected in (None, "reference-manifest"):
+        results.append(check_reference_plugin_manifest_valid(reference_plugin_manifest_path))
+
+    if selected in (None, "fixture-roundtrip"):
+        results.append(check_v0_4_fixture_roundtrip(v0_4_fixture_path))
 
     for result in results:
         _print_result(result)
