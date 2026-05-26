@@ -11,18 +11,18 @@ An open-source, self-hosted autonomous AI command center.
 
 ## Project status
 
-**Public, but not currently accepting outside contributions.**
+**Solo dev mode. Outside PRs are not merged. Issue claims are not honored.**
 
-`horus-os` was open-sourced out of a working private command center the maintainer has been building for personal use. The repo is public for transparency and to share the design openly, but the project is in a **solo development phase** right now. Pull requests from outside the maintainer will not be merged at this time, and "I'd like to claim this issue" comments will not be assigned. This is to keep moving fast through the early milestones and to avoid pulling in code before a real contributor-vetting and automated-review pipeline is in place.
+The full timeline, the gate for when this changes, and the canonical "what's shipped and what's next" view live in [STATUS.md](STATUS.md). Read that first.
 
-When that changes, this section will say so. Until then:
+The short version:
 
-- **You can:** read the code, file issues to report bugs or suggest features, open Discussions for design questions, watch / star to follow along.
-- **Please don't:** open PRs against this repo, comment "working on it" on issues, or assume an issue is yours because nobody else has commented.
+- `horus-os` was open-sourced out of a working private command center. The repo is public for transparency, not because the contribution flow is open.
+- Pull requests from forks are acknowledged and closed without review until the **private PR-review pipeline** ships. Earliest milestone for private: **v0.6**. Not promised, not scheduled.
+- Issue claim comments ("on it", "working on this", "claim this", "assign to me") are not honored. The maintainer holds the queue and assigns all work internally. An automation will reply to common claim phrasing pointing you at [STATUS.md](STATUS.md); apologies in advance for the canned tone.
+- Star or watch to follow along. File bug reports when you hit one. Open Discussions for design questions. Run `horus-os` locally and write up real-use feedback. That feedback is the single most valuable outside contribution today.
 
-If you are interested in collaborating once the project opens up, the most useful thing you can do today is run `horus-os` locally and write up what worked and what didn't in a GitHub Discussion. Real use feedback is the most valuable input at this stage.
-
-Current version: **v0.3.0** (2026-05-24). See `CHANGELOG.md` for the diff and `ROADMAP.md` for what's next (v0.4 Observability in planning).
+Current release: **v0.3.0** (2026-05-24). Active milestone: v0.4 Observability (planning). See [STATUS.md](STATUS.md), [CHANGELOG.md](CHANGELOG.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Quickstart
 

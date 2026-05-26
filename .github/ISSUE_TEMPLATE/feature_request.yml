@@ -6,6 +6,27 @@ body:
   - type: markdown
     attributes:
       value: |
+        ### Heads-up: this repo is not accepting outside PRs yet
+
+        Filing this feature request does **not** reserve the work
+        for you. The maintainer holds the queue and assigns all
+        work internally. Issue-claim comments ("on it", "claim
+        this", "assign to me") are not honored, and an automation
+        will reply to common claim phrasing.
+
+        See
+        [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
+        for the project timeline and the gate for when outside
+        contributions open (private PR-review pipeline; earliest
+        v0.6, not promised).
+
+        Open-ended design questions belong in a Discussion, not
+        an issue. Use this template only for concrete proposals
+        scoped to the current `ROADMAP.md`.
+
+  - type: markdown
+    attributes:
+      value: |
         Thanks for the proposal. Before filing, please read
         `PROJECT.md` and `ROADMAP.md` to confirm your idea fits the
         project's scope and current direction.
