@@ -1,0 +1,12 @@
+{
+  "samples": [
+    {
+      "os": "darwin",
+      "python": "3.12",
+      "horus_os_version": "0.3.0",
+      "median_3_iteration_loop_ms": 0.005,
+      "n_samples": 20,
+      "captured_at": "2026-05-26T02:01:28.949276Z"
+    }
+  ]
+}
