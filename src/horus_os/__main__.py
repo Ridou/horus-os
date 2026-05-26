@@ -8,7 +8,15 @@ from pathlib import Path
 from typing import TextIO
 
 from horus_os import __version__
-from horus_os.cli import run_agents, run_init, run_run, run_serve, run_traces, run_usage
+from horus_os.cli import (
+    run_agents,
+    run_init,
+    run_plugins,
+    run_run,
+    run_serve,
+    run_traces,
+    run_usage,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -214,6 +222,193 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the platform default data directory.",
     )
     delete_p.set_defaults(func=run_agents, agents_command="delete")
+
+    plugins_p = sub.add_parser("plugins", help="Manage installed plugins")
+    plugins_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    plugins_p.set_defaults(func=run_plugins)
+    plugins_sub = plugins_p.add_subparsers(
+        dest="plugins_command", metavar="<operation>"
+    )
+
+    pi_install = plugins_sub.add_parser(
+        "install", help="Install a plugin from a pip spec"
+    )
+    pi_install.add_argument(
+        "spec",
+        help="A pip-installable spec: PyPI name, ./path, or git+https URL",
+    )
+    pi_install.add_argument(
+        "--allow-sdist",
+        action="store_true",
+        dest="allow_sdist",
+        help=(
+            "Permit sdist installs (runs setup.py BEFORE manifest validation; "
+            "Pitfall 4 mode 5). Not recommended."
+        ),
+    )
+    pi_install.add_argument(
+        "--allow-system-python",
+        action="store_true",
+        dest="allow_system_python",
+        help="Permit install outside a venv (Pitfall 4; not recommended).",
+    )
+    pi_install.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        dest="yes",
+        help="Auto-grant every requested capability without prompting.",
+    )
+    pi_install.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_install.set_defaults(func=run_plugins, plugins_command="install")
+
+    pi_uninstall = plugins_sub.add_parser(
+        "uninstall", help="Uninstall an installed plugin"
+    )
+    pi_uninstall.add_argument("name", help="Plugin name (e.g. 'horus-example-foo')")
+    pi_uninstall.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        dest="yes",
+        help="Skip the confirmation prompt.",
+    )
+    pi_uninstall.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_uninstall.set_defaults(func=run_plugins, plugins_command="uninstall")
+
+    pi_list = plugins_sub.add_parser(
+        "list", help="List installed plugins (table or --json)"
+    )
+    pi_list.add_argument(
+        "--json",
+        action="store_true",
+        dest="json",
+        help="Emit machine-readable JSON instead of a table.",
+    )
+    pi_list.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_list.set_defaults(func=run_plugins, plugins_command="list")
+
+    pi_info = plugins_sub.add_parser(
+        "info", help="Show detailed info for one installed plugin"
+    )
+    pi_info.add_argument("name", help="Plugin name")
+    pi_info.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_info.set_defaults(func=run_plugins, plugins_command="info")
+
+    pi_enable = plugins_sub.add_parser(
+        "enable", help="Enable an installed plugin (plugins.enabled = 1)"
+    )
+    pi_enable.add_argument("name", help="Plugin name")
+    pi_enable.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_enable.set_defaults(func=run_plugins, plugins_command="enable")
+
+    pi_disable = plugins_sub.add_parser(
+        "disable", help="Disable an installed plugin (plugins.enabled = 0)"
+    )
+    pi_disable.add_argument("name", help="Plugin name")
+    pi_disable.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_disable.set_defaults(func=run_plugins, plugins_command="disable")
+
+    pi_update = plugins_sub.add_parser(
+        "update",
+        help="Update an installed plugin (runs the upgrade-diff classifier)",
+    )
+    pi_update.add_argument("name", help="Plugin name")
+    pi_update.add_argument(
+        "spec",
+        help="A pip-installable spec for the new version",
+    )
+    pi_update.add_argument(
+        "--allow-sdist",
+        action="store_true",
+        dest="allow_sdist",
+        help="Permit sdist updates. Not recommended.",
+    )
+    pi_update.add_argument(
+        "--allow-system-python",
+        action="store_true",
+        dest="allow_system_python",
+        help="Permit update outside a venv.",
+    )
+    pi_update.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        dest="yes",
+        help="Auto-grant expanded capabilities without prompting.",
+    )
+    pi_update.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_update.set_defaults(func=run_plugins, plugins_command="update")
+
+    pi_grant = plugins_sub.add_parser(
+        "grant", help="Grant a capability to an installed plugin"
+    )
+    pi_grant.add_argument("name", help="Plugin name")
+    pi_grant.add_argument(
+        "capability", help="Capability string (e.g. 'filesystem.read')"
+    )
+    pi_grant.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_grant.set_defaults(func=run_plugins, plugins_command="grant")
+
+    pi_revoke = plugins_sub.add_parser(
+        "revoke", help="Revoke a capability from an installed plugin"
+    )
+    pi_revoke.add_argument("name", help="Plugin name")
+    pi_revoke.add_argument(
+        "capability", help="Capability string (e.g. 'filesystem.read')"
+    )
+    pi_revoke.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    pi_revoke.set_defaults(func=run_plugins, plugins_command="revoke")
 
     usage_p = sub.add_parser("usage", help="Print usage report (cost, latency, tool reliability)")
     usage_p.add_argument(
