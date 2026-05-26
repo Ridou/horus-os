@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -35,6 +36,7 @@ from horus_os.memory.tools import (
     search_notes_tool,
 )
 from horus_os.observability import SQLitePersister, get_observation_bus
+from horus_os.observability.bus import RunEndEvent
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -298,6 +300,11 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         notes_store = NotesStore(cfg.notes_dir, on_write=lambda w: _persist_write(db, w))
         registry = _build_default_registry(cfg, notes_store)
         tool_log: list[ToolResult] = []
+        # Phase 33: pre-generate the trace_id so the same id flows into
+        # the LLMCallEvents published inside run_agent_loop, the traces
+        # row record_trace writes, and the RunEndEvent that triggers the
+        # rollup UPDATE.
+        _trace_id = uuid.uuid4().hex
         start = time.perf_counter()
         try:
             result = run_agent_loop(
@@ -307,24 +314,34 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 model=model,
                 max_iterations=max_iterations,
                 on_tool_result=tool_log.append,
+                trace_id=_trace_id,
             )
         except Exception as exc:
             latency_ms = int((time.perf_counter() - start) * 1000)
-            trace_id = db.record_trace(
+            db.record_trace(
                 prompt,
                 AgentResult(text="", provider=provider, model=model),
                 latency_ms=latency_ms,
                 status="error",
                 error_message=f"{type(exc).__name__}: {exc}",
+                trace_id=_trace_id,
+            )
+            # RunEndEvent fires AFTER record_trace so the persister's
+            # UPDATE matches the row we just inserted.
+            get_observation_bus().publish(
+                RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms)
             )
             raise HTTPException(
-                500, detail={"error": f"{type(exc).__name__}: {exc}", "trace_id": trace_id}
+                500, detail={"error": f"{type(exc).__name__}: {exc}", "trace_id": _trace_id}
             ) from exc
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        trace_id = db.record_trace(prompt, result, latency_ms=latency_ms)
+        db.record_trace(prompt, result, latency_ms=latency_ms, trace_id=_trace_id)
+        # RunEndEvent fires AFTER record_trace so the persister's UPDATE
+        # matches the row we just inserted.
+        get_observation_bus().publish(RunEndEvent(trace_id=_trace_id, latency_ms=latency_ms))
         return {
-            "trace_id": trace_id,
+            "trace_id": _trace_id,
             "result": _agent_result_to_dict(result),
             "tool_log": [asdict(r) for r in tool_log],
             "latency_ms": latency_ms,
