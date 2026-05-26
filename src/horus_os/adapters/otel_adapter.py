@@ -68,6 +68,7 @@ from horus_os.observability import (
     ObservationEvent,
     get_observation_bus,
 )
+from horus_os.observability.redact import redact
 
 if TYPE_CHECKING:
     # Type-only imports never execute at runtime; bare `pip install
@@ -274,5 +275,21 @@ class OtelAdapter:
             # capture contract.
             if event.status == "error" and event.error_type is not None:
                 span.set_attribute(ERROR_TYPE, event.error_type)
+            # OTEL-04 opt-in body capture (Pitfall 7). Off by default;
+            # even when on, the redactor allowlist strips secrets
+            # BEFORE the attribute is set. ONLY exact lowercase "true"
+            # flips the bit; any other value (including "1", "yes",
+            # "TRUE") leaves default-deny in place so a typo cannot
+            # silently leak content.
+            if os.environ.get(CAPTURE_CONTENT_ENV) == "true":
+                # event.error_message is the only field this branch
+                # can attach in Phase 38; Phase 33's capture contract
+                # keeps it class-name-only in practice, so the
+                # redactor runs as defence-in-depth. The attribute
+                # key is hard-coded INLINE here so the default-deny
+                # path has no shared constant to reach by accident.
+                if event.error_message is not None:
+                    redacted = redact(event.error_message)
+                    span.set_attribute("gen_ai.output.messages", redacted)
             if self._context is not None:
                 self._context.registry.touch(self.name)
