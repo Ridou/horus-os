@@ -71,6 +71,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "horus_os.server" = ["static/*.html", "static/*.css", "static/*.js"]
+"horus_os.observability" = ["pricing.json"]
 
 [tool.ruff]
 line-length = 100
