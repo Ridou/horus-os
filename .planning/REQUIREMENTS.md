@@ -424,13 +424,13 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | BASELINE-02 | 40 | Complete |
-| MANIFEST-01 | 41 | Pending |
-| MANIFEST-02 | 41 | Pending |
-| MANIFEST-03 | 41 | Pending |
-| MANIFEST-04 | 41 | Pending |
-| MANIFEST-05 | 41 | Pending |
-| OBSERVE-01 | 41 | Pending |
-| MIG-05 | 41 | Pending |
+| MANIFEST-01 | 41 | Complete |
+| MANIFEST-02 | 41 | Complete |
+| MANIFEST-03 | 41 | Complete |
+| MANIFEST-04 | 41 | Complete |
+| MANIFEST-05 | 41 | Complete |
+| OBSERVE-01 | 41 | Complete |
+| MIG-05 | 41 | Complete |
 | DISCOVERY-01 | 42 | Pending |
 | DISCOVERY-02 | 42 | Pending |
 | ISOLATE-04 | 42 | Pending |
