@@ -62,6 +62,7 @@ from horus_os.plugins import (
     PluginRegistry,
     discover_plugins,
 )
+from horus_os.server.plugins_api import router as plugins_router
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -354,6 +355,11 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     app.state.adapter_registry = _registry
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
+    # Phase 45: the new plugins_api router resolves Config per-request
+    # via Config.load(app.state.data_dir). Storing the resolved data_dir
+    # here lets the router stay decoupled from the create_app closure
+    # while still honoring the tmp_path-injected data_dir in tests.
+    app.state.data_dir = _resolved_data_dir
     # Phase 42: plugin pipeline already ran above (before the lifespan
     # was constructed) so the registry is fully populated by the time
     # FastAPI starts serving. Exposed on app.state for the upcoming
@@ -975,6 +981,13 @@ def create_app(data_dir: str | Path | None = None) -> Any:
             _registry.mark_error(_adapter.name, f"{type(exc).__name__}: {exc}")
             continue
         _registry.mark_running(_adapter.name)
+
+    # Phase 45: mount the /api/plugins/* + /api/observability/plugins
+    # router. Lives in a dedicated module so api.py stays under 1200
+    # lines. Mounted AFTER the adapter bind loop so it shares the same
+    # boot-order contract -- all routes are wired before the first
+    # request can hit them.
+    app.include_router(plugins_router)
 
     return app
 
