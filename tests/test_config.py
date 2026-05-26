@@ -10,6 +10,62 @@ import pytest
 from horus_os import Config
 from horus_os.config import CONFIG_FILENAME
 
+# ---------------------------------------------------------------------------
+# Phase 34 Task 1: pricing_path field + HORUS_OS_PRICING_PATH env override +
+# [pricing] TOML table override.
+# ---------------------------------------------------------------------------
+
+
+def test_pricing_path_defaults_to_none(tmp_path: Path) -> None:
+    cfg = Config.with_defaults(tmp_path)
+    assert cfg.pricing_path is None
+
+
+def test_pricing_path_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    override = tmp_path / "custom_pricing.json"
+    monkeypatch.setenv("HORUS_OS_PRICING_PATH", str(override))
+    cfg = Config.load(tmp_path)
+    assert cfg.pricing_path == override
+
+
+def test_pricing_path_toml_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HORUS_OS_PRICING_PATH", raising=False)
+    toml_pricing = tmp_path / "from_toml.json"
+    contents = "[pricing]\n" f'path = "{toml_pricing.as_posix()}"\n'
+    (tmp_path / CONFIG_FILENAME).write_text(contents)
+    cfg = Config.load(tmp_path)
+    assert cfg.pricing_path == toml_pricing
+
+
+def test_pricing_path_env_beats_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env_pricing = tmp_path / "from_env.json"
+    toml_pricing = tmp_path / "from_toml.json"
+    monkeypatch.setenv("HORUS_OS_PRICING_PATH", str(env_pricing))
+    contents = "[pricing]\n" f'path = "{toml_pricing.as_posix()}"\n'
+    (tmp_path / CONFIG_FILENAME).write_text(contents)
+    cfg = Config.load(tmp_path)
+    assert cfg.pricing_path == env_pricing
+
+
+def test_save_omits_pricing_table_when_none(tmp_path: Path) -> None:
+    cfg = Config.with_defaults(tmp_path)
+    assert cfg.pricing_path is None
+    cfg.save()
+    dumped = (tmp_path / CONFIG_FILENAME).read_text()
+    assert "[pricing]" not in dumped
+
+
+def test_save_round_trips_pricing_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HORUS_OS_PRICING_PATH", raising=False)
+    custom = tmp_path / "round_trip_pricing.json"
+    cfg = Config.with_defaults(tmp_path)
+    cfg.pricing_path = custom
+    cfg.save()
+    loaded = Config.load(tmp_path)
+    assert loaded.pricing_path == custom
+
 
 def test_with_defaults_under_given_dir(tmp_path: Path) -> None:
     config = Config.with_defaults(tmp_path)
