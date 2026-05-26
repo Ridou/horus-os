@@ -36,6 +36,100 @@ def test_agents_list_returns_default_after_init(tmp_path: Path) -> None:
     assert row["allowed_tools"] is None
     assert row["last_activity_at"] is None
     assert row["system_prompt"]
+    # Phase 35 DASH-4-04 extension: rollup fields default to zero/null when the
+    # agent has no in-window runs.
+    assert row["total_runs"] == 0
+    assert row["total_cost_usd"] is None
+    assert row["latency_p50_ms"] is None
+    assert row["latency_p95_ms"] is None
+    assert row["uncosted_runs"] == 0
+
+
+def test_agents_list_preserves_existing_v0_3_keys(tmp_path: Path) -> None:
+    """Backward-compat: every key the v0.3 surface returned MUST still be present."""
+    _init_db(tmp_path)
+    response = _client(tmp_path).get("/api/agents")
+    row = response.json()["agents"][0]
+    for key in (
+        "name",
+        "system_prompt",
+        "default_model",
+        "allowed_tools",
+        "memory_scope",
+        "created_at",
+        "updated_at",
+        "last_activity_at",
+    ):
+        assert key in row, f"missing pre-existing key {key!r}"
+
+
+def test_agents_list_pre_v0_4_rows_render_null_cost(tmp_path: Path) -> None:
+    """Pitfall 11: a synthetic pre-v0.4 trace (total_cost_usd NULL) surfaces as
+    total_runs=1, total_cost_usd is None, uncosted_runs=1. NEVER zero dollars."""
+    import sqlite3
+    import uuid
+    from datetime import UTC, datetime
+
+    db = _init_db(tmp_path)
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    with sqlite3.connect(str(db.path)) as conn:
+        conn.execute(
+            "INSERT INTO traces "
+            "(trace_id, created_at, provider, model, prompt, response_text, "
+            "agent_profile_name, total_input_tokens, total_output_tokens, "
+            "total_cost_usd, total_duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)",
+            (
+                uuid.uuid4().hex,
+                now_iso,
+                "anthropic",
+                "claude-sonnet-4-6",
+                "p",
+                "r",
+                "default",
+            ),
+        )
+    response = _client(tmp_path).get("/api/agents")
+    row = next(r for r in response.json()["agents"] if r["name"] == "default")
+    assert row["total_runs"] == 1
+    assert row["total_cost_usd"] is None  # JSON null, NOT 0
+    assert row["uncosted_runs"] == 1
+
+
+def test_agents_list_mixed_v0_3_and_v0_4_rows(tmp_path: Path) -> None:
+    """A v0.4 trace at 0.005 + a pre-v0.4 NULL trace -> total_runs=2,
+    total_cost_usd=0.005 (sum of non-NULL), uncosted_runs=1."""
+    import sqlite3
+    import uuid
+    from datetime import UTC, datetime
+
+    db = _init_db(tmp_path)
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    with sqlite3.connect(str(db.path)) as conn:
+        for cost in (0.005, None):
+            conn.execute(
+                "INSERT INTO traces "
+                "(trace_id, created_at, provider, model, prompt, response_text, "
+                "agent_profile_name, total_input_tokens, total_output_tokens, "
+                "total_cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    uuid.uuid4().hex,
+                    now_iso,
+                    "anthropic",
+                    "claude-sonnet-4-6",
+                    "p",
+                    "r",
+                    "default",
+                    100,
+                    50,
+                    cost,
+                ),
+            )
+    response = _client(tmp_path).get("/api/agents")
+    row = next(r for r in response.json()["agents"] if r["name"] == "default")
+    assert row["total_runs"] == 2
+    assert row["total_cost_usd"] == 0.005
+    assert row["uncosted_runs"] == 1
 
 
 def test_agents_list_503_when_db_missing(tmp_path: Path) -> None:
