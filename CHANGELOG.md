@@ -4,7 +4,9 @@ All notable changes to horus-os are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - YYYY-MM-DD
+## [Unreleased]
+
+## [0.5.0] - 2026-05-26
 
 Fifth alpha. Adds a third-party plugin system on top of the v0.4
 observability substrate. Plugins are Python packages that ship a
