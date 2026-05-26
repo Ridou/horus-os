@@ -1,0 +1,6 @@
+# intentionally invalid TOML — TEST-19 fixture for error_phase="discover"
+# the unterminated string literal below causes tomllib.loads to raise
+# TOMLDecodeError immediately at parse time.
+manifest_version = 1
+name = "bad-toml
+version = "0.1.0"

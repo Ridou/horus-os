@@ -1,0 +1,18 @@
+# Valid manifest. The Python module imports cleanly; the tool factory
+# (make_tool) raises ValueError when called during PluginLoader.load().
+# Surfaces as error_phase="load" with the factory's error message
+# captured verbatim in PluginLoadResult.error.
+#
+# TEST-19 fixture for the discover-passes + import-passes + factory-fails path.
+manifest_version = 1
+name = "tool-raises-registration"
+version = "0.1.0"
+description = "tool_raises_registration fixture: factory raises ValueError"
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["filesystem.read"]
+
+[[contributions.tools]]
+name = "tool_raises_registration_tool"
+entry_point = "tests.fixtures.broken_plugins.tool_raises_registration:make_tool"

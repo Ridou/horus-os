@@ -1,0 +1,16 @@
+# Valid manifest. The Python module at
+# tests.fixtures.broken_plugins.import_raises raises RuntimeError at
+# module-import time, so PluginLoader.load() fails at error_phase="load".
+# TEST-19 fixture for the discover-passes-but-load-fails path.
+manifest_version = 1
+name = "import-raises"
+version = "0.1.0"
+description = "import_raises fixture: module raises RuntimeError at import"
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["filesystem.read"]
+
+[[contributions.tools]]
+name = "import_raises_tool"
+entry_point = "tests.fixtures.broken_plugins.import_raises:make_tool"

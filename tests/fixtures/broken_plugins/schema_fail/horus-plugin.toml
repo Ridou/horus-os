@@ -1,0 +1,13 @@
+# Valid TOML; fails MANIFEST_V1_SCHEMA validator because the
+# capability "gpu.cuda_access" is not a member of the closed
+# Capability StrEnum catalog. Mirrors the
+# manifest_v1_unknown_capability.toml fixture from Phase 41.
+# TEST-19 fixture for error_phase="validate".
+manifest_version = 1
+name = "schema-fail"
+version = "0.1.0"
+description = "schema_fail fixture: declares an unknown capability"
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["gpu.cuda_access"]

@@ -1,0 +1,16 @@
+# Valid manifest. The Python module imports cleanly and make_tool
+# returns a working Tool. The control fixture for TEST-19: proves
+# that a healthy plugin still loads in the same discovery+load pass
+# as the four broken fixtures — the isolation guarantee.
+manifest_version = 1
+name = "healthy"
+version = "0.1.0"
+description = "healthy fixture: control plugin that loads cleanly"
+author = "horus-os contributors"
+license = "Apache-2.0"
+horus_os_compat = ">=0.5,<0.6"
+capabilities = ["filesystem.read"]
+
+[[contributions.tools]]
+name = "hello_tool"
+entry_point = "tests.fixtures.broken_plugins.healthy:make_tool"

@@ -52,6 +52,11 @@ from horus_os.observability.queries import (
     parse_window,
     tool_reliability,
 )
+from horus_os.plugins import (
+    PluginLoader,
+    PluginRegistry,
+    discover_plugins,
+)
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -86,6 +91,85 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         registry=_registry,
         tool_registry=_app_tool_registry,
     )
+
+    # Phase 42 wiring: discover + validate + (permission-stub) + load
+    # third-party plugins into the master ToolRegistry / AdapterRegistry.
+    # Each failure (DiscoveryError, validate failure, load failure) is
+    # routed to plugin_registry.mark_error and the loop continues —
+    # broken plugins NEVER crash lifespan startup (ISOLATE-01).
+    #
+    # The Start phase (Pattern 2 phase E in ARCHITECTURE.md) lands in
+    # Phase 43 with bounded asyncio.wait_for(start, timeout=2.0) here.
+    # Phase 43 also swaps the CapabilityGuard pass-through stub for
+    # real default-deny enforcement (PERMISSION-01..04).
+    _plugin_db: Database | None = None
+    try:
+        _plugin_db_path = Config.load(_resolved_data_dir).db_path
+        if _plugin_db_path.exists():
+            _plugin_db = Database(_plugin_db_path)
+    except Exception:
+        _plugin_db = None
+    _plugin_registry = PluginRegistry(db=_plugin_db)
+    _plugin_loader = PluginLoader(
+        tool_registry=_app_tool_registry,
+        adapter_registry=_registry,
+    )
+    try:
+        _plugin_specs, _plugin_discovery_errors = discover_plugins()
+    except Exception:
+        # discover_plugins() is contracted to never raise out, but the
+        # belt-and-suspenders catch here honors ISOLATE-01 if the
+        # contract ever drifts.
+        _plugin_specs, _plugin_discovery_errors = [], []
+    for _err in _plugin_discovery_errors:
+        try:
+            _plugin_registry.register_discovery_error(
+                _err.name,
+                source=_err.source,
+                source_detail=_err.source_detail,
+                error_phase=_err.error_phase,
+                error_message=_err.error_message,
+            )
+        except Exception:
+            # A registry mutator must not crash startup.
+            continue
+    for _spec in _plugin_specs:
+        try:
+            _plugin_registry.register(_spec)
+        except Exception as _exc:
+            _plugin_registry.register_discovery_error(
+                _spec.name,
+                source=_spec.source,
+                source_detail=_spec.source_detail,
+                error_phase="validate",
+                error_message=f"{type(_exc).__name__}: {_exc}",
+            )
+            continue
+        # Phase 43 inserts the permission gate here:
+        # if not _permission_gate.check(_spec):
+        #     _plugin_registry.mark_error(_spec.name, "permission", ...)
+        #     continue
+        try:
+            _result = _plugin_loader.load(_spec)
+        except Exception as _exc:
+            # PluginLoader.load() must never raise; this catch is the
+            # belt-and-suspenders ISOLATE-01 guard.
+            _plugin_registry.mark_error(
+                _spec.name, "load", f"{type(_exc).__name__}: {_exc}"
+            )
+            continue
+        if _result.status == "loaded":
+            _plugin_registry.mark_loaded(
+                _spec.name,
+                registered_tools=_result.registered_tools,
+                registered_adapters=_result.registered_adapters,
+            )
+        else:
+            _plugin_registry.mark_error(
+                _spec.name,
+                _result.error_phase or "load",
+                _result.error or "",
+            )
 
     @asynccontextmanager
     async def _lifespan(_app: Any) -> AsyncGenerator[None, None]:
@@ -125,6 +209,12 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     app.state.adapter_registry = _registry
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
+    # Phase 42: plugin pipeline already ran above (before the lifespan
+    # was constructed) so the registry is fully populated by the time
+    # FastAPI starts serving. Exposed on app.state for the upcoming
+    # /api/plugins route (Phase 45) and for tests that inspect
+    # plugin_registry.error() / .enabled() to verify ISOLATE-01.
+    app.state.plugin_registry = _plugin_registry
     # Phase 33 wiring: the ObservationBus is the central pub-sub for
     # LLMCallEvent / ToolCallEvent / RunEndEvent. Phase 34 CostAnnotator
     # subscribes here BEFORE the persister so the persister writes
