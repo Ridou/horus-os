@@ -276,10 +276,10 @@ Plans:
   3. Existing `/api/agents` route gains `total_runs`, `total_cost_usd`, `latency_p50`, `latency_p95` fields per agent, sourced from the v0.4 rollup columns; pre-v0.4 rows contribute NULL and are excluded from cost sums via `COALESCE` (DASH-4-04 backend half, Pitfall 11 NULL handling)
   4. Percentile queries return NULL (not 0) for windows with no data; queries return raw `sample_count` alongside `p50`/`p95` so callers can apply the n-threshold rule (Pitfall 10)
   5. Reliability query honors the `status` enum so `retry_then_success` rows do not count toward `error_count`; query never reads `error_message` content (Pitfall 9)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 35-01: queries.py module, four new /api/observability routes, /api/agents extension
+- [ ] 35-01-PLAN.md: queries.py (parse_window + agent_totals + cost_by_agent + latency_p50_p95 + tool_reliability), four new /api/observability routes, /api/agents extension with rollup columns (DASH-4-04 backend half)
 
 ### Phase 36: Observability dashboard tab
 **Goal**: New `/observability` tab with three panels (cost-by-agent, latency p50/p95, tool reliability) plus the small UI tweak that extends the existing `/agents` tab with the cost and latency columns sourced from Phase 35's `/api/agents` extension. Same vanilla-JS pattern as the v0.3 Adapters tab. Render NULLs honestly so pre-v0.4 runs never look like $0.
