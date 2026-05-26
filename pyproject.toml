@@ -124,3 +124,6 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
+markers = [
+    "installer_e2e: requires --run-installer-e2e CLI flag (tier-3 clean-venv tests; ~30s session startup; ~5s per test)",
+]
