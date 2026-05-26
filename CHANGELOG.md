@@ -518,3 +518,5 @@ See `docs/MIGRATION-v0.1-to-v0.2.md` for upgrade notes from v0.1.
 - GitHub issue templates (bug report, feature request) and pull
   request template added under `.github/`.
 
+
+<!-- sentinel-pipeline smoke test PR — safe to close -->
