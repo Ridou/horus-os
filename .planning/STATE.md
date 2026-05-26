@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: observability
 status: planning
-last_updated: "2026-05-24T06:13:07.929Z"
-last_activity: 2026-05-24
+last_updated: "2026-05-26T00:00:00.000Z"
+last_activity: 2026-05-26
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
-  total_plans: 0
+  total_plans: 8
   completed_plans: 0
   percent: 0
 ---
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.4 Observability milestone in planning — defining requirements and roadmap. Cost, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI.
+**Current focus:** v0.4 Observability milestone, roadmap created (Phases 32-39). Cost, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI. Sequential 32 → 33 → 34 → 35 → (36 ∥ 37) → 38 → 39 execution order.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 32 (not started — roadmap created, awaiting plan)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-24 — Milestone v0.4 started
+Status: Roadmap created, ready for `/gsd-plan-phase 32`
+Last activity: 2026-05-26 — Roadmap created for v0.4 Observability (phases 32-39)
 
 ## Prior Milestones
 
@@ -37,4 +37,4 @@ Last activity: 2026-05-24 — Milestone v0.4 started
 
 ## Last Activity
 
-2026-05-24, v0.3.0 release shipped. Version bumped 0.2.0 -> 0.3.0 in pyproject.toml and src/horus_os/__init__.py. CHANGELOG rotated under `[0.3.0] - 2026-05-24`. Annotated tag v0.3.0 on origin. Public GitHub Release at https://github.com/Ridou/horus-os/releases/tag/v0.3.0 with CHANGELOG body and migration-guide link. v0.3 milestone closed.
+2026-05-26, v0.4 roadmap created. 8 phases (32-39) mapping all 41 v0.4 requirements with full coverage. Sequential order with one parallel opportunity (36 ∥ 37). BASELINE-01 committed in Phase 32 ahead of METRIC capture in Phase 33. OTel adapter (Phase 38) lands last after the bus has stabilized across Phases 32-37. Three non-negotiable OTel tests (TEST-13 PII-not-leaked, TEST-14 bounded-shutdown, TEST-15 two-variant install-smoke) named explicitly in Phase 38 Success Criteria. REQUIREMENTS.md Phase column filled for every v0.4 row. Roadmap awaits `/gsd-plan-phase 32`.

@@ -188,92 +188,92 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| METRIC-01 | Every LLM call captures input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, latency_ms, model, provider, status | active | TBD |
-| METRIC-02 | Every tool call captures duration_ms, status (success or error), retry_count (best-effort, may be NULL if SDK does not expose it), last_error_text on failure | active | TBD |
-| METRIC-03 | Capture lands on the agent_runner path AND on the streaming SSE path (server/api.py:_event_stream); streamed runs never silently record $0 | active | TBD |
-| METRIC-04 | Per-iteration LLM-call rows roll up to per-trace totals on RUN_END; fixes the v0.3 record_trace bug where only the final iteration's usage was recorded | active | TBD |
-| METRIC-05 | Capture overhead stays within 50ms of the v0.3 baseline (BASELINE-01), asserted in a CI benchmark on the 3-OS matrix | active | TBD |
+| METRIC-01 | Every LLM call captures input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, latency_ms, model, provider, status | active | 33 |
+| METRIC-02 | Every tool call captures duration_ms, status (success or error), retry_count (best-effort, may be NULL if SDK does not expose it), last_error_text on failure | active | 33 |
+| METRIC-03 | Capture lands on the agent_runner path AND on the streaming SSE path (server/api.py:_event_stream); streamed runs never silently record $0 | active | 33 |
+| METRIC-04 | Per-iteration LLM-call rows roll up to per-trace totals on RUN_END; fixes the v0.3 record_trace bug where only the final iteration's usage was recorded | active | 33 |
+| METRIC-05 | Capture overhead stays within 50ms of the v0.3 baseline (BASELINE-01), asserted in a CI benchmark on the 3-OS matrix | active | 33 |
 
 ### Storage and migration (STORE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| STORE-01 | New `llm_calls` child table keyed by `trace_id`, one row per LLM call | active | TBD |
-| STORE-02 | New `tool_invocations` child table keyed by `trace_id`, one row per tool call | active | TBD |
-| STORE-03 | Four nullable rollup columns on `traces`: total_input_tokens, total_output_tokens, total_cost_usd, total_duration_ms | active | TBD |
-| STORE-04 | All schema changes additive (ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS); v0.3 databases load unchanged; old `traces.usage` JSON blob preserved forever | active | TBD |
-| STORE-05 | SQLite pragmas set to `synchronous=NORMAL` + WAL; never `synchronous=FULL` | active | TBD |
+| STORE-01 | New `llm_calls` child table keyed by `trace_id`, one row per LLM call | active | 32 |
+| STORE-02 | New `tool_invocations` child table keyed by `trace_id`, one row per tool call | active | 32 |
+| STORE-03 | Four nullable rollup columns on `traces`: total_input_tokens, total_output_tokens, total_cost_usd, total_duration_ms | active | 32 |
+| STORE-04 | All schema changes additive (ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS); v0.3 databases load unchanged; old `traces.usage` JSON blob preserved forever | active | 32 |
+| STORE-05 | SQLite pragmas set to `synchronous=NORMAL` + WAL; never `synchronous=FULL` | active | 32 |
 
 ### Pricing and cost (PRICE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| PRICE-01 | Bundled `pricing.json` shipped as package data; schema mirrors LiteLLM's `model_prices_and_context_window.json` | active | TBD |
-| PRICE-02 | Cost computed per LLM call from token counts times pricing-table rates, including separate cache_read and cache_creation rates (cache-aware) | active | TBD |
-| PRICE-03 | Unknown models persist `pricing_missing=1` with `cost_usd=NULL`; NULL is honest, zero is a lie | active | TBD |
-| PRICE-04 | User can override the pricing table via env `HORUS_OS_PRICING_PATH` or config field | active | TBD |
-| PRICE-05 | Pricing table carries `version`, `updated_at`, `release_version` metadata; dashboard surfaces a stale-banner past 30 days | active | TBD |
+| PRICE-01 | Bundled `pricing.json` shipped as package data; schema mirrors LiteLLM's `model_prices_and_context_window.json` | active | 34 |
+| PRICE-02 | Cost computed per LLM call from token counts times pricing-table rates, including separate cache_read and cache_creation rates (cache-aware) | active | 34 |
+| PRICE-03 | Unknown models persist `pricing_missing=1` with `cost_usd=NULL`; NULL is honest, zero is a lie | active | 34 |
+| PRICE-04 | User can override the pricing table via env `HORUS_OS_PRICING_PATH` or config field | active | 34 |
+| PRICE-05 | Pricing table carries `version`, `updated_at`, `release_version` metadata; dashboard surfaces a stale-banner past 30 days | active | 34 |
 
 ### Observability dashboard (DASH-4)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| DASH-4-01 | New `/observability` tab with three panels: cost-by-agent, latency p50/p95, tool reliability | active | TBD |
-| DASH-4-02 | Window selector (24h / 7d / 30d, default 7d) drives all panels | active | TBD |
-| DASH-4-03 | Percentile cells with n < 10 samples render as "—", not as a number | active | TBD |
-| DASH-4-04 | Existing `/agents` tab gains cost + latency columns from rollups | active | TBD |
-| DASH-4-05 | Pre-v0.4 trace rows render "—" for new columns with hover "no cost data captured before v0.4" | active | TBD |
+| DASH-4-01 | New `/observability` tab with three panels: cost-by-agent, latency p50/p95, tool reliability | active | 36 |
+| DASH-4-02 | Window selector (24h / 7d / 30d, default 7d) drives all panels | active | 36 |
+| DASH-4-03 | Percentile cells with n < 10 samples render as "—", not as a number | active | 36 |
+| DASH-4-04 | Existing `/agents` tab gains cost + latency columns from rollups | active | 35 |
+| DASH-4-05 | Pre-v0.4 trace rows render "—" for new columns with hover "no cost data captured before v0.4" | active | 36 |
 
 ### Usage CLI (USAGE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| USAGE-01 | `horus-os usage --since 7d` returns a usage report over a configurable window | active | TBD |
-| USAGE-02 | `--format json|csv|table` controls output shape; JSON schema documented in `docs/CLI.md` and pinned by a test | active | TBD |
-| USAGE-03 | `--by model|tool|agent` slices the report into per-model, per-tool, or per-agent views | active | TBD |
-| USAGE-04 | Costs rounded to 6 decimal places, durations to integer ms, consistent units across all formats | active | TBD |
+| USAGE-01 | `horus-os usage --since 7d` returns a usage report over a configurable window | active | 37 |
+| USAGE-02 | `--format json|csv|table` controls output shape; JSON schema documented in `docs/CLI.md` and pinned by a test | active | 37 |
+| USAGE-03 | `--by model|tool|agent` slices the report into per-model, per-tool, or per-agent views | active | 37 |
+| USAGE-04 | Costs rounded to 6 decimal places, durations to integer ms, consistent units across all formats | active | 37 |
 
 ### OpenTelemetry exporter (OTEL)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| OTEL-01 | Opt-in OTel adapter ships behind `pip install horus-os[otel]`; bare install has zero `opentelemetry-*` deps | active | TBD |
-| OTEL-02 | Adapter implements v0.3 LifecycleAdapter; `start(ctx)` configures OTLP HTTP exporter from env and subscribes to ObservationBus; `stop()` does `force_flush(2000)` then `shutdown()` | active | TBD |
-| OTEL-03 | Default-deny content capture: prompt and completion bodies are NEVER attached to spans by default | active | TBD |
-| OTEL-04 | Content capture opt-in via `HORUS_OS_OTEL_CAPTURE_CONTENT=true` AND a redactor allowlist (`AKIA[A-Z0-9]{16}`, `sk-...`, `ghp_*`, `xoxb-*`, emails, e164 phones, common API-key prefixes) | active | TBD |
-| OTEL-05 | Span attribute names use OTel-canonical GenAI conventions sourced from internal `horus_os/_observability/semconv.py`; never the deprecated `gen_ai.prompt` / `gen_ai.completion` | active | TBD |
-| OTEL-06 | `BatchSpanProcessor` always; `SimpleSpanProcessor` never used in production | active | TBD |
-| OTEL-07 | Without the `[otel]` extra, importing the adapter module succeeds and `start(ctx)` raises a clean `RuntimeError` with a `pip install horus-os[otel]` hint (not `ModuleNotFoundError`) | active | TBD |
+| OTEL-01 | Opt-in OTel adapter ships behind `pip install horus-os[otel]`; bare install has zero `opentelemetry-*` deps | active | 38 |
+| OTEL-02 | Adapter implements v0.3 LifecycleAdapter; `start(ctx)` configures OTLP HTTP exporter from env and subscribes to ObservationBus; `stop()` does `force_flush(2000)` then `shutdown()` | active | 38 |
+| OTEL-03 | Default-deny content capture: prompt and completion bodies are NEVER attached to spans by default | active | 38 |
+| OTEL-04 | Content capture opt-in via `HORUS_OS_OTEL_CAPTURE_CONTENT=true` AND a redactor allowlist (`AKIA[A-Z0-9]{16}`, `sk-...`, `ghp_*`, `xoxb-*`, emails, e164 phones, common API-key prefixes) | active | 38 |
+| OTEL-05 | Span attribute names use OTel-canonical GenAI conventions sourced from internal `horus_os/_observability/semconv.py`; never the deprecated `gen_ai.prompt` / `gen_ai.completion` | active | 38 |
+| OTEL-06 | `BatchSpanProcessor` always; `SimpleSpanProcessor` never used in production | active | 38 |
+| OTEL-07 | Without the `[otel]` extra, importing the adapter module succeeds and `start(ctx)` raises a clean `RuntimeError` with a `pip install horus-os[otel]` hint (not `ModuleNotFoundError`) | active | 38 |
 
 ### Baseline measurement (BASELINE)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| BASELINE-01 | A `tests/perf/v0_3_baseline.json` artifact captures v0.3 latency overhead for 3-iteration agent loops with no observability; committed before Phase 2 instrumentation lands; METRIC-05 asserts against it | active | TBD |
+| BASELINE-01 | A `tests/perf/v0_3_baseline.json` artifact captures v0.3 latency overhead for 3-iteration agent loops with no observability; committed before Phase 2 instrumentation lands; METRIC-05 asserts against it | active | 32 |
 
 ### Test and CI (continued from v0.3)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| TEST-11 | v0.3 SQLite fixture (`tests/fixtures/v0_3_database.sqlite3`) loads cleanly under v0.4 migration; new columns NULL on old rows; old `usage` JSON preserved | active | TBD |
-| TEST-12 | Capture-overhead benchmark on 3-OS matrix (asserts METRIC-05) | active | TBD |
-| TEST-13 | PII-not-leaked test: `InMemorySpanExporter` fixture, prompt contains `AKIAIOSFODNN7EXAMPLE`, default-mode OTel export does not contain the literal (asserts OTEL-03 and OTEL-04) | active | TBD |
-| TEST-14 | Bounded-shutdown test: OTel adapter pointed at closed port (`http://127.0.0.1:1`), one event published, `stop()` completes in < 3s wall clock (asserts OTEL-02) | active | TBD |
-| TEST-15 | Two-variant install-smoke matrix: parallel CI jobs for `[dev]` and `[dev,otel]`; the no-otel variant asserts the adapter module imports AND `start(ctx)` raises the `RuntimeError` hint (asserts OTEL-07) | active | TBD |
+| TEST-11 | v0.3 SQLite fixture (`tests/fixtures/v0_3_database.sqlite3`) loads cleanly under v0.4 migration; new columns NULL on old rows; old `usage` JSON preserved | active | 32 |
+| TEST-12 | Capture-overhead benchmark on 3-OS matrix (asserts METRIC-05) | active | 33 |
+| TEST-13 | PII-not-leaked test: `InMemorySpanExporter` fixture, prompt contains `AKIAIOSFODNN7EXAMPLE`, default-mode OTel export does not contain the literal (asserts OTEL-03 and OTEL-04) | active | 38 |
+| TEST-14 | Bounded-shutdown test: OTel adapter pointed at closed port (`http://127.0.0.1:1`), one event published, `stop()` completes in < 3s wall clock (asserts OTEL-02) | active | 38 |
+| TEST-15 | Two-variant install-smoke matrix: parallel CI jobs for `[dev]` and `[dev,otel]`; the no-otel variant asserts the adapter module imports AND `start(ctx)` raises the `RuntimeError` hint (asserts OTEL-07) | active | 38 |
 
 ### Migration (continued from v0.2)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| MIG-04 | v0.3 SQLite databases upgrade to v0.4 (v5) schema idempotently; multiple runs of the migration are a no-op after the first; downgrade not supported and documented | active | TBD |
+| MIG-04 | v0.3 SQLite databases upgrade to v0.4 (v5) schema idempotently; multiple runs of the migration are a no-op after the first; downgrade not supported and documented | active | 32 |
 
 ### Release (continued from v0.3)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| REL-07 | Tag v0.4.0 with CHANGELOG and GitHub Release; migration notes for v0.3 users documented | active | TBD |
-| REL-08 | `scripts/release_gate.py` enforces (a) `pricing.json.updated_at` within 14 days of tag date AND (b) a green two-variant install-smoke matrix | active | TBD |
-| REL-09 | `docs/OTEL.md` includes a "Threat model" section covering what an OTel collector receives in default and content-capture-enabled modes | active | TBD |
+| REL-07 | Tag v0.4.0 with CHANGELOG and GitHub Release; migration notes for v0.3 users documented | active | 39 |
+| REL-08 | `scripts/release_gate.py` enforces (a) `pricing.json.updated_at` within 14 days of tag date AND (b) a green two-variant install-smoke matrix | active | 39 |
+| REL-09 | `docs/OTEL.md` includes a "Threat model" section covering what an OTel collector receives in default and content-capture-enabled modes | active | 39 |
 
 ## Coverage summary
 
