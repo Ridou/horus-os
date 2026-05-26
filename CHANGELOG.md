@@ -10,6 +10,154 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+## [0.4.0] - 2026-05-26
+
+Fourth alpha. Turns horus-os from "agents run" into "agents run and
+you know what they cost, what they took, and what broke."
+Local-first cost, latency, and tool-reliability instrumentation
+against a SQLite source of truth. New `/observability` dashboard
+tab, `horus-os usage` CLI subcommand, opt-in OpenTelemetry exporter
+behind a `[otel]` extra. Fixes two confirmed v0.3 cost-correctness
+bugs along the way.
+
+See `docs/MIGRATION-v0.3-to-v0.4.md` for upgrade notes from v0.3.
+
+### Added
+
+- **Observability capture pipeline.** New `horus_os.observability`
+  package: `ObservationBus` singleton (`get_observation_bus`,
+  `reset_observation_bus_for_tests`), `SQLitePersister` (one row
+  per LLM call into `llm_calls`, one row per tool call into
+  `tool_invocations`), `LLMCallEvent` and `ToolInvocationEvent`
+  payloads. SQLite pragmas pinned to `synchronous=NORMAL` plus
+  WAL on every connection (Pitfall 8 prevention).
+- **Runner and SSE-branch capture sites.** Phase 33 wired
+  `agent.run_agent_loop`, `tools/loop.py:_execute_one`, and
+  `server/api.py:_event_stream` to publish events through the bus
+  at every LLM call and every tool call. Latency measured via
+  `time.perf_counter` (Pitfall 3 prevention). Capture overhead
+  benchmark in TEST-12 / METRIC-05.
+- **Pricing table + cost annotation.** Bundled
+  `src/horus_os/observability/pricing.json` (cache-aware: four
+  rates per model: input, output, cache write, cache read).
+  `PricingTable` exposes `lookup(model)`. `CostAnnotator`
+  subscribes to the bus BEFORE the persister so cost lands on
+  the event before it is written. NULL not zero on unknown
+  models (Pitfall 5: honesty over false precision). Override
+  via `HORUS_OS_PRICING_PATH` env or `[pricing] path = "..."`
+  in `config.toml`.
+- **`observability/queries.py`** pure functions (`agent_totals`,
+  `cost_by_agent`, `latency_p50_p95`, `tool_reliability`) shared
+  by the dashboard JSON routes and the CLI subcommand.
+- **Four new `/api/observability/*` GET routes** sourced from
+  `queries.py`. The existing `/api/agents` route gained
+  `total_cost_usd`, `latency_p50`, `latency_p95` rollup columns.
+- **New `/observability` dashboard tab.** Three panels: cost by
+  agent (bar chart, sorted high to low), latency p50 and p95
+  (table per model), tool reliability (list per tool: success
+  rate + last error preview). Window selector (24h / 7d / 30d,
+  default 7d) drives all three. Pricing-staleness banner
+  (yellow past 30 days, red past 90 days) with copy explaining
+  the `HORUS_OS_PRICING_PATH` override. Small-sample guard
+  renders a placeholder dash for cells with fewer than 10
+  samples. Pre-v0.4 NULL render explains missing dollars rather
+  than hiding them. The existing `/agents` tab shows the three
+  new rollup columns.
+- **`horus-os usage` CLI subcommand.** `horus-os usage --since
+  Nh|Nd --format json|csv|table --by model|tool|agent`. Stdlib
+  only. Reuses `observability/queries.py` so CLI and dashboard
+  cannot drift. JSON output schema pinned in `docs/CLI.md` and
+  tested against a fixture. Costs rounded to 6 decimal places,
+  durations to integer ms (safe for `jq` pipelines).
+- **`OtelAdapter`** behind the new `[otel]` extra. Opt-in OTLP
+  HTTP exporter (gRPC was rejected for the Windows wheel-gap
+  issue documented in STACK.md). Default-deny on body content;
+  emits the eight canonical attributes from
+  `src/horus_os/_observability/semconv.py`
+  (`gen_ai.system`, `gen_ai.operation.name`,
+  `gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+  `gen_ai.usage.output_tokens`, `gen_ai.usage.cached_tokens`,
+  `horus_os.cost_usd`, `error.type`). Body capture opt-in via
+  `HORUS_OS_OTEL_CAPTURE_CONTENT=true` (EXACT lowercase only)
+  with the seven-pattern redactor allowlist from
+  `src/horus_os/observability/redact.py` as defence-in-depth.
+  Lazy SDK import so `pip install horus-os` without the extra
+  raises a clean `RuntimeError`, never `ModuleNotFoundError`
+  (Pitfall 12). Bounded shutdown: `force_flush(2000ms)` +
+  `shutdown()` with a 1s per-export timeout so the app exits in
+  under 3 seconds when the collector is unreachable.
+- **Three non-negotiable OTel tests.** TEST-13 (PII redaction:
+  `AKIAIOSFODNN7EXAMPLE` never appears in exported spans in
+  either default or opt-in mode), TEST-14 (bounded shutdown
+  against a closed-port endpoint completes in less than 3
+  seconds), TEST-15 (two-variant install-smoke CI matrix:
+  `install-smoke-no-otel` AND `install-smoke-with-otel` on the
+  3-OS x 2-Python matrix).
+- **`scripts/release_gate.py`** local pre-tag quality gate. Four
+  checks: pricing freshness (within 14 days, env-overridable via
+  `HORUS_OS_PRICING_MAX_AGE_DAYS`), CI two-variant install-smoke
+  presence (greps both job literals), wheel pricing.json
+  packaging (`python -m build` + zipfile membership), pytest
+  pass. CLI flags `--check {pricing,wheel,ci,tests}` and
+  `--skip-build`. See `docs/RELEASE.md` for the maintainer's
+  release procedure.
+
+### Changed
+
+- **SQLite schema v4 to v5 (additive).** Four nullable rollup
+  columns on `traces` (`total_input_tokens`,
+  `total_output_tokens`, `total_cost_usd`, `total_duration_ms`).
+  Two new child tables (`llm_calls`, `tool_invocations`). v0.3
+  databases upgrade cleanly on first v0.4 startup; old
+  `traces.usage` JSON blob preserved forever; pre-v0.4 trace
+  rows render NULL on the new columns and the dashboard shows a
+  placeholder dash with explanatory hover text.
+- **Multi-iteration token capture now correct (Pitfall 1).** v0.3
+  `record_trace` wrote only the FINAL iteration's `usage` dict.
+  v0.4 publishes one `LLMCallEvent` per iteration through the
+  observation bus; per-call `llm_calls` rows roll up to
+  `traces.total_input_tokens = SUM(...)` on `RUN_END`. Streaming
+  and non-streaming paths share the same capture.
+- **SSE streaming runs now persist real cost (Pitfall 2).** v0.3
+  `/api/chat/stream` did not route through `run_agent_loop`, so
+  every streamed run silently landed at $0.00. v0.4 instruments
+  the SSE branch directly via `stream.get_final_message().usage`
+  (Anthropic) or `response.usage_metadata` (Gemini).
+- **SQLite pragmas pinned to `synchronous=NORMAL` plus WAL** on
+  every connection. Never `FULL`. Pitfall 8 prevention.
+
+### Fixed
+
+- **Per-iteration token undercount (Pitfall 1, Phase 33).** A
+  5-iteration agent run in v0.3 reported 1/5 of actual cost.
+  v0.4 reports the truth via per-call `llm_calls` rows that roll
+  up to `traces.total_input_tokens`. Pre-v0.4 cost numbers
+  should be treated as ceilings, not actuals.
+- **SSE silent $0 (Pitfall 2, Phase 33).** v0.4 instruments the
+  SSE branch directly; streamed runs now persist real token
+  counts and the same rollup math drives the trace
+  `total_cost_usd`.
+
+### Documentation
+
+- `docs/MIGRATION-v0.3-to-v0.4.md` (new): upgrade guide with
+  `## Schema migration v4 to v5`, `## Bug fixes you inherit for
+  free`, env vars, new CLI / dashboard surface, no breaking
+  changes, upgrade checklist.
+- `docs/OBSERVABILITY.md` (new): user-facing observability guide
+  (what gets captured, dashboard tour, CLI usage, cost math,
+  pricing staleness, privacy note).
+- `docs/OTEL.md` (new): OTel adapter guide with installation,
+  configuration, attribute schema, threat model (Default mode /
+  Opt-in mode / Trust statement subsections), bounded shutdown,
+  regression coverage.
+- `docs/RELEASE.md` (new): maintainer release procedure with the
+  release gate, pricing refresh procedure, full release
+  sequence, and the rationale for the gate (Pitfall 5 and
+  Pitfall 12).
+- `docs/CLI.md`: extended with the `horus-os usage` subcommand
+  and JSON output schema.
+
 ## [0.3.0] - 2026-05-24
 
 Third alpha. Takes the v0.2 adapter plugin interface from "one
