@@ -506,7 +506,7 @@ Plans:
   3. Release workflow refuses to allow the v0.5.0 tag when ANY of the eight gate checks fails (four new + four carried from v0.4); a fixture test asserts each of the four new checks individually fails the gate when its precondition is broken (e.g. mutating the docs schema file diverges from the runtime constant) (REL-11)
   4. Three-OS CI matrix (macOS + Ubuntu + Windows × Python 3.11 + 3.12) green on the full test suite including: v0.4 capture-overhead benchmark, v0.4 OTel three non-negotiable tests (PII-not-leaked, bounded-shutdown, two-variant install-smoke), v0.5 cold-start <100ms benchmark (TEST-18), v0.5 broken-plugin fixtures (TEST-19), v0.5 plugin install-smoke (TEST-20), the 12+ pitfall regression tests from Phase 46
   5. `docs/manifest-v1.schema.json` committed alongside `MANIFEST_V1_SCHEMA` runtime constant; both stay in sync via the docs-drift gate; any future schema change must update both atomically or the gate refuses the tag
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
 - [ ] 49-01: TEST-20 three-OS plugin install-smoke + scripts/release_gate.py extension (4 new checks) + docs/manifest-v1.schema.json + v0.4-fixture v5→v6 round-trip test
