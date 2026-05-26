@@ -69,7 +69,7 @@
 2. **OTel (Phase 38) ships LAST among the feature phases.** The ObservationBus must have shipped (Phase 32) and been exercised by the SQLite persister plus the runner capture sites (Phases 32, 33) before the OTel subscriber is wired. Shipping earlier would wire `AdapterContext.observation_bus` before the bus is proven internally.
 3. **TEST-13 (PII-not-leaked), TEST-14 (bounded-shutdown), and TEST-15 (two-variant install-smoke) appear in Phase 38's Success Criteria block as named observable tests, not as implied items in TEST traceability.** These are the highest-stakes guardrails in the milestone.
 
-- [ ] **Phase 32: Schema migration, persistence skeleton, v0.3 baseline** - Schema v4→v5 additive migration, ObservationBus + SQLitePersister written but not yet wired into the runner, v0.3 capture-overhead baseline artifact committed.
+- [x] **Phase 32: Schema migration, persistence skeleton, v0.3 baseline** - Schema v4→v5 additive migration, ObservationBus + SQLitePersister written but not yet wired into the runner, v0.3 capture-overhead baseline artifact committed. (completed 2026-05-26)
 - [ ] **Phase 33: Capture at the runner + SSE branch** - Wrap each `Conversation.send` and `_execute_one` with bus publishes; fix the SSE branch in `server/api.py:_event_stream` so streamed runs never silently record $0; capture-overhead CI benchmark.
 - [ ] **Phase 34: Pricing table and cost annotation** - Bundle `pricing.json`, ship `PricingTable` + `CostAnnotator`; user override path; `pricing_missing=1, cost_usd=NULL` for unknown models.
 - [ ] **Phase 35: Query module and read APIs** - `observability/queries.py` plus four `/api/observability/*` GET routes plus the `/api/agents` extension with rollup columns; SQLite-side `NTILE(100)` percentiles with sample-count guards.
@@ -234,7 +234,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 32-01-PLAN.md: v4-to-v5 migration, ObservationBus + SQLitePersister, v0.3 baseline artifact, lint guard
+- [x] 32-01-PLAN.md: v4-to-v5 migration, ObservationBus + SQLitePersister, v0.3 baseline artifact, lint guard
 
 ### Phase 33: Capture at the runner + SSE branch
 **Goal**: Wire the bus into the runner so real agent runs publish `LLM_CALL` and `TOOL_CALL` events that the SQLitePersister writes. Fix two confirmed v0.3 correctness bugs: per-iteration token undercount (Pitfall 1) and the streaming path silently recording $0 (Pitfall 2). Cost still NULL at this point; pricing lands in Phase 34.
@@ -359,7 +359,7 @@ Plans:
 | 29. Test surface expansion | v0.3 | 1/1 | Complete | 2026-05-24 |
 | 30. Three-OS install verification (v0.3) | v0.3 | 1/1 | Complete | 2026-05-24 |
 | 31. v0.3.0 release | v0.3 | 1/1 | Complete | 2026-05-24 |
-| 32. Schema migration, persistence skeleton, v0.3 baseline | v0.4 | 0/1 | Not started | - |
+| 32. Schema migration, persistence skeleton, v0.3 baseline | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 33. Capture at the runner + SSE branch | v0.4 | 0/1 | Not started | - |
 | 34. Pricing table and cost annotation | v0.4 | 0/1 | Not started | - |
 | 35. Query module and read APIs | v0.4 | 0/1 | Not started | - |
