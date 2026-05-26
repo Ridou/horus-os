@@ -1,10 +1,11 @@
 """Pitfall 3 (PITFALLS.md): forbid time.time() in observability code paths.
 
-Scans the three watched targets:
+Scans the four watched targets:
 
     src/horus_os/observability/  (all .py files, recursively)
     src/horus_os/agent.py
     src/horus_os/tools/loop.py
+    src/horus_os/server/api.py
 
 For each scanned file, a violation is recorded when a non-comment,
 non-docstring line contains the literal substring time.time(). Comment
@@ -17,6 +18,12 @@ Exits 1 with one offending file:line:text per violation on stderr.
 
 Wired into the unit-test job via tests/test_lint_no_wallclock.py.
 Wired into CI via the corresponding step in .github/workflows/ci.yml.
+
+Phase 33 extension: server/api.py joined the watched scope because the
+SSE branch (chat_stream) now publishes LLMCallEvents whose latency_ms
+must use perf_counter. Without this guard, future SSE-branch code could
+silently re-introduce time.time() and the persister's negative-latency
+assertion would be the only defense.
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ WATCHED_DIRS: tuple[Path, ...] = (REPO_ROOT / "src" / "horus_os" / "observabilit
 WATCHED_FILES: tuple[Path, ...] = (
     REPO_ROOT / "src" / "horus_os" / "agent.py",
     REPO_ROOT / "src" / "horus_os" / "tools" / "loop.py",
+    REPO_ROOT / "src" / "horus_os" / "server" / "api.py",
 )
 
 NEEDLE = "time.time()"
