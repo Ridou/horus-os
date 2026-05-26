@@ -131,8 +131,7 @@ def test_cli_flag_sets_env_var(
 
         return _StubApp()
 
-    import uvicorn
-
+    uvicorn = pytest.importorskip("uvicorn")
     monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
     monkeypatch.setattr(
         "horus_os.server.create_app",
@@ -177,8 +176,7 @@ def test_cli_no_flag_does_not_set_env_var(
 
         return _StubApp()
 
-    import uvicorn
-
+    uvicorn = pytest.importorskip("uvicorn")
     monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
     monkeypatch.setattr("horus_os.server.create_app", _fake_create_app)
 
