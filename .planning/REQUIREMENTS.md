@@ -416,3 +416,51 @@
 | **Total** | **141** | **141** | **107** |
 
 "Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
+
+## Traceability — v0.5 Plugin System
+
+Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth: the Phase column in each category table above. Where a requirement's Phase column lists two numbers (ISOLATE-01 "42, 43" and TEST-19 "42, 43"), the owning phase is the one carrying the bulk of the work; the other phase consumes its substrate.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| BASELINE-02 | 40 | Pending |
+| MANIFEST-01 | 41 | Pending |
+| MANIFEST-02 | 41 | Pending |
+| MANIFEST-03 | 41 | Pending |
+| MANIFEST-04 | 41 | Pending |
+| MANIFEST-05 | 41 | Pending |
+| OBSERVE-01 | 41 | Pending |
+| MIG-05 | 41 | Pending |
+| DISCOVERY-01 | 42 | Pending |
+| DISCOVERY-02 | 42 | Pending |
+| ISOLATE-04 | 42 | Pending |
+| TEST-18 | 42 | Pending |
+| TEST-19 | 42 | Pending |
+| PERMISSION-01 | 43 | Pending |
+| PERMISSION-02 | 43 | Pending |
+| PERMISSION-03 | 43 | Pending |
+| PERMISSION-04 | 43 | Pending |
+| ISOLATE-01 | 43 | Pending |
+| ISOLATE-02 | 43 | Pending |
+| ISOLATE-03 | 43 | Pending |
+| INSTALL-01 | 44 | Pending |
+| INSTALL-02 | 44 | Pending |
+| INSTALL-03 | 44 | Pending |
+| INSTALL-04 | 44 | Pending |
+| INSTALL-05 | 44 | Pending |
+| INSTALL-06 | 44 | Pending |
+| DASH-5-01 | 45 | Pending |
+| DASH-5-02 | 45 | Pending |
+| DASH-5-03 | 45 | Pending |
+| OBSERVE-02 | 45 | Pending |
+| TEST-16 | 46 | Pending |
+| TEST-17 | 46 | Pending |
+| REFERENCE-02 | 47 | Pending |
+| REL-12 | 47 | Pending |
+| REFERENCE-01 | 48 | Pending |
+| TEST-21 | 48 | Pending |
+| TEST-20 | 49 | Pending |
+| REL-11 | 49 | Pending |
+| REL-10 | 50 | Pending |
+
+**Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.
