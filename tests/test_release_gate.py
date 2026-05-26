@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -24,14 +25,23 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+_MODULE_NAME = "_release_gate_under_test"
+
 
 def _load_release_gate_module():
-    """Import scripts/release_gate.py as a module without modifying sys.path."""
+    """Import scripts/release_gate.py as a module without modifying sys.path.
+
+    The module is registered in `sys.modules` because @dataclass needs to
+    introspect the defining module via `sys.modules[cls.__module__]`.
+    """
+    if _MODULE_NAME in sys.modules:
+        return sys.modules[_MODULE_NAME]
     script = REPO_ROOT / "scripts" / "release_gate.py"
-    spec = importlib.util.spec_from_file_location("_release_gate_under_test", script)
+    spec = importlib.util.spec_from_file_location(_MODULE_NAME, script)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[_MODULE_NAME] = module
     spec.loader.exec_module(module)
     return module
 
