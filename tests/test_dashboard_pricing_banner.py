@@ -83,9 +83,7 @@ def test_pricing_status_integration_stale_fixture(
     """
     fixture = _fixture(tmp_path, updated_at="2025-01-01")
     monkeypatch.setenv("HORUS_OS_PRICING_PATH", str(fixture))
-    response = TestClient(create_app(data_dir=tmp_path)).get(
-        "/api/observability/pricing-status"
-    )
+    response = TestClient(create_app(data_dir=tmp_path)).get("/api/observability/pricing-status")
     assert response.status_code == 200
     body = response.json()
     assert body["is_stale"] is True

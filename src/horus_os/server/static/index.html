@@ -486,6 +486,9 @@
     // (NULL): agents with total_cost_usd === null render em-dash for
     // cost (same honesty rule the /agents tab uses).
     async function loadObservability() {
+      // Phase 36 Task 4: fire the staleness banner first; do not await
+      // so a slow pricing-status route never blocks the three panels.
+      renderStalenessBanner();
       const win = $("#obs-window").value;
       const costBody = $("#obs-cost-body");
       const latencyBody = $("#obs-latency-body");
@@ -502,6 +505,29 @@
           .catch((e) => { toolsBody.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }),
       ];
       await Promise.all(fetches);
+    }
+
+    // Phase 36 Task 4: Pitfall 5 pricing-staleness banner.
+    // Yellow when age is 30 to 89 days, red when age is 90+. Copy
+    // includes HORUS_OS_PRICING_PATH verbatim so the cure path is one
+    // cp-and-edit operation away. Failure is silent so a slow or
+    // unreachable pricing-status route never blocks the panels.
+    async function renderStalenessBanner() {
+      const container = $("#obs-banner-container");
+      try {
+        const data = await fetchJson("/api/observability/pricing-status");
+        const age = data.updated_at_age_days;
+        if (age < 30) {
+          container.innerHTML = "";
+          return;
+        }
+        const colorClass = age < 90 ? "yellow" : "red";
+        const msg = "Pricing data is " + age + " days old. Override via HORUS_OS_PRICING_PATH.";
+        container.innerHTML = '<div class="obs-banner ' + colorClass + '">' + escapeHtml(msg) + '</div>';
+      } catch (e) {
+        // Banner is best-effort decoration; never let it blank the tab.
+        container.innerHTML = "";
+      }
     }
 
     function renderCostPanel(data, container) {
