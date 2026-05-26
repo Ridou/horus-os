@@ -20,6 +20,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,11 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     _bus.subscribe(CostAnnotator(_pricing_table).on_event)
     _bus.subscribe(SQLitePersister(Database(Config.load(_resolved_data_dir).db_path)).on_event)
     app.state.observation_bus = _bus
+    # Phase 36 wiring: expose the PricingTable on app.state so the
+    # new /api/observability/pricing-status route reads from the same
+    # instance the CostAnnotator subscriber uses. Guards against silent
+    # dual-construction; pinned by tests/test_server_pricing_status.py.
+    app.state.pricing_table = _pricing_table
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -382,6 +388,23 @@ def create_app(data_dir: str | Path | None = None) -> Any:
             )
             calls = [dict(row) for row in cursor.fetchall()]
         return {"calls": calls}
+
+    @app.get("/api/observability/pricing-status")
+    def observability_pricing_status() -> dict[str, Any]:
+        """Return staleness metadata for the active PricingTable.
+
+        Phase 36 banner data source. Reads from app.state.pricing_table
+        (same instance the CostAnnotator subscriber uses). Pitfall 5:
+        the dashboard banner pulls updated_at_age_days from here and
+        switches color at 30 days (yellow) and 90 days (red).
+        """
+        pt = app.state.pricing_table
+        now = datetime.now(UTC)
+        return {
+            "updated_at": pt.updated_at.isoformat(),
+            "updated_at_age_days": pt.updated_at_age_days(now),
+            "is_stale": pt.is_stale(now, 30),
+        }
 
     @app.post("/api/chat")
     async def chat(payload: dict = Body(...)) -> dict[str, Any]:  # noqa: B008
