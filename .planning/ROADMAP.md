@@ -491,7 +491,7 @@ Plans:
   3. **TEST-21 single-public-API-surface lint:** a ruff custom rule fails CI on any `from horus_os ...` or `import horus_os...` line in the reference plugin source EXCEPT `from horus_os.plugins.api import ...`; the rule is documented in `docs/PLUGINS.md` and tested with a synthetic bad-import fixture that MUST fail CI (TEST-21, Pitfall 8)
   4. CI runs `pip install -e ./examples/horus-os-example-plugin` in a clean venv, boots horus-os, calls `GET /api/plugins`, asserts the example plugin appears with `status="pending"` (no grants yet); after `horus-os plugins grant horus-os-example-plugin --all`, restart asserts `status="loaded"`; tools and adapter both registered (REFERENCE-01)
   5. CHANGELOG `[0.5.0]` section updated with a link to the example plugin and a callout that the reference is the contract for third-party authors
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 48-01: examples/horus-os-example-plugin/ package + four scenarios + ruff single-API-surface custom rule (TEST-21) + CI install-smoke
