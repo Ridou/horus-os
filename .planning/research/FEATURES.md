@@ -1,267 +1,269 @@
 # Feature Research
 
-**Domain:** LLM-application observability (cost, latency, tool-reliability, OTel export) for an existing local-first, single-machine OSS agent runtime (horus-os v0.4)
-**Researched:** 2026-05-24
-**Confidence:** HIGH for prior-art shapes (multiple official sources). HIGH for what's table-stakes vs. anti given v0.4's locked anti-goals (PROJECT.md "Out of Scope"). MEDIUM on the exact UX of a few differentiators (cost-budget alerts, slow-trace drill-in) where OSS implementations diverge.
+**Domain:** Plugin system for a self-hosted Python AI command center (horus-os v0.5)
+**Researched:** 2026-05-26
+**Confidence:** HIGH (cross-verified across 6 named plugin systems; v0.5 already locked PROJECT.md decisions on entry-points + local dir + TOML manifest + default-deny capabilities + in-process loading)
 
-## Prior-Art Grounding (cited inline below)
+## Scope
 
-Five reference OSS LLM-observability projects and the GenAI specs that define "what an LLM observability feature looks like" in 2026:
+horus-os v0.1-v0.4 already shipped: Tool registry, Adapter Protocol with lifecycle hooks (start/stop/error states), AdapterRegistry, ObservationBus + per-event SQLite persistence, `/observability` dashboard tab with cost/latency/reliability panels, `horus-os usage` CLI, opt-in OTel exporter behind `[otel]` extra. v0.5 adds **third-party packaging on top of those primitives** — manifest, installer, discovery, capability declarations, and dashboard surface for plugins. It does NOT introduce a new hook framework, a new persistence layer, or OS-level sandboxing.
 
-| Project | License | What they ship for cost / latency / tool-reliability / OTel |
-|---------|---------|-------------------------------------------------------------|
-| [Langfuse](https://langfuse.com/docs/observability/features/token-and-cost-tracking) | OSS (self-hostable, all core features free) | Cost & latency broken down by user, session, model, prompt version. Tracks usage/cost on `generation` and `embedding` observations. Aggregate metrics (latency, cost, tokens) on dashboard. Gantt-chart trace timeline. |
-| [Arize Phoenix](https://arize.com/docs/phoenix) | OSS (Apache 2.0) | Span-level tracing built on OpenTelemetry + OpenInference. Traces every step including tool calls. "Traces stay in your environment" (self-hostable). Playground for replaying traced LLM calls. |
-| [Helicone](https://github.com/Helicone/helicone) | OSS (self-hostable, single Docker command) | Cost tracking, latency, error rates per request. Self-host containerized down to 4 services. Export to PostHog for custom dashboards. |
-| [Lunary](https://posthog.com/blog/best-open-source-llm-observability-tools) | OSS (self-hostable) | Cost & token tracking per user, per session, per model. Detailed traces, user-session grouping, prompt playground. |
-| [AgentOps](https://github.com/AgentOps-AI/agentops) | OSS (MIT) | Cost monitoring, failure detection ("multi-agent interaction issues"), session replay, time-travel debugging. Maintainer of [tokencost](https://github.com/AgentOps-AI/tokencost) (`model_prices.json` for 400+ models). |
-| [OpenLLMetry / OTel GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) | OSS standard | Defines the wire shape: `gen_ai.client.token.usage` (histogram), `gen_ai.client.operation.duration` (histogram), `gen_ai.request.model`, `gen_ai.provider.name`, plus `gen_ai.input.messages` / `gen_ai.output.messages` (the deprecation of `gen_ai.prompt` / `gen_ai.completion` matters for our schema choices — see PITFALLS). |
-| [LiteLLM `model_prices_and_context_window.json`](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) | OSS pricing dataset | The de-facto community-maintained pricing JSON. Auto-synced from GitHub by LiteLLM itself. Single source for input/output/cache token rates per 400+ models. |
+PROJECT.md has already locked:
+- TOML manifest format (`horus-plugin.toml`)
+- Discovery via Python entry-points (group `horus_os.plugins`) + `~/.horus-os/plugins/` directory drop-in
+- Default-deny capability grants persisted in SQLite, revocable from dashboard
+- `horus-os plugins install|uninstall|list|info` CLI wrapping `pip`
+- One reference plugin (`horus-os-example-plugin`)
+- No HTTP catalog, no OS-level isolation in v0.5
 
-All five OSS projects converge on the same baseline: **token counts + USD cost + latency + error rate, sliced by model and by agent/run/session, viewable in a dashboard, exportable.** That convergence is what makes those features "table stakes." Where the projects diverge is on evals, guardrails, prompt playgrounds, multi-tenant workspaces, and team features — most of which are explicit anti-features for us.
+This research feeds the **REQUIREMENTS.md categories** (MANIFEST, DISCOVERY, INSTALL, PERMISSION, ISOLATE, DASH, REFERENCE, plus continuation TEST/REL/MIG). Each finding is tagged **table-stakes**, **differentiator**, or **anti-feature**.
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-Every v0.4 user already running an agent on horus-os will assume these exist. Missing any of them makes the milestone feel like a half-shipped observability story.
+Features users assume exist in any modern Python plugin system. Missing these = product feels half-finished. Each row is backed by 2+ named examples.
 
-| Feature | Why Expected | Complexity | Notes (incl. dependencies on existing v0.1-v0.3 surfaces) |
-|---------|--------------|------------|-----------|
-| **Token counts captured per LLM call** (input/output, plus cache-read / cache-write when the provider returns them) | Every OSS LLM-obs tool (Langfuse, Helicone, Lunary, AgentOps) captures this. Without it, no cost math is possible. | LOW | Anthropic SDK returns `usage.input_tokens` / `usage.output_tokens` / cache fields directly. Gemini SDK returns `usage_metadata.prompt_token_count` / `candidates_token_count`. We already buffer the provider response in `_providers/_anthropic.py` and `_providers/_gemini.py`. **Depends on:** existing provider helpers. Schema change: add columns to `traces` (v4 → v5 migration). |
-| **USD cost computed from token counts + bundled `pricing.json`** | Decision is locked (PROJECT.md). Token counts alone are useful but everyone wants $ figures — this is the headline of [Langfuse cost tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking) and [Helicone](https://github.com/Helicone/helicone). | LOW | Bundled JSON shaped like [LiteLLM's `model_prices_and_context_window.json`](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (per-1M-token input/output rates, optional cache rates). Cost = `(input_tokens × input_rate + output_tokens × output_rate) / 1_000_000`. **Depends on:** token-capture above. **Dependency on:** nothing else; pure derived column. |
-| **User-overridable `pricing.json`** | Bundled file ages between releases; new models ship weekly. PROJECT.md locks this in. [LiteLLM](https://docs.litellm.ai/docs/proxy/sync_models_github) and [tokencost-dev](https://github.com/atriumn/tokencost-dev) both treat overrideability as required because pricing changes weekly. | LOW | Load order: bundled → `${HORUS_OS_HOME}/pricing.json` → env override. **Depends on:** existing `config.py` (`HORUS_OS_HOME` already wired in). |
-| **End-to-end agent-run latency** (wall clock from `run_agent` entry to final result) | This is the single most-asked-about LLM-observability number. Every tool surveyed surfaces it as the primary chart on the dashboard. | LOW | Measure in `run_agent` / `run_agent_async` / `run_agent_loop`. Store on the top-level trace row. **Depends on:** existing `traces` table (add `total_duration_ms` column). |
-| **Per-LLM-call latency** | OTel GenAI semconv defines [`gen_ai.client.operation.duration`](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/) as a core histogram. Without per-call latency, "slow run" investigations dead-end at "the run was slow." | LOW | Measure inside `_providers/_anthropic.py` and `_providers/_gemini.py` around the SDK call. Already exists implicitly (we have a `latency` column in v4 `traces`); we need to make sure it's populated consistently and split from total agent latency. **Depends on:** existing `traces.latency` column. |
-| **Per-tool-call latency + success/error status** | The [OTel GenAI agent spans spec](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/) treats tool calls as first-class spans. Phoenix and AgentOps both surface tool-call success/failure as a top-level signal. | LOW-MEDIUM | We already have `ToolCallEvent` in `types.py` and `execute_tool_uses` in `tools/registry.py` — wrap the dispatch in try/except + timing. Store as JSON in trace row OR new `tool_calls` child table. The child-table version is cleaner for the reliability dashboard query. **Depends on:** `tools/registry.py`, `types.py`, `traces` schema. |
-| **p50 / p95 percentile aggregates per model + per agent + per tool** | OTel GenAI metrics spec [explicitly recommends p95 by `(provider, model)`](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/). Langfuse, Helicone, Lunary all surface percentile bands (mean alone hides tail-latency, which is what users actually feel). | LOW | Computed on-demand in SQL (`ORDER BY duration_ms LIMIT 1 OFFSET <pct * N>`) over a time window. No need for a streaming percentile estimator at v0.4 scale (single user, single machine, thousands of rows). **Depends on:** per-call latency capture. |
-| **Tool success/error rates** (rolling success ratio per tool name) | Decision is locked. AgentOps and Phoenix both show this as a per-tool tile. Without it, broken tools rot silently. | LOW | `SELECT tool_name, AVG(success), COUNT(*) FROM tool_calls WHERE ts > ?`. **Depends on:** per-tool capture above. |
-| **Last-error preview per tool** (most recent error message, truncated) | Decision is locked. Listed in user-facing copy across [Helicone error dashboards](https://github.com/Helicone/helicone) and Phoenix's [tool-span view](https://arize.com/docs/phoenix). The dashboard tells you a tool is failing; the preview tells you *why* without a full trace dive. | LOW | Store `last_error_message`, `last_error_at` either on a rolled-up `tool_stats` view OR computed from the latest failing row per tool. View is cheaper, no extra writes. **Depends on:** per-tool error capture. |
-| **`/observability` dashboard tab** with three core panels: cost-by-agent, latency p50/p95, tool error-rate | PROJECT.md locks this in. The shape mirrors [Helicone's main dashboard](https://www.helicone.ai/blog/self-hosting-launch) and [Langfuse aggregate views](https://langfuse.com/docs/metrics/overview). | MEDIUM | Three vanilla-JS panels added to the existing single-page dashboard (no React build — see ARCHITECTURE.md "single-page vanilla JS"). New `/api/observability/*` endpoints in `server/api.py`. **Depends on:** existing dashboard scaffolding, existing API patterns (`/api/traces`, `/api/agents`). |
-| **Extended numbers on existing `/agents` tab** (cost / median latency / error rate per profile) | Same expectation users already have for the `/agents` listing — they'll glance there first. PROJECT.md mentions this explicitly. | LOW | Augment the existing `GET /api/agents` payload with aggregate fields. **Depends on:** existing `/api/agents` route. |
-| **Time-window filtering** (last 24h / 7d / 30d, with default of 7d) | Every OSS tool defaults to a window. Without it, the cost panel either lies (lifetime totals) or overwhelms (every row). | LOW | URL query param `?since=24h|7d|30d`. Wire through `/api/observability/*` and the new CLI. |
-| **`horus-os usage` CLI subcommand** with `--format json|csv|table` and `--since 7d` | PROJECT.md locks this in. The CLI is the v0.1 audience — they need parity with the dashboard. Pattern mirrors [`aws ce get-cost-and-usage`](https://docs.aws.amazon.com/cli/latest/reference/ce/get-cost-and-usage.html) (JSON/CSV/text output) and the existing `horus-os traces` subcommand we already ship. | LOW-MEDIUM | New file `cli/usage.py`. Shares query layer with `/api/observability/*` — extract a `horus_os.metrics` module that both call so we don't duplicate SQL. **Depends on:** existing `cli/` scaffolding, new `metrics` module. |
-| **Opt-in OTel exporter as a v0.3-style adapter** (behind `[otel]` extra) | PROJECT.md locks the *shape* (adapter, opt-in extra). The *feature* is table-stakes for any OSS observability tool in 2026 because half the audience already runs Grafana/Tempo/Jaeger/Honeycomb. [OpenLLMetry](https://www.traceloop.com/docs/openllmetry/contributing/semantic-conventions) demonstrates OSS LLM apps emitting OTel directly. [Python OTLP exporter](https://opentelemetry.io/docs/languages/python/exporters/) is the standard install (`pip install opentelemetry-exporter-otlp`). | MEDIUM | New `adapters/otel_adapter.py` implementing `Adapter` + `LifecycleAdapter` (start = init `TracerProvider` + `OTLPSpanExporter`, stop = shutdown provider). Emit one span per trace row, child spans for tool calls. Use the GenAI semantic-convention attribute names (`gen_ai.request.model`, `gen_ai.client.token.usage`, `gen_ai.provider.name`). **Depends on:** existing `adapters/base.py` (LifecycleAdapter, AdapterRegistry, FastAPI lifespan integration — all already in place). |
-| **Additive v4 → v5 SQLite migration** (v0.3 databases continue to read) | PROJECT.md locks this in. v0.1 → v0.2 (v2 → v3) and v0.2 → v0.3 (v3 → v4) both already shipped under the "additive, idempotent" rule. Breaking that contract on the first observability release would be the worst-possible user surprise. | LOW | `ALTER TABLE traces ADD COLUMN ...` for the new cost/latency fields, `CREATE TABLE IF NOT EXISTS tool_calls ...`. Idempotent in the existing `storage.py` boot path. **Depends on:** existing `storage.py` migration scaffold (already handles v2 → v3 → v4 cleanly). |
+| Feature | Why Expected | Complexity | Examples / Sources |
+|---------|--------------|------------|--------------------|
+| **MANIFEST-01: Declared name + version + horus-os-compatibility range** | Every plugin system declares these. They are the minimum a user needs to answer "what is this and will it work?" before granting trust. | LOW | Home Assistant `manifest.json` (domain, name, version, requirements); VS Code `package.json` (name, version, engines.vscode); pyproject.toml (name, version, requires-python) |
+| **MANIFEST-02: Declared entry points (which tools and adapters this plugin contributes)** | Users and the dashboard must know what the plugin contributes before loading it, not after. "Contribution points" are the canonical pattern. | LOW | VS Code `contributes` section (commands, views, languages, etc.); Home Assistant `integration_type` + dependencies; Datasette plugin hooks listed in `/-/plugins` |
+| **MANIFEST-03: Declared capabilities/permissions requested** | Users grant trust on declared scope. A plugin that silently grabs file/network access is the canonical anti-pattern. | MEDIUM | Home Assistant manifest permission policy (entity/domain grants, "True or None=deny" default); VS Code `capabilities.untrustedWorkspaces.supported` + restrictedConfigurations; Datasette's `actor_from_request` + permission hooks |
+| **MANIFEST-04: Declared author / homepage / issue tracker** | Required to triage bugs and verify provenance. Users won't install plugins without an "I know where to report this" path. | LOW | Home Assistant `codeowners` + `issue_tracker` + `documentation` (required for core); VS Code `publisher` + `repository` + `bugs.url` |
+| **DISCOVERY-01: Python entry-points group as primary discovery** | The canonical Python plugin discovery mechanism. Works for `pip install`-ed plugins out of the box. Two named ecosystems use it identically. | LOW | pytest `pytest11` group; Datasette `datasette` group; Sphinx setup() via `extensions = []` in conf.py (different mechanism but same intent); JupyterLab via labextension entry points |
+| **DISCOVERY-02: Local directory drop-in for unpublished/dev plugins** | Without this, plugin development requires `pip install -e` round-trips. Every mature ecosystem has both paths. | LOW | Datasette `--plugins-dir=plugins/`; pytest `conftest.py` auto-discovery; Sphinx local extensions via `sys.path.append`; Home Assistant `custom_components/` |
+| **INSTALL-01: `install <pip-spec>` wraps pip into active venv** | "Open a shell and run pip" is unacceptable UX for a self-hosted product. Every successful plugin system ships its own wrapper. | LOW | Datasette `datasette install <name>` (explicitly documented as "thin wrapper around pip install"); JupyterLab `pip install` + `jupyter labextension enable`; HACS download-to-custom_components |
+| **INSTALL-02: `uninstall <name>`** | Symmetrical with install. Users expect to remove what they install via the same surface. | LOW | Datasette `datasette uninstall`; pip uninstall; HACS Remove action |
+| **INSTALL-03: `list` shows installed plugins with version + status** | "What's installed?" is the first question a user has after install. | LOW | Datasette `datasette plugins`; `pip list`; JupyterLab `jupyter labextension list`; Home Assistant Integrations page |
+| **INSTALL-04: `info <name>` shows manifest contents + granted capabilities** | "What does this plugin do and what can it touch?" before users grant trust. | LOW | `pip show`; VS Code Extensions detail pane; Home Assistant integration detail page |
+| **INSTALL-05: First-run capability prompt — display requested capabilities, require explicit user confirmation** | Default-deny posture requires an explicit grant. Plugins that activate without consent are the canonical security anti-pattern. | MEDIUM | VS Code 1.97+ "trust the publisher" dialog on first install; Home Assistant config_flow consent step; mobile app permission prompts (the obvious analog) |
+| **PERMISSION-01: Default-deny posture — declared capability is not the same as granted capability** | Industry consensus across security and plugin systems. "Default-allow" plugin systems get owned. | LOW | Home Assistant policy: `True=grant, None=use default=deny`; sandbox firewall guidance ("treat it like a firewall: default-deny, then explicitly allow"); VS Code Restricted Mode default-disables extensions in untrusted workspaces |
+| **PERMISSION-02: Grants persisted with the plugin name + version on which they were granted; re-prompt when a plugin upgrade widens the requested set** | Users will accept a narrow set then never see the upgrade that widens it, otherwise. Already locked in PROJECT.md as a design constraint. | MEDIUM | Mobile OS permission models (iOS/Android re-prompt on scope expansion); VS Code workspace trust re-prompts when extension publisher changes |
+| **PERMISSION-03: Grants are revocable from the dashboard at any time** | Symmetrical with grant. If a user can grant from the UI, they must be able to revoke from the UI. | LOW | VS Code Manage Trusted Domains; Home Assistant per-entity permissions; iOS/Android settings |
+| **ISOLATE-01: A broken plugin (import error, manifest validation failure, exception in start hook) MUST NOT crash horus-os** | The single most common reason users abandon a plugin host. Home Assistant recovery mode and pytest's plugin error handling both exist because this happens. | MEDIUM | Home Assistant: `ConfigEntryNotReady` triggers retry, never crashes core; Recovery Mode boots minimal set if a user-configured integration takes down startup; pytest plugin load errors are caught and reported; pluggy `_multicall` wraps hook impls in try/except |
+| **ISOLATE-02: Plugin load failures degrade to a visible "plugin error" status, not silent removal** | "Why isn't my plugin working?" with no surface in the dashboard is the worst possible UX. | LOW | Home Assistant integration page "Failed setup, will retry" + error log link; VS Code Extensions view error indicator; JupyterLab disable-on-error pattern |
+| **ISOLATE-03: Plugin enable/disable toggle without uninstall** | Users need to A/B isolate which plugin is causing trouble. Uninstall is too coarse. | LOW | JupyterLab `jupyter labextension disable/enable`; Home Assistant Integrations disable toggle; VS Code Enable/Disable per-extension; Datasette `--plugins-dir` filtering |
+| **DASH-01: Plugins tab listing installed plugins with name, version, declared tools/adapters, granted capabilities, lifecycle status, last error** | Already locked in PROJECT.md. Minimum dashboard surface to make a user trust the plugin set. | MEDIUM | Home Assistant Integrations page (status, last activity, error count); VS Code Extensions view; Datasette `/-/plugins` JSON endpoint |
+| **DASH-02: Per-plugin enable/disable toggle on the plugins tab** | Symmetrical with the CLI toggle. v0.3 already shipped this pattern for adapters at `/adapters`. | LOW | Existing horus-os v0.3 `/adapters` page (precedent); Home Assistant; JupyterLab Plugin Manager |
+| **REFERENCE-01: One published reference plugin in the same repo, demonstrating the full happy path** | Without a working example, third-party authors abandon plugin development. Already locked in PROJECT.md as `horus-os-example-plugin`. | LOW | Datasette `datasette-plugin` cookiecutter template (creates skeleton + test + CI workflow); pytest plugin examples in docs; Home Assistant `example_integration` in core; VS Code `vscode-extension-samples` repo |
+| **REFERENCE-02: Plugin author docs — manifest schema, capability list, lifecycle contract, test harness** | "I want to write one of these" is a documented user need. Without docs, only the maintainer ships plugins. | MEDIUM | Datasette `Writing plugins`; Home Assistant Developer Docs `creating_integration_manifest`; VS Code Extension API docs; pytest "Writing plugins" |
 
 ### Differentiators (Competitive Advantage)
 
-These are not strictly required for v0.4 to feel complete, but each one is a genuine local-first / single-user UX win over the SaaS-flavored OSS tools surveyed. Pick from this list if scope allows.
+Features that set horus-os v0.5 apart from a generic plugin system. Not required for launch, but valuable. Each is tagged for inclusion or deferral.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Cache-aware cost math** (separate counters for cache-read vs. cache-write tokens with their own rates) | Anthropic prompt caching is 90% cheaper to read, 25% more to write. Most OSS tools collapse both into "input tokens" and silently undercount or overcount cost. Getting this right is a small honesty win that matters to people who actually use prompt caching. | LOW-MEDIUM | Anthropic SDK already exposes `cache_creation_input_tokens` and `cache_read_input_tokens`. LiteLLM's [pricing JSON](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) already carries `cache_read_input_token_cost` and `cache_creation_input_token_cost` per model. Just persist + use those columns. |
-| **Cost diff vs. prior window** ("week-over-week: +$2.13, +18%") on dashboard + CLI | Single-line summary that turns raw numbers into a decision signal. Lunary's per-user/session cost cards do something similar. Cheap to compute over a single SQLite table. | LOW | One extra SQL aggregate; one extra dashboard tile; one CLI flag (`--compare 7d`). |
-| **Slow-trace drill-in** ("top 5 slowest agent runs in window, click → full trace tree") | The existing `/traces` view shows everything chronologically; users want "show me what's painful." Phoenix and Langfuse both highlight slow traces. We already have `parent_trace_id` + `list_child_traces` from v0.2 multi-agent work — the tree rendering already exists. | LOW-MEDIUM | New panel on `/observability` querying `ORDER BY total_duration_ms DESC LIMIT 5`, deep-linking to existing `/traces/{id}` page. |
-| **Most-failing-tool callout** (single biggest red number on the dashboard) | One-glance answer to "what's broken right now?" Inverts the success-rate panel into an action signal. AgentOps and Helicone both surface this. | LOW | One SQL aggregate (`ORDER BY error_rate DESC LIMIT 1 WHERE call_count >= 5`). |
-| **CLI JSON output is stable enough to pipe through `jq`** (documented schema, semver-tagged) | Local-first users compose. `horus-os usage --format json --since 7d \| jq '...'` should not break between point releases. Treats the CLI like a public API. The existing `horus-os traces` JSON output already sets this precedent. | LOW (mostly discipline + docs) | Document the JSON schema in `docs/CLI.md`. Add a test that pins the top-level shape. |
-| **OTel adapter emits both spans and metrics** (not just spans) | OTel GenAI spec defines [`gen_ai.client.token.usage`](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/) as a histogram metric. Users who already run a metrics backend (Prometheus, Grafana, Honeycomb) want native histograms, not derived-from-spans. | MEDIUM | Adds `MeterProvider` + `OTLPMetricExporter` alongside the trace exporter. Bucket boundaries per spec. |
-| **`horus-os usage --by model` / `--by tool` / `--by agent`** | Three different "where's the money / where's the time / where's the broken thing" questions. Mirrors `aws ce get-cost-and-usage --group-by`. | LOW | Same query layer, different `GROUP BY` column. |
-| **Bundled `pricing.json` includes a `last_updated` and `release_version` field** | Honesty about freshness. tokencost and LiteLLM both ship with version metadata. Lets the dashboard show a "pricing data is N days old, override at $HORUS_OS_HOME/pricing.json" hint when stale. | LOW | Trivial header fields in the JSON; consumed by a single dashboard banner. |
+| Feature | Value Proposition | Complexity | v0.5 verdict |
+|---------|-------------------|------------|--------------|
+| **OBSERVE-01: Per-plugin error rate and latency on the existing `/observability` tab** | v0.4 already ships ObservationBus + SQLite persistence + p50/p95 + tool reliability. Extending `tool_invocations.plugin_name` is a column-level migration, not a new pipeline. "Plugin X tools fail 12% of the time" is a unique trust signal no other Python plugin system surfaces by default. | LOW (column addition + label propagation; query module already exists) | **INCLUDE in v0.5.** This is the single highest-leverage feature for differentiation. Reuses v0.4 entirely. |
+| **OBSERVE-02: Per-plugin LLM cost attribution (which plugin's tools spent which dollars)** | If a plugin calls back into the LLM via `delegate_to_agent` or via a tool the plugin contributes, v0.4's cost annotation should attribute that cost to the plugin. Closes the "I installed a plugin and my Anthropic bill doubled — which one?" question. | LOW-MEDIUM (column on `llm_calls`, attribution via trace context) | **INCLUDE in v0.5 if it's a column addition.** Defer if it requires new instrumentation; that's a v0.6 conversation. |
+| **MANIFEST-05: Strict TOML schema validation at install time — reject bad manifests with line-numbered errors** | `validate-pyproject` proves the pattern works; the cost is shipping a JSON schema file and a CI validator. Plugins with malformed manifests fail at install (loud), not at runtime (silent). | LOW | **INCLUDE in v0.5.** Cheap, defensible, prevents an entire class of "why doesn't my plugin work?" bug reports. |
+| **PERMISSION-04: Capability strings are a closed, documented set (not free-form), with copy that explains each in user-facing terms** | Free-form capability strings invite typos and plugin sprawl. A documented closed enum (`filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`, `process.spawn`, `agent.delegate`) keeps prompts and audit honest. | LOW (it's a Python enum + docs page) | **INCLUDE in v0.5.** Bake the enum in code, render the friendly strings in the dashboard prompt. |
+| **ISOLATE-04: Slow-start timeout — if a plugin's `start()` hook blocks more than N seconds, mark it as `slow_start` and continue boot** | Single slow plugin should not delay horus-os boot. Inherited from v0.3's adapter lifecycle (which already has start/stop). | LOW (asyncio.wait_for around start) | **INCLUDE in v0.5.** Extension of existing v0.3 pattern. |
+| **REFERENCE-03: Cookiecutter template (`horus-os-plugin-template`) — `cookiecutter gh:Ridou/horus-os-plugin-template`** | Datasette's single biggest accelerant for third-party authors. The cookiecutter generates manifest + setup.py + test + GH Actions CI in one command. | LOW-MEDIUM (it's a template repo + 1 docs page) | **CONSIDER for v0.5.** Could land in v0.5 release week or be the first follow-up. The reference plugin (`horus-os-example-plugin`) is the must-have; the cookiecutter is the nice-have. |
+| **DASH-03: Plugin-author hyperlinks on the plugins tab (homepage, issue tracker, source)** | Cheap to render from manifest fields. Closes the "I want to file a bug" loop. | LOW | **INCLUDE in v0.5.** Manifest fields exist, render them. |
+| **MANIFEST-06: `quality_scale` analog (bronze/silver/gold) declared by the author and renderable in dashboard** | Home Assistant's quality_scale gives users a quick trust signal independent of stars. For v0.5 we likely just want a "verified by maintainer" badge for the reference plugin, not a tier system. | LOW (just a field) but conceptual complexity (governance) | **DEFER to v0.6+.** A self-declared quality scale is meaningless without governance. Skip. |
+| **INSTALL-06: `horus-os plugins update <name>` and `horus-os plugins update --all`** | Symmetrical with install. Datasette ships `--upgrade` via pip pass-through, but `update` as a first-class verb is more discoverable. | LOW (pip install --upgrade pass-through) | **INCLUDE in v0.5.** It is literally one argparse subcommand. |
+| **PERMISSION-05: Read-only "dry-run" mode — load a plugin with all capabilities denied, see what it tries to do, then grant** | Useful for sketchy third-party plugins; lets users see the actual access pattern before granting. | MEDIUM (requires instrumenting every capability check to log on deny) | **DEFER to v0.6+.** Conceptually elegant, but the value is concentrated on a small audience and the cost is real. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-These are features the surveyed OSS LLM-observability projects all ship — and that v0.4 must explicitly NOT ship, because they violate horus-os's locked anti-goals (PROJECT.md "Out of Scope": no SaaS, no multi-tenant, no third-party paid accounts, single-machine).
+Features that look good in v0.5 brainstorms but create rewrite cost, security debt, or scope sprawl. Ship none of these in v0.5. PROJECT.md already calls out the hosted catalog and OS-level isolation; this section adds the ones not yet in `Out of Scope`.
 
-| Feature | Why Requested | Why Problematic Here | Alternative |
-|---------|---------------|----------------------|-------------|
-| **Multi-user / multi-tenant cost attribution** ("cost per `user_id`", "cost per `session_id`") — central to Langfuse, Lunary, Helicone | Required for SaaS-style chargeback dashboards. Users coming from Langfuse will ask. | Violates PROJECT.md "Multi-tenant patterns" Out of Scope. There's one user — the operator. Cost-per-agent / per-model / per-tool already gives them every slice they need. | The agent-profile dimension *is* our per-user proxy. Document this. |
-| **Cost budgets with alerts** ("notify me when this month > $50") | Almost every OSS tool has this. Tempting because "alert me" feels universal. | Requires an alerting subsystem (channels, delivery, dedup) we deliberately don't have. Closest existing surface is the Discord/Slack adapter, but wiring observability into adapter-emitted alerts is a v0.5 plugin-manifest concern. | v0.5+. Users who need this today can query the SQLite directly with cron. |
-| **Custom dashboards / saved queries** | Helicone exports to PostHog for custom dashboards. Langfuse has its own query builder. | We have one dashboard for one operator. A query builder UI is a 10x feature for a 1x audience. | The CLI `usage` subcommand + JSON output covers ad-hoc analysis. SQLite is a file on disk; advanced users can use any SQL tool. |
-| **Trace evaluation / scoring / LLM-as-judge** — Phoenix and Langfuse both ship this | Big in 2026 LLM-obs marketing. Users coming from those tools will ask. | Out of scope for the *observability* milestone. Evals are a separate concern (v0.6+ candidate). Mixing them in dilutes v0.4 and pulls in eval-model API costs (anti-goal). | Defer entirely. Note in PROJECT.md if it becomes a recurring ask. |
-| **Replay / re-run a traced LLM call from the dashboard** — Phoenix Playground | Genuinely useful for debugging. | Requires either re-issuing the call (network + cost side-effects, breaks "no silent network calls" principle) or a mock-replay mode (significant complexity). | The existing `horus-os run` CLI already takes a prompt; `traces` already shows the prompt. Copy-paste suffices at v0.4. |
-| **PII redaction / guardrails / prompt-injection detection** — Lunary ships this | Increasingly expected from LLM-obs tools. | Out of scope for an observability milestone. Conflates two concerns. | Defer. Could land as an opt-in v0.5 adapter (the v0.3 adapter pattern fits this well). |
-| **Required external service for storage** (ClickHouse, Postgres, S3) — Langfuse v3 needs all three | Performant at scale. | Violates PROJECT.md "SQLite remains the source of truth" + "no paid third-party account" + "single-machine." | SQLite scales fine to millions of rows for a single user. WAL mode handles concurrent dashboard reads + agent writes. |
-| **A built-in alerting / webhook hub** | Helicone has rate-limit hooks, Langfuse has alerts. | We have adapters that already own the "outbound notification" lane (Discord, Slack, Email). Building a parallel alerting subsystem inside observability fragments the codebase. | When alerting eventually ships, it should be an adapter consuming observability data, not a feature *of* observability. v0.5 plugin manifest era. |
-| **Multi-project / workspace separation** | Standard in SaaS-flavored OSS (Lunary "3 projects", Langfuse "organizations"). | Out of scope. One operator, one machine, one project. Adding workspaces is a complexity tax with zero local-first benefit. | The `agent_profile_name` axis already gives logical grouping. |
-| **Auth on the `/observability` tab** | Reasonable for a hosted dashboard. | We bind to `127.0.0.1` (already documented in ARCHITECTURE.md "What is not in v0.3"). Adding auth on a single endpoint without auth on the rest of the dashboard is inconsistent and misleading. | Stays bound to localhost. Document. |
-| **Forced OTel-only mode** (no SQLite, push everything to user's collector) | Pure-OTel purists will ask. | Violates "SQLite remains the source of truth" (PROJECT.md). Also breaks the CLI `usage` subcommand, the dashboard, and the existing `traces` table contract. | OTel is opt-in *additive* export. SQLite is always-on. |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Hosted plugin marketplace / catalog API in v0.5** | "Users will want to browse plugins from the dashboard." | Hosted catalog = hosted service = paid ops + an attack surface (typosquatting, supply chain). Datasette ships a static `datasette.io/plugins` page generated from a repo, which is what a small project should do. PROJECT.md already deferred this. | Static `docs/plugins.md` in the horus-os repo listing the few existing plugins + the reference. Link to PyPI search `horus-os` namespace. |
+| **OS-level sandbox (subprocess or container) for plugin execution in v0.5** | "What if a plugin is malicious?" | In-process Python sandboxing is broken by design (pysandbox is the canonical cautionary tale). OS-level isolation is real work — IPC contract, lifecycle complexity, performance hit on every tool call. PROJECT.md already deferred this. | Default-deny capability declarations + clear "you trust this plugin's author" prompt + revocable grants. Trust model = "you `pip install`-ed it, you took the risk." Same model Datasette, Sphinx, pytest all use. |
+| **Custom in-process Python sandbox (RestrictedPython, AST whitelisting, etc.)** | "What about default-deny that actually blocks code?" | Strictly worse than no sandbox — it provides the illusion of safety while every introspection feature in Python is a bypass (`__import__`, `__builtins__`, `__class__.__mro__`, etc.). Industry consensus: do not ship this. | Same as above: clear consent + revocable grants. If a plugin author is hostile, no in-process sandbox will save you. |
+| **Pluggy-style hook framework for v0.5** | "Datasette and pytest use pluggy, we should too." | We already have a Tool registry (v0.1) and an Adapter Protocol with lifecycle hooks (v0.2/v0.3). Pluggy is for systems with many extension points and complex multicall semantics. horus-os has two extension points: tools and adapters. A separate hook framework would compete with the existing registries. | Stay with the existing protocols. v0.5 just packages them behind a manifest. The plugin "contributes Tool X via the manifest" — no new hook system needed. |
+| **Auto-update plugins on horus-os start** | "Users want plugins to stay current." | Auto-update silently widening capability grants (PERMISSION-02 violation) or breaking on a new version is the worst possible v0.5 first impression. Home Assistant integrations explicitly require a restart after install. | Notification-style "3 plugins have updates available" in the dashboard. User clicks update, sees the re-grant prompt if capabilities expanded. |
+| **Plugin signing / Sigstore verification in v0.5** | "Supply chain attacks are real." | Plugin signing requires a publisher identity model, a signature distribution channel, and revocation. Real work — and pip itself doesn't enforce it. v0.5 is too early. | Pin versions in `horus-plugin.toml`. Show "installed from PyPI on date X" in the dashboard. Add Sigstore in v0.6+ if real-world abuse warrants it. |
+| **Hot-reload of plugins without restart** | "It would be cool to swap a plugin in without a server restart." | Python doesn't really support clean module unload (sys.modules is sticky, references to old class objects persist). Hot-reload becomes a long tail of "why isn't my new code running?" bug reports. JupyterLab and Datasette both require restart. | Toggle disable, restart, toggle enable. The restart cost is seconds in horus-os. |
+| **Manifest in JSON instead of TOML** | "JSON is everywhere, TOML is niche." | PROJECT.md already locked TOML. JSON is fine but TOML matches `pyproject.toml`, ships in stdlib (`tomllib`) on 3.11+, and supports comments which a manifest will want. | TOML, as locked. |
+| **Per-plugin Python virtualenv** | "Two plugins might want conflicting versions of a library." | Real work (subprocess + IPC) for a marginal case. pip itself surfaces the conflict at install time. | Let pip resolve. If two plugins genuinely conflict, the user picks one or files an issue against the offending author. |
+| **Plugin "settings UI" — dynamic forms rendered from manifest schema** | "Adapters get config in the dashboard, plugins should too." | A schema-driven form renderer is its own product (think Home Assistant config_flow). For v0.5 the plugin reads env vars and config files like the rest of horus-os. | Document env-var conventions in the plugin author guide. Defer schema-driven forms to v0.6+. |
 
 ## Feature Dependencies
 
 ```
-[SQLite v4 → v5 migration]                  (TABLE STAKES, foundational)
-        |
-        +--> [Token-count capture per LLM call]
-        |        |
-        |        +--> [USD cost computation]
-        |        |        |
-        |        |        +--> [User-overridable pricing.json]
-        |        |        |
-        |        |        +--> [/observability cost panel]
-        |        |        |
-        |        |        +--> [/agents tab cost augmentation]
-        |        |        |
-        |        |        +--> [horus-os usage CLI]
-        |        |        |
-        |        |        +--> [Cost diff vs. prior window]   (DIFF)
-        |        |        |
-        |        |        +--> [Cache-aware cost math]        (DIFF)
-        |        |
-        |        +--> [OTel exporter — token usage metric]    (TABLE STAKES; opt-in)
-        |
-        +--> [Per-LLM-call latency]
-        |        |
-        |        +--> [p50/p95 aggregates]
-        |        |        |
-        |        |        +--> [/observability latency panel]
-        |        |        +--> [horus-os usage CLI]
-        |        |        +--> [Slow-trace drill-in]          (DIFF)
-        |        |
-        |        +--> [OTel exporter — operation.duration]    (TABLE STAKES; opt-in)
-        |
-        +--> [Per-tool-call latency + status]
-                 |
-                 +--> [Tool success/error rates]
-                 |        |
-                 |        +--> [/observability tool-reliability panel]
-                 |        +--> [Most-failing-tool callout]    (DIFF)
-                 |
-                 +--> [Last-error preview]
-                 |
-                 +--> [OTel exporter — tool spans]            (TABLE STAKES; opt-in)
+MANIFEST-01..04 (declared name/version/entry points/capabilities)
+    └──required-by──> DISCOVERY-01 (entry-points loader)
+                          └──required-by──> INSTALL-01 (install command must validate manifest after pip install)
+                                                └──required-by──> INSTALL-05 (capability prompt reads manifest)
+                                                                       └──required-by──> PERMISSION-01..03 (grant model + revocation)
+                                                                                              └──required-by──> ISOLATE-01..03 (a denied capability is enforced at runtime; ISOLATE-01 also catches load errors before grants are persisted)
+                                                                                                                     └──required-by──> DASH-01..03 (dashboard surfaces what the grant model + isolation produced)
+                                                                                                                                            └──enables──> OBSERVE-01..02 (per-plugin telemetry attaches plugin name to existing observation events)
 
-[Time-window filtering] ──enhances──> every dashboard panel + the CLI
+REFERENCE-01..02 (example plugin + author docs)
+    └──validates──> MANIFEST-01..04 + DISCOVERY-01..02 + INSTALL-01..06
+                    (if the reference plugin doesn't install and run cleanly via the documented path, nothing else does)
 
-[OTel adapter] ──depends on──> existing v0.3 [Adapter + LifecycleAdapter protocols],
-                               existing [AdapterRegistry], existing [FastAPI lifespan integration]
+MANIFEST-05 (strict schema validation)
+    └──enhances──> INSTALL-01 (validation at install rejects bad plugins before the SQLite grant row is written)
+
+ISOLATE-04 (slow-start timeout)
+    └──extends──> v0.3 adapter lifecycle hooks (start/stop already exist)
+
+OBSERVE-01..02 (per-plugin telemetry)
+    └──reuses──> v0.4 ObservationBus + SQLitePersister + queries.py
+                 (column-level extension: add plugin_name to llm_calls + tool_invocations)
 ```
 
 ### Dependency Notes
 
-- **SQLite v4 → v5 migration is the only hard ordering constraint.** Everything else can ship in any order once the schema is in place. The migration adds: `traces.input_tokens`, `traces.output_tokens`, `traces.cache_read_input_tokens`, `traces.cache_creation_input_tokens`, `traces.cost_usd`, `traces.total_duration_ms`, plus a new `tool_calls` child table keyed by `trace_id`.
-- **Token-count capture must precede cost computation.** No tokens, no math. Both Anthropic and Gemini SDKs already return the data — we just have to persist it.
-- **Per-call latency must precede percentile aggregates.** SQLite can compute `PERCENTILE_CONT` only if we have the per-call rows. We do not need a streaming sketch (HdrHistogram, T-Digest) at v0.4 scale.
-- **Per-tool capture must precede both the reliability panel and the last-error preview.** Same row, different SELECTs.
-- **`horus-os usage` CLI shares its query layer with `/api/observability/*`.** Extract a `horus_os.metrics` module and have both consumers call it. Avoids two SQL implementations drifting apart.
-- **OTel adapter depends on the entire v0.3 adapter system.** This is by design — PROJECT.md locks it. The lifecycle protocol's `start`/`stop` hooks map cleanly to `TracerProvider` init/shutdown. The AdapterRegistry's error isolation means a missing OTLP collector cannot brick the core dashboard.
-- **OTel adapter does NOT depend on `horus-os usage` or the dashboard panels.** It can ship in parallel with them. They share the same underlying capture path (token counts, durations) but consume it differently.
-- **The bundled `pricing.json` must ship in the package data,** like the dashboard JS file already does. Reuse the same package-data plumbing — there's a known-good path in `pyproject.toml` for shipping non-Python files.
+- **MANIFEST is the spine.** All seven categories below it depend on a parsed, validated manifest. The schema decision (TOML, locked) and the closed capability enum (PERMISSION-04) must land in the first plugin-system phase, before anything else.
+- **DISCOVERY-01 (entry points) + DISCOVERY-02 (local dir) are both required.** Entry points is the third-party distribution path; local dir is the dev path. PROJECT.md already commits to both. They share the same loader code but the load path differs (importlib.metadata vs filesystem walk).
+- **PERMISSION-02 (re-prompt on widened scope) is a hard ordering constraint.** It must land in the same phase as INSTALL-05 (first-run prompt) or it creates a security regression on every plugin upgrade. Don't ship the prompt without the re-prompt logic.
+- **ISOLATE-01 (no host crash) blocks REL.** Three-OS install verification can't go green if a synthetic broken plugin can take down the server. The "broken plugin" test fixture is part of REFERENCE.
+- **OBSERVE-01 (per-plugin error rate) is the killer differentiator** and it's almost free given v0.4. Don't drop it. It also makes ISOLATE-02 (last error visible) much richer: the dashboard shows not just "plugin error" but "plugin error 14% of the time across 320 calls in the last 7 days."
+- **REFERENCE-01 (example plugin) blocks REL too.** The release gate should refuse to tag if the example plugin doesn't install and pass its smoke test on the three-OS matrix. This is the v0.5 equivalent of v0.4's two-variant install-smoke.
 
 ## MVP Definition
 
-### v0.4 Launch (Table Stakes Only)
+### Launch With (v0.5.0)
 
-Minimum viable v0.4 — every item is from the Table Stakes table above. Without all of these, the milestone is incomplete.
+Minimum viable v0.5 — the smallest plugin system that earns user trust and unblocks third-party authors. Mapped to PROJECT.md's locked decisions plus the table-stakes rows above. Each row is the v0.5.0 release gate.
 
-- [ ] SQLite v4 → v5 additive migration (foundational)
-- [ ] Token-count capture per LLM call (both providers, all token types Anthropic returns)
-- [ ] USD cost computation from bundled `pricing.json`
-- [ ] User-overridable `pricing.json` via `$HORUS_OS_HOME/pricing.json`
-- [ ] End-to-end agent-run latency on top-level trace row
-- [ ] Per-LLM-call latency (already partially present; normalize)
-- [ ] Per-tool-call latency + success/error status (new `tool_calls` table)
-- [ ] p50 / p95 aggregates per model / per agent / per tool
-- [ ] Tool success/error rates + last-error preview
-- [ ] `/observability` dashboard tab (cost-by-agent, latency p50/p95, tool error-rate)
-- [ ] Cost / median latency / error rate added to `/agents` tab
-- [ ] Time-window filtering (`?since=24h|7d|30d`, default 7d)
-- [ ] `horus-os usage --format json|csv|table --since 7d` CLI subcommand
-- [ ] Opt-in OTel exporter as a v0.3-style adapter (`[otel]` extra), emitting GenAI-semconv-compliant spans
+- [ ] **MANIFEST-01..04 + MANIFEST-05** — `horus-plugin.toml` with name, version, compatible-horus-os range, declared tools + adapters, requested capabilities, author/homepage/issue tracker; strict TOML schema validation at install with line-numbered errors.
+- [ ] **DISCOVERY-01 + DISCOVERY-02** — Entry points group `horus_os.plugins` (loaded via `importlib.metadata`) + `~/.horus-os/plugins/` directory drop-in. Same loader, different inputs.
+- [ ] **INSTALL-01..06** — `horus-os plugins install|uninstall|list|info|update` subcommands wrapping pip; first-run capability prompt with explicit consent.
+- [ ] **PERMISSION-01..04** — Default-deny posture; grants persisted in SQLite keyed by `(plugin_name, plugin_version)`; revocable from dashboard; re-prompt on version-upgrade scope widening; closed enum of capability strings.
+- [ ] **ISOLATE-01..04** — Plugin load failure or runtime exception caught and reported, never propagates to host; per-plugin error status surface; enable/disable toggle; slow-start timeout that doesn't block boot.
+- [ ] **DASH-01..03** — `/plugins` tab listing installed plugins with version, declared contributions, granted capabilities, lifecycle status, last error; per-plugin enable/disable toggle; manifest hyperlinks (homepage, issue tracker).
+- [ ] **OBSERVE-01** — Extend v0.4 `tool_invocations` with `plugin_name`; render per-plugin error rate on `/observability`. **This is the v0.5 differentiator. Don't cut it.**
+- [ ] **REFERENCE-01..02** — Published `horus-os-example-plugin` in the same repo as a separate package; plugin author docs (`docs/PLUGINS.md`) covering manifest, capabilities, lifecycle, testing.
+- [ ] **MIG-05** — Additive v4→v5 SQLite migration (plugin_grants table + plugin_name column on tool_invocations); v0.4 databases continue to read.
+- [ ] **TEST/REL** — Three-OS install gate (Ubuntu, macOS, Windows × Python 3.11 + 3.12) including a synthetic broken-plugin fixture that proves ISOLATE-01.
 
-### Add If Scope Allows (Differentiators)
+### Add After v0.5.0 (v0.5.x or v0.6 follow-ups)
 
-In rough order of "biggest UX win for least extra work."
+Features that strengthen the plugin system once the core has shipped. Each row has a trigger condition — do not ship speculatively.
 
-- [ ] Cache-aware cost math (LOW, free correctness win; user-visible only if they use Anthropic caching)
-- [ ] Most-failing-tool callout on dashboard (LOW, one SQL aggregate)
-- [ ] Slow-trace drill-in (LOW-MEDIUM, reuses existing trace-tree renderer)
-- [ ] `horus-os usage --by model|tool|agent` (LOW, same query layer)
-- [ ] Cost diff vs. prior window (LOW, one extra aggregate)
-- [ ] OTel metrics (in addition to spans) — `gen_ai.client.token.usage` histogram (MEDIUM)
-- [ ] `pricing.json` carries `last_updated` + `release_version`; dashboard surfaces a "stale" banner (LOW)
-- [ ] CLI JSON output schema documented + pinned by a test (LOW; mostly process)
+- [ ] **REFERENCE-03 cookiecutter template** — Add when the first third-party author opens an issue asking for one (very likely within v0.5's first month).
+- [ ] **OBSERVE-02 per-plugin LLM cost attribution** — Add when the first user asks "which plugin spent the most on Anthropic this week?" (deferral OK; ship in v0.5 only if it's a literal column addition).
+- [ ] **Notification-style update banner on dashboard** — Add when the second plugin author ships and users have stale installs.
 
-### Out (Explicit, Don't Drift Into)
+### Future Consideration (v0.6+ and beyond)
 
-Everything in the Anti-Features table. Document the boundary in v0.4 release notes so people coming from Langfuse / Phoenix / Helicone aren't surprised.
+Features that need more validation, more governance, or more user demand before they're worth building.
+
+- [ ] **OS-level sandbox (subprocess or container)** — Defer until there is a documented real-world abuse case for an in-process plugin. PROJECT.md already lists this in Out of Scope.
+- [ ] **Hosted plugin catalog / browse-and-install UI** — Defer until there are 10+ plugins and the static repo page has hit its limits.
+- [ ] **Plugin signing / Sigstore verification** — Defer until the supply chain attack happens to a horus-os user. Pin versions in the meantime.
+- [ ] **Schema-driven plugin settings UI** — Defer until config sprawl is a documented user complaint.
+- [ ] **PERMISSION-05 dry-run mode** — Defer until at least one third-party plugin is sketchy enough to warrant the engineering investment.
+- [ ] **Self-declared quality_scale tiers** — Defer indefinitely. Meaningless without governance.
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| SQLite v4 → v5 migration | HIGH (blocks everything) | LOW | P1 |
-| Token-count capture per LLM call | HIGH | LOW | P1 |
-| USD cost computation | HIGH | LOW | P1 |
-| User-overridable `pricing.json` | MEDIUM (becomes HIGH the day a model is missing) | LOW | P1 |
-| End-to-end agent-run latency | HIGH | LOW | P1 |
-| Per-LLM-call latency | HIGH | LOW | P1 |
-| Per-tool-call latency + status | HIGH | LOW-MEDIUM | P1 |
-| p50 / p95 aggregates | HIGH | LOW | P1 |
-| Tool success/error rates | HIGH | LOW | P1 |
-| Last-error preview | HIGH | LOW | P1 |
-| `/observability` dashboard tab | HIGH | MEDIUM | P1 |
-| `/agents` tab augmentation | MEDIUM | LOW | P1 |
-| Time-window filtering | HIGH (default 7d is the actual UX) | LOW | P1 |
-| `horus-os usage` CLI | HIGH (CLI is half our audience) | LOW-MEDIUM | P1 |
-| Opt-in OTel exporter | MEDIUM (huge for the subset who run their own collector; zero for everyone else) | MEDIUM | P1 (PROJECT.md locks it) |
-| Cache-aware cost math | MEDIUM | LOW-MEDIUM | P2 |
-| Most-failing-tool callout | MEDIUM | LOW | P2 |
-| Slow-trace drill-in | MEDIUM | LOW-MEDIUM | P2 |
-| Cost diff vs. prior window | MEDIUM | LOW | P2 |
-| `usage --by model\|tool\|agent` | MEDIUM | LOW | P2 |
-| OTel metrics (alongside spans) | LOW-MEDIUM | MEDIUM | P3 |
-| `pricing.json` freshness banner | LOW | LOW | P3 |
+| MANIFEST-01..04 (declared name/version/entry points/capabilities/author) | HIGH | LOW | **P1** |
+| MANIFEST-05 (strict schema validation at install) | MEDIUM | LOW | **P1** |
+| DISCOVERY-01 (entry points loader) | HIGH | LOW | **P1** |
+| DISCOVERY-02 (local directory loader) | MEDIUM | LOW | **P1** |
+| INSTALL-01..04 (install/uninstall/list/info) | HIGH | LOW | **P1** |
+| INSTALL-05 (first-run capability prompt) | HIGH | MEDIUM | **P1** |
+| INSTALL-06 (update subcommand) | MEDIUM | LOW | **P1** |
+| PERMISSION-01..03 (default-deny + persisted + revocable) | HIGH | MEDIUM | **P1** |
+| PERMISSION-04 (closed capability enum) | MEDIUM | LOW | **P1** |
+| ISOLATE-01 (no host crash on plugin failure) | HIGH | MEDIUM | **P1** |
+| ISOLATE-02 (last error surface) | HIGH | LOW | **P1** |
+| ISOLATE-03 (enable/disable toggle) | HIGH | LOW | **P1** |
+| ISOLATE-04 (slow-start timeout) | MEDIUM | LOW | **P1** |
+| DASH-01 (plugins tab) | HIGH | MEDIUM | **P1** |
+| DASH-02 (enable/disable from dashboard) | HIGH | LOW | **P1** |
+| DASH-03 (author hyperlinks) | LOW | LOW | **P1** |
+| REFERENCE-01 (example plugin) | HIGH | MEDIUM | **P1** |
+| REFERENCE-02 (author docs) | HIGH | LOW | **P1** |
+| OBSERVE-01 (per-plugin error rate) | HIGH | LOW | **P1** |
+| OBSERVE-02 (per-plugin LLM cost) | MEDIUM | LOW-MEDIUM | **P2** |
+| REFERENCE-03 (cookiecutter template) | MEDIUM | LOW-MEDIUM | **P2** |
+| MANIFEST-06 (quality_scale tier) | LOW | LOW | **P3** |
+| PERMISSION-05 (dry-run mode) | LOW | MEDIUM | **P3** |
+| Hosted catalog | LOW (today) | HIGH | **P3** |
+| OS-level sandbox | LOW (today) | HIGH | **P3** |
+| Plugin signing | LOW (today) | HIGH | **P3** |
+| Hot-reload | LOW | HIGH | **P3** (anti-feature for v0.5) |
+| Auto-update on start | NEGATIVE | LOW | **anti-feature** |
+| In-process Python sandbox | NEGATIVE (illusion of safety) | MEDIUM | **anti-feature** |
 
 **Priority key:**
-- P1 — required for v0.4 launch (table stakes; PROJECT.md locked items).
-- P2 — ship if scope allows after P1 lands; clear differentiators with cheap implementations.
-- P3 — defer to a v0.4.x patch or v0.5 if the cost-benefit moves.
+- **P1:** Must ship in v0.5.0. The minimum that earns trust.
+- **P2:** Should ship in v0.5.x as fast follow.
+- **P3:** Defer to v0.6+ until user demand validates the cost.
+- **anti-feature:** Do not ship. Listed for explicit rejection.
 
 ## Competitor Feature Analysis
 
-How each of the five reference OSS projects implements the v0.4 surface area, and what we do differently because of our anti-goals.
+How the named plugin systems handle the same surface horus-os v0.5 is building. Use this table when implementation questions arise — do what at least two of them do, deviate only with documented reason.
 
-| Feature | Langfuse | Phoenix (Arize) | Helicone | Lunary | AgentOps | horus-os v0.4 |
-|---------|----------|-----------------|----------|--------|----------|----------------|
-| **Cost tracking source** | Auto-attaches usage based on model name; supports custom pricing per project | Inherits from instrumented framework | Built-in price registry, per-request cost | Per-user / per-session / per-model | Uses [tokencost](https://github.com/AgentOps-AI/tokencost) JSON | Bundled `pricing.json` (shape borrowed from [LiteLLM's](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)), user-overridable |
-| **Storage backend** | Postgres + ClickHouse + Redis + S3 (v3) | OpenTelemetry-native, multiple backends | Postgres (self-host: 4 containers) | Postgres | Cloud-hosted, OSS SDK | SQLite (single file, WAL mode) — and that's it |
-| **Tracing primitive** | Trace / observation hierarchy | OTel spans + OpenInference | Per-request | Trace / session | Sessions + events | Top-level trace + child traces (delegation) + new tool_calls child table |
-| **Latency view** | Gantt + aggregates | Span tree + waterfall | Request list + percentiles | Trace list + aggregates | Session replay timeline | Per-trace tree (existing) + p50/p95 panel (new) |
-| **Tool reliability UI** | Generic span/event filtering | Tool-call spans (OpenInference convention) | Generic error tracking | Generic error tracking | Failure detection callout | Dedicated `/observability` tile + last-error preview |
-| **OTel export** | Ingests OTLP (it's a *receiver*) | OTel-native end-to-end | Has OTel integrations | Has OTel exporter (custom) | Multi-framework SDK | Opt-in *outbound* OTLP adapter (`[otel]` extra) — we never *receive* OTLP, we only emit it |
-| **CLI for usage data** | None (web-first) | None (web-first) | None (web-first) | None (web-first) | None (SDK-first) | `horus-os usage` — none of the surveyed tools ship a CLI usage report; this is a genuine gap we fill |
-| **Auth model** | Multi-tenant, project keys | Configurable | Multi-tenant, project keys | Multi-tenant, project keys | Multi-tenant, project keys | Single-user, localhost-bound, no auth |
-| **Evals / playgrounds / guardrails** | Yes (all three) | Yes (evals + playground) | Experimentation | Prompt playground + guardrails | Failure analysis | None — explicit anti-feature for v0.4 |
+| Capability | Datasette | pytest | Home Assistant | Sphinx | JupyterLab | VS Code | horus-os v0.5 plan |
+|------------|-----------|--------|----------------|--------|------------|---------|-----|
+| **Manifest format** | None (setup.py entry_points only) | None (setup.py entry_points only) | `manifest.json` (per integration) | None (setup.py + setup() function returns dict) | `package.json` + `jupyter-config-data` | `package.json` with `contributes` | `horus-plugin.toml` (TOML, stdlib `tomllib`) |
+| **Required manifest fields** | name + entry_points | name + entry_points | domain, name, codeowners, integration_type | name in setup.py | name, version, jupyterlab field | name, version, publisher, engines.vscode | name, version, horus_os_compatible_range, contributions |
+| **Discovery — primary** | entry-points group `datasette` | entry-points group `pytest11` | core integrations bundled + `custom_components/` dir | `conf.py extensions = []` list | entry-points + `jupyter labextension install` | VS Code marketplace + local install | entry-points group `horus_os.plugins` |
+| **Discovery — drop-in dir** | `--plugins-dir=plugins/` | `conftest.py` auto-discovery | `custom_components/` | `sys.path.append('exts')` then list in conf.py | `--app-dir` | n/a | `~/.horus-os/plugins/` |
+| **Install command** | `datasette install <name>` (pip wrapper) | `pip install` (no wrapper) | HACS (third-party UI) | `pip install` (no wrapper) | `pip install` + `jupyter labextension enable` | Marketplace UI + CLI | `horus-os plugins install <pip-spec>` |
+| **Uninstall command** | `datasette uninstall <name>` | `pip uninstall` | HACS Remove | `pip uninstall` | `jupyter labextension uninstall` | Marketplace UI + CLI | `horus-os plugins uninstall <name>` |
+| **List command** | `datasette plugins` | n/a (`pip list \| grep pytest-`) | Settings > Devices & Services | n/a (read conf.py) | `jupyter labextension list` | Extensions view | `horus-os plugins list` |
+| **Permission model** | None (in-process trust) | None (in-process trust) | Entity-level grants in policy | None (in-process trust) | None (in-process trust) | Workspace Trust + publisher trust + `capabilities.untrustedWorkspaces` | Closed enum of capability strings, default-deny, per-plugin grant persisted in SQLite |
+| **First-run consent prompt** | No | No | Config flow per integration | No | No | Yes (1.97+: trust the publisher dialog) | Yes |
+| **Failure isolation** | pluggy try/except per hook | pytest plugin load errors caught + reported | `ConfigEntryNotReady` triggers retry; Recovery Mode for catastrophic failures | Errors surface in build log; one bad extension can break build | Errors caught, plugin disabled | Extension host crash isolated from editor | Try/except around load + start + tool invocations; degrade to "plugin error" status; never crash host |
+| **Per-plugin observability** | `/-/plugins` JSON; no error rate | Plugin name shows in test output; no error rate | System Health endpoint per integration; error count on integrations page | Build log per extension; no telemetry | Plugin Manager surface; no error rate | Extensions view + extension host metrics | **Per-plugin error rate + latency p50/p95 on `/observability` (v0.4 reuse). This is the differentiator.** |
+| **Enable/disable toggle** | No (uninstall = remove) | n/a | Yes (per integration) | No (edit conf.py) | Yes (`jupyter labextension disable`) | Yes (per extension) | Yes |
+| **Reference / template** | `simonw/datasette-plugin` cookiecutter | Examples in docs | `example_integration` in core | Various tutorial extensions | `extension-cookiecutter-ts` | `vscode-extension-samples` repo | `horus-os-example-plugin` (separate package) + future cookiecutter |
+| **Hosted catalog** | Static `datasette.io/plugins` page | None | HACS (third-party UI on top of GitHub) | None | PyPI search + Plugin Manager UI | Yes (Marketplace) | None in v0.5 (static `docs/plugins.md`) |
 
-The differentiation pattern is consistent: **we trade away every "team / SaaS / multi-tenant / hosted" feature, and in return we get a single-binary install, zero external dependencies, the CLI, and the file the user can grep with `sqlite3`.**
+**Pattern that emerges:** Datasette is the closest analog — a small Python-first project with entry-points + a cookiecutter + a CLI wrapper around pip + a JSON endpoint listing installed plugins. horus-os v0.5 = Datasette's plugin model + Home Assistant's manifest + capability declaration + VS Code's first-run consent prompt + v0.4's existing observability stack. None of those four pieces is new engineering; the work is wiring them together cleanly.
 
 ## Sources
 
-OSS LLM observability projects surveyed (the prior art the v0.4 feature set is calibrated against):
+### Datasette (primary analog)
+- [Plugins — Datasette documentation](https://docs.datasette.io/en/stable/plugins.html) — `datasette install/uninstall/plugins` CLI; entry-points group `datasette`; `/-/plugins` endpoint; pluggy hook system
+- [Writing plugins — Datasette documentation](https://docs.datasette.io/en/stable/writing_plugins.html) — minimum setup.py, one-off plugin pattern via `--plugins-dir`, hookimpl decorator
+- [simonw/datasette-plugin cookiecutter template](https://github.com/simonw/datasette-plugin) — reference structure for third-party authors
+- [A cookiecutter template for writing Datasette plugins (Simon Willison)](https://simonwillison.net/2020/Jun/20/cookiecutter-plugins/) — author rationale
 
-- [Langfuse — Token & Cost Tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking)
-- [Langfuse — Observability Overview](https://langfuse.com/docs/observability/overview)
-- [Langfuse v3 Self-Hosting Guide (ClickHouse architecture rationale)](https://jangwook.net/en/blog/en/langfuse-self-hosted-llm-tracing-setup-guide-2026/)
-- [Arize Phoenix — What it is (OSS)](https://arize.com/docs/phoenix)
-- [Arize Phoenix — GitHub](https://github.com/arize-ai/phoenix)
-- [Helicone — GitHub](https://github.com/Helicone/helicone)
-- [Helicone — Self-Hosting launch announcement](https://www.helicone.ai/blog/self-hosting-launch)
-- [Lunary — feature overview (PostHog OSS tools roundup)](https://posthog.com/blog/best-open-source-llm-observability-tools)
-- [AgentOps — GitHub](https://github.com/agentops-ai/agentops)
+### pytest
+- [Writing plugins — pytest documentation](https://docs.pytest.org/en/stable/how-to/writing_plugins.html) — three plugin types: builtin, external (entry points), conftest auto-discovery
+- [How to install and use plugins — pytest documentation](https://docs.pytest.org/en/stable/how-to/plugins.html) — `pytest11` entry-points group
+- [pluggy default multicall exception handling — issue 259](https://github.com/pytest-dev/pluggy/issues/259) — failure isolation behavior
 
-Pricing data sources (for the bundled `pricing.json` shape):
+### Home Assistant
+- [Integration manifest — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/creating_integration_manifest/) — manifest.json schema, required vs optional fields
+- [Permissions — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/auth_permissions/) — policy model, default-deny via `True=grant, None=deny`
+- [Handling setup failures — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/integration_setup_failures/) — `ConfigEntryNotReady`, retry semantics, recovery patterns
+- [Recovery mode — Home Assistant](https://www.home-assistant.io/integrations/recovery_mode/) — fallback boot model when user integrations break startup
+- [Integration system health — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/core/integration/system_health/) — per-integration health surface
+- [HACS — Home Assistant Community Store](https://www.hacs.xyz/) — community plugin manager UX patterns
 
-- [tokencost — AgentOps-AI/tokencost (Python package + `model_prices.json` for 400+ models)](https://github.com/AgentOps-AI/tokencost)
-- [LiteLLM `model_prices_and_context_window.json` (the de-facto community pricing dataset, auto-synced from GitHub)](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)
-- [LiteLLM — Auto Sync New Models from GitHub (Day-0 Launches)](https://docs.litellm.ai/docs/proxy/sync_models_github)
-- [tokencost-dev — MCP server backed by LiteLLM registry](https://github.com/atriumn/tokencost-dev)
+### Sphinx
+- [Sphinx Extensions — Sphinx documentation](https://documentation.help/Sphinx/extensions.html) — setup() function contract, `extensions = []` config
+- [Sphinx API — Sphinx documentation](https://www.sphinx-doc.org/en/master/extdev/index.html) — setup() return dict (version, env_version, parallel_read_safe)
 
-OpenTelemetry GenAI semantic conventions (defines the wire shape the OTel adapter must produce):
+### JupyterLab
+- [Extensions — JupyterLab documentation (stable)](https://jupyterlab.readthedocs.io/en/stable/user/extensions.html) — enable/disable, discovery, `jupyter labextension` CLI
+- [Is there a way to enable/disable a lab extension through entries in a .py file — Jupyter Discourse](https://discourse.jupyter.org/t/is-there-a-way-to-enable-disable-a-lab-extension-through-entries-in-a-py-file/18141) — config-driven disable
 
-- [OTel — Semantic conventions for generative AI systems (index)](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
-- [OTel — Semantic conventions for generative client AI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/)
-- [OTel — Semantic conventions for GenAI agent and framework spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/)
-- [OTel — Semantic conventions for generative AI metrics](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
-- [OTel — Python OTLP exporter docs](https://opentelemetry.io/docs/languages/python/exporters/)
-- [OpenLLMetry — GenAI semantic conventions contribution guide](https://www.traceloop.com/docs/openllmetry/contributing/semantic-conventions)
-- [traceloop/openllmetry#3515 — deprecation of `gen_ai.prompt` / `gen_ai.completion`, replaced by `gen_ai.input.messages` / `gen_ai.output.messages`](https://github.com/traceloop/openllmetry/issues/3515) (informs our schema attribute naming)
+### VS Code
+- [Extension Manifest — Visual Studio Code Extension API](https://code.visualstudio.com/api/references/extension-manifest) — package.json fields, contributes section
+- [Activation Events — Visual Studio Code Extension API](https://code.visualstudio.com/api/references/activation-events) — `activationEvents` declarative startup
+- [Workspace Trust Extension Guide — Visual Studio Code Extension API](https://code.visualstudio.com/api/extension-guides/workspace-trust) — `capabilities.untrustedWorkspaces.supported`, `restrictedConfigurations`, Restricted Mode
+- [Extension runtime security — Visual Studio Code](https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security) — trust-the-publisher dialog from 1.97+
 
-CLI usage-report design references:
+### Python packaging primitives
+- [Creating and discovering plugins — Python Packaging User Guide](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/) — entry points vs namespace packages vs naming convention
+- [Entry points specification — Python Packaging User Guide](https://packaging.python.org/specifications/entry-points/) — spec for the discovery mechanism we'll use
+- [validate-pyproject — PyPI](https://pypi.org/project/validate-pyproject/) — pattern for strict TOML manifest validation
+- [Python and TOML: Read, Write, and Configure with tomllib — Real Python](https://realpython.com/python-toml/) — `tomllib` in stdlib 3.11+
 
-- [AWS CLI `ce get-cost-and-usage` reference (JSON/text output shape)](https://docs.aws.amazon.com/cli/latest/reference/ce/get-cost-and-usage.html)
-- [AWS Cost Management — CSV download format](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-download-csv.html)
+### Security model
+- [Sandboxing Untrusted Python Code (UBOS)](https://ubos.tech/news/sandboxing-untrusted-python-code-secure-execution-strategies-and-ubos-solutions/) — default-deny posture as industry consensus
+- [pysandbox — vstinner](https://github.com/vstinner/pysandbox) — canonical "in-process Python sandboxing is broken by design" reference
+- [Running Untrusted Python Code (Andrew Healey)](https://healeycodes.com/running-untrusted-python-code) — practical failure modes
 
 ---
-*Feature research for: LLM-observability features for horus-os v0.4 (cost, latency, tool reliability, OTel export, CLI usage)*
-*Researched: 2026-05-24*
+*Feature research for: horus-os v0.5 Plugin System*
+*Researched: 2026-05-26*
+*Consumer: REQUIREMENTS.md categories MANIFEST, DISCOVERY, INSTALL, PERMISSION, ISOLATE, DASH, OBSERVE, REFERENCE — each row above is REQ-ID-able as listed.*

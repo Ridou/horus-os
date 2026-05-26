@@ -1,426 +1,489 @@
 # Pitfalls Research
 
-**Domain:** Adding cost / latency / tool-reliability / OTel observability to an existing local-first AI agent runtime (horus-os v0.4)
-**Researched:** 2026-05-25
-**Confidence:** HIGH for the failure modes (cross-referenced against OTel Python issue tracker, OneUptime + maketocreate writeups, Langfuse/Helicone docs, Anthropic + Gemini SDK behaviour, and the v0.3 source-read findings in ARCHITECTURE.md §0). MEDIUM for the precise blast-radius numbers (single-user desktop deployment, hard to source production-scale anecdotes for our shape).
+**Domain:** Adding a third-party plugin system to horus-os v0.5 — manifest contract, entry-point + local-directory discovery, capability-declared permission grants, `pip install`-wrapped installer, dashboard plugins tab, in-process execution (no OS-level sandbox in v0.5).
+**Researched:** 2026-05-26
+**Confidence:** HIGH for the failure modes (verified against pytest/pluggy, Datasette, Pelican namespace-package design, `importlib.metadata` 3.10→3.12 behavior change documented in CPython docs, Wiz / Truesec / Checkmarx writeups on PyPI supply-chain attacks via entry points and `.pth` files, OTel-bounded-shutdown precedent shipped in v0.4 Phase 38). MEDIUM only on "what fraction of v0.5 plugin authors will trip Pitfall 3 vs Pitfall 5" — those are guesses; the trap itself is verified.
 
 ## Scope and Sibling Cross-References
 
-This file ONLY covers v0.4-specific instrumentation pitfalls. Generic FastAPI / SQLite / Python pitfalls are out of scope.
+This file ONLY covers v0.5 plugin-system pitfalls. Generic FastAPI / SQLite / Python pitfalls and v0.4-resolved observability pitfalls are out of scope (see the prior PITFALLS.md committed 2026-05-25 for those).
 
-Where a sibling research file has already made a call, this file builds on it instead of re-arguing:
+Where existing horus-os v0.4 code already locks a position, this file builds on it instead of re-arguing:
 
-- **ARCHITECTURE.md §0** already names two confirmed v0.3 bugs that v0.4 must fix: (a) the `traces.usage` column reflects only the **final** turn's tokens, not the loop sum, and (b) per-tool latency is computed but never persisted. Both are reframed below as Pitfalls 1 and 6 with the failure-detection angle the architecture doc deliberately did not cover.
-- **ARCHITECTURE.md §4.4** flagged the SSE streaming path as a "documented second capture site" where `usage` is structurally unavailable. That's reframed below as Pitfall 2 with the cost-accounting consequences spelled out.
-- **STACK.md §"GenAI semconv adoption"** locked the position that `gen_ai.*` attributes are Development-status and must live in our own constants module. That decision is treated as given here; Pitfall 11 covers what happens if a future contributor forgets it.
-- **FEATURES.md "Anti-Features"** ruled out cost-budget alerts, multi-tenant attribution, evals, and forced-OTel mode. Pitfalls below assume that boundary holds.
+- **`src/horus_os/adapters/base.py:233`** already swallows `Exception` in `discover_adapters()` so a broken third-party adapter cannot kill the app. That is the right shape; Pitfall 6 builds on it with a stronger "swallow plus emit a structured failure" contract for plugins.
+- **`src/horus_os/server/api.py:99-116`** wraps adapter `start`/`stop` in `try/except` but **without a timeout**. That is fine when we ship the adapters ourselves; it is not fine when a third-party plugin's `start()` decides to `time.sleep(600)` or wait on a dead network. Pitfall 7 mandates `asyncio.wait_for` in v0.5 in the same shape v0.4 Phase 38 used for `OtelAdapter.shutdown(timeout=2000ms)`.
+- **`src/horus_os/observability/bus.py`** (`ObservationBus`) is the v0.4 substrate. Pitfall 8 says every plugin-emitted event must carry a `plugin_name` attribution column, otherwise v0.4's rollups will attribute errors to "the registry" rather than to the offending plugin.
+- **`src/horus_os/storage.py:28`** has `SCHEMA_VERSION = 5`. Pitfall 10 mandates v5→v6 is additive-only and v0.4 databases must continue to read — the same contract v0.4 Phase 32 honored on v4→v5.
+- **`src/horus_os/tools/registry.py:23`** already raises `ValueError("Tool ... is already registered")` on duplicate registration. Pitfall 3 builds on that with a plugin-attributed error message so the user sees *which* plugin lost the collision.
 
-Cited prior art (full URLs at the bottom): OTel Python issues [#3309](https://github.com/open-telemetry/opentelemetry-python/issues/3309) (shutdown-blocks-60s), [#4623](https://github.com/open-telemetry/opentelemetry-python/issues/4623) (no configurable shutdown timeout); OpenLLMetry issue [#3515](https://github.com/traceloop/openllmetry/issues/3515) (`gen_ai.prompt`/`gen_ai.completion` deprecation); OneUptime "Redact Sensitive Prompts" + "Prevent Data Loss in Seven Common OpenTelemetry Scenarios"; maketocreate "OpenTelemetry GenAI: Tracing AI Agents Without Leaking PII"; Last9 "Latency Percentiles are Incorrect P99 of the Times"; Helicone retries doc; Anthropic per-token billing analysis from `implicator.ai`.
+The v0.5 milestone PROJECT.md is explicit that **OS-level sandbox isolation is out of scope for v0.5**. Every pitfall below assumes in-process loading. That assumption is also the single largest threat-model surface, which is why Pitfall 1 is non-negotiable.
+
+Cited prior art (URLs at the bottom): CPython `importlib.metadata` 3.10/3.11/3.12 docs, [pypa/setuptools#510](https://github.com/pypa/setuptools/issues/510) (`pkg_resources` import cost), [catkin/catkin_tools#297](https://github.com/catkin/catkin_tools/issues/297) (entry-point discovery >200ms), [unslothai/unsloth#1859](https://github.com/unslothai/unsloth/issues/1859) (60s import via entry points), Datasette plugin model and `datasette install` shape, Pelican 4.5+ namespace-package plugins, pluggy hook-collision design, [Wiz LiteLLM TeamPCP writeup](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign) on PyPI supply-chain, [Checkmarx Command-Jacking](https://checkmarx.com/blog/this-new-supply-chain-attack-technique-can-trojanize-all-your-cli-commands/) on entry-point hijacks and `.pth` arbitrary execution, Confluent / Conduktor schema-evolution rules.
 
 ## Critical Pitfalls
 
-### Pitfall 1: Per-iteration token totals silently undercount cost
+### Pitfall 1: Default-allow capability grants normalize compromise
 
 **What goes wrong:**
-The agent loop calls `Conversation.send` N times per run (one per iteration). Each call returns its own `usage` dict. A naive implementation writes whichever `usage` it last saw onto the trace row, so a 5-iteration run with 12k input / 800 output per turn is recorded as 12k / 800 instead of 60k / 4000. Cost reported is 1/N of actual. The user sees a $0.07 weekly bill, the Anthropic console shows $0.35, and trust in the dashboard evaporates.
+v0.5 ships in-process plugin execution. A plugin's code runs in the same Python process as horus-os, with the same file descriptors, the same env vars, and access to the same `~/.horus-os/secrets.json`. If `horus-plugin.toml` lists `capabilities = ["filesystem.read", "filesystem.write", "net.outbound", "secrets.read"]` and we render that as a one-button "Install" with no per-capability prompt, the user has effectively granted a stranger arbitrary code execution on their laptop. The Wiz/Truesec LiteLLM writeups (PyPI v1.82.7 / 1.82.8 trojanized within hours of publication, 2025) and Checkmarx's command-jacking research show this is not theoretical: malicious entry-point hijacks and `.pth`-file arbitrary execution are an active 2025-2026 attack surface in PyPI. Plugin code IS arbitrary code execution — the only question is whether the user knowingly grants it.
 
 **Why it happens:**
-ARCHITECTURE.md §0 confirms this is the live shape of `Database.record_trace` in v0.3 today: the per-iteration `usage` overwrites instead of accumulating. The bug is invisible until the user cross-checks against the provider console, because every individual number looks plausible.
+Adoption pressure. The frictionless "datasette install datasette-foo" UX is what made the Datasette plugin ecosystem viable, and a v0.5 reviewer will reasonably argue that any prompt the user does not understand will be click-throughed. That reviewer is correct that prompts get ignored — but the right response is to make the *prompt content* legible (one-line plain-English capability descriptions, not a JSON dump), not to remove the prompt. Datasette itself does NOT have a capability grant model on plugin install for exactly this reason: it punts to the user's pip trust. horus-os v0.5 must do better because we are a single-user desktop product with credentials on disk — the blast radius is higher than a multi-tenant API gateway.
 
 **How to avoid:**
-- Capture per-call, sum at the trace level. Persist one row per `Conversation.send` into the new `llm_calls` table; compute `traces.total_input_tokens = SUM(llm_calls.input_tokens WHERE trace_id = ?)` on `RUN_END` (ARCHITECTURE.md §4.1 already mandates this).
-- Add an integration test that runs a 3-iteration loop with hand-stubbed `usage` returning `{input: 100, output: 50}` each turn and asserts `trace.total_input_tokens == 300`, not 100. This test is cheap and catches every future regression at the bus-wiring layer.
-- Add a nightly comparison harness (optional, but extremely high value): for any user opted in, sum `llm_calls.cost_usd` for the last 24h and write the number to a debug log alongside the user's Anthropic + Gemini console totals (manually entered or scraped from a CSV download). Within 5% means the table is sound; > 5% drift flags a regression. The "implicator.ai" piece on Anthropic billing confirms the per-token rates on the console are exact, so any drift > rounding is a horus-os bug, not a provider bug.
+- **Default-deny posture in code, not just docs.** `src/horus_os/plugins/permissions.py` exposes `check_capability(plugin_name, capability) -> bool` that returns False unless an explicit grant row exists in `plugin_capability_grants` for the *exact (plugin_name, plugin_version, capability)* tuple. Plugin-facing helpers (a `filesystem` shim, a `secrets` shim, a `net` shim) call `check_capability` first and raise `PermissionDenied` otherwise. The default for every shim is deny; the grant table is the only path to allow.
+- **Capabilities are declared in `horus-plugin.toml` and re-prompted on every change.** If v1.0 of plugin foo requested `filesystem.read` and v1.1 requests `filesystem.read, filesystem.write`, the upgrade is gated by a re-prompt; the existing grant does NOT carry forward. Pinned to `plugin_version` in the grant table; never to `plugin_name` alone.
+- **One-line plain-English description per capability** lives in `src/horus_os/plugins/capability_catalog.py`. Example: `"filesystem.read": "Read any file in your home directory, including notes, secrets, and SSH keys."` The installer surfaces this string verbatim, never the dotted-key. The catalog is closed: a plugin requesting an unknown capability key is **refused** at install time (`ManifestError: unknown capability 'filesystem.god_mode'`), not silently granted nothing.
+- **Threat model lives in `docs/PLUGIN-SECURITY.md`** and is linked from the install confirmation screen. Explicit statement: "Plugins run in the same Python process as horus-os. A plugin you have granted `filesystem.read` can read your secrets file. We do not sandbox plugins at the OS level in v0.5. Only install plugins from authors you trust." That sentence is the truth and refusing to write it down does not change it.
+- **No `eval`, no `exec`, no `__import__` from plugin-supplied strings.** Plugin code is loaded via the entry-point mechanism only. The installer never accepts a `code` string field.
 
 **Warning signs:**
-- Dashboard cost-by-agent panel shows much lower numbers than the provider's billing page.
-- Multi-iteration runs (delegation chains, tool-heavy loops) show suspiciously similar cost to single-iteration runs.
-- The `traces.total_input_tokens` column is null or zero on a run that obviously did multiple turns (turn_count > 1).
+- Any code path where `plugin_capability_grants` is checked-then-not-used (TOCTOU); the helper shims must raise before returning, not return-and-trust the caller.
+- A capability declared in `horus-plugin.toml` is never actually consumed by the plugin — sign the plugin is over-requesting; the dashboard should show "requested but never used in last 30d" as a hint to revoke.
+- A plugin process opens a file outside `~/.horus-os/plugins/<plugin_name>/` without holding the `filesystem.read` grant. (We cannot strictly enforce this without OS isolation; we *can* monkey-patch `builtins.open` in the plugin's module namespace and lint for raw `open()` in PR review of the reference plugin.)
 
 **Phase to address:**
-v0.4.1 (schema) + v0.4.2 (capture) + v0.4.3 (cost). Bug exists in v0.3 today; v0.4.1 introduces the table that makes the fix possible; v0.4.2 wires the per-call publish that makes the sum correct; v0.4.3 multiplies tokens by price. Owner: METRIC requirement.
+**Phase 41-42 (manifest schema + permission model substrate)**, **Phase 44 (installer surface)**, **Phase 47 (docs trio including threat model)**. Owned by PLUG-01, PLUG-02 (default-deny), MANIFEST-03 (capability declaration), and a `docs/PLUGIN-SECURITY.md` deliverable on the release-gate phase. The default-deny posture must land BEFORE the installer ships; an installer that grants by default then "we will tighten it later" is the trap that turns into the v0.6 CVE.
 
 ---
 
-### Pitfall 2: Streaming path silently records $0.00 runs
+### Pitfall 2: Manifest schema drift — adding a v2 field silently breaks every v1 plugin OR silently underuses every v2 plugin
 
 **What goes wrong:**
-`/api/chat/stream` and CLI streaming runs go through `run_agent_stream`, not `run_agent_loop`. The SSE response shape does not surface the provider's final `usage` to the consumer. If the v0.4 capture only hooks `run_agent_loop`, every streamed run lands in SQLite with `input_tokens=0`, `output_tokens=0`, `cost_usd=0.00`. Two weeks in, the dashboard says "cost: $0.42" while the user has actually spent $7. The numbers are not wrong-by-rounding; they are wrong-by-percentage, and the lower the user's streaming ratio the worse it gets.
+v0.5 ships `manifest_version = 1` with five top-level fields (`name`, `version`, `entry_points`, `capabilities`, `horus_os_compat`). v0.6 wants to add a `signing_key_fingerprint` field. Naively, the loader either (a) refuses to load v1 plugins because they are missing the new field, breaking every published plugin, or (b) loads v2 plugins under a v1 codepath that never reads the new field, silently granting unsigned plugins the trust they would have been denied. Confluent and Conduktor's schema-evolution rules call this out as the "add an optional field with a default" discipline; Pelican learned it the hard way in the v4.5 namespace-package migration when older plugins stopped working without an explicit shim.
 
 **Why it happens:**
-The SDK *does* surface usage on the final stream chunk (Anthropic: read `final_message.usage` after the stream drains via `MessageStream.get_final_message()`; Gemini: `response.usage_metadata` after iteration finishes). But the current `_event_stream` handler in `server/api.py` does not call those terminal accessors before closing the response. ARCHITECTURE.md §4.4 flagged this as a "documented gap" and accepted best-effort. That acceptance is wrong if "best effort" silently becomes "zeros." Best effort must surface as a non-zero number plus an honest `streaming_estimated=true` flag, never as silent zeros.
+The first version of a schema is always under-specified. A v0.5 reviewer optimistically declares "we can add fields later." That is *true*, but only if v1 was designed knowing that. If `manifest_version` is not a top-level field from day one, you cannot tell v1 from v2. If unknown fields raise instead of being ignored, every v1 loader rejects v2 plugins. If unknown fields are silently ignored without a corresponding `min_loader_version` field on the manifest, the plugin author cannot signal "I require a feature that landed in v0.6 to function correctly."
 
 **How to avoid:**
-- Always read the terminal `usage` from the stream object before publishing the `LLM_CALL` event. Anthropic exposes `stream.get_final_message().usage` and `stream.get_final_text()`; both are stable accessors on `MessageStream`. Gemini accumulates `response.usage_metadata` on the response object after iteration completes. Both are documented in their respective SDKs and were stable as of May 2026.
-- If the stream errors mid-flight (network drop, content filter), the terminal accessor will not have a complete usage. Fallback: estimate output tokens with `len(accumulated_text_chunks) / 4` (rough tokens-per-char heuristic), persist with `estimated=1`, `pricing_missing=0`, and surface a yellow "estimated" badge in the dashboard. NEVER persist `0` for a non-empty stream.
-- Add a regression test that hits `/api/chat/stream` with a stubbed Anthropic SDK that yields a stream and a terminal usage; assert the persisted `llm_calls` row has the real numbers, not zeros.
-- Add a dashboard tile: "Streaming runs where token count was estimated: N (last 7d)." If N grows unexpectedly the user has visibility, not silent rot.
+- **`manifest_version: int` is a required top-level field from day one.** v0.5 ships `manifest_version = 1`. The loader reads it first and refuses any value it does not know how to load (`ManifestError: manifest_version=2 not supported by horus-os 0.5; please upgrade`).
+- **Forward-compatibility rule: additive only.** v6 (whenever it ships) may add new optional top-level fields with default values; may NOT remove fields, rename fields, or change a field's type. This is the Confluent "Forward" compatibility class. Encoded as a test fixture: `tests/fixtures/manifest_v1_minimum.toml` ships at v0.5 and MUST continue to load unmodified through every future loader version. CI runs a parametrized test across every shipped manifest version.
+- **`min_horus_os_version: str` is a required top-level field** so a v0.6-only plugin can refuse to load on v0.5 with a clear error rather than crashing at runtime when the missing API is called.
+- **Unknown top-level fields are warned, not refused.** When loading a v1 manifest with an unknown key `signing_key_fingerprint`, the loader logs `WARN: unknown manifest field 'signing_key_fingerprint' in plugin foo; this field is ignored under manifest_version=1.` This way a plugin can be authored against v2 and still load (with warnings) on v0.5; the user sees an actionable upgrade message.
+- **Migration is a pure function, tested explicitly.** `src/horus_os/plugins/manifest.py` exposes `load_manifest(path: Path) -> PluginManifest` that normalizes v1 manifests to the current internal representation. The v2-loader normalizes v1 by filling defaults. A test asserts `load_manifest('v1.toml') == load_manifest('v2_same_intent.toml')` after normalization.
 
 **Warning signs:**
-- The dashboard says cost is much lower than the user's perception.
-- A `SELECT COUNT(*) FROM llm_calls WHERE input_tokens=0 AND output_tokens=0` query returns a non-zero count after a real streaming session.
-- Any `llm_calls` row exists with all four (input, output, cache_read, cache_creation) at zero.
+- Anything that reads `manifest['some_field']` without going through `PluginManifest.field_with_default`. Direct dict access is the place schema drift hides.
+- A field renamed in a PR (e.g. `entry_points` → `entrypoints`). That is always a breaking change; the reviewer must add a deprecation alias for at least one minor version.
+- The `min_horus_os_version` field is not enforced — a plugin built against v0.7 features installs cleanly on v0.5 and crashes at first invocation.
 
 **Phase to address:**
-v0.4.2 (capture). The SSE branch fix is in `server/api.py:_event_stream`. Owner: METRIC requirement. Add to "Looks Done But Isn't" checklist below.
+**Phase 41 (manifest schema)**, owned by MANIFEST-01 (versioned manifest), MANIFEST-02 (top-level required-fields contract), MANIFEST-04 (forward-compat test matrix). The `manifest_version` field decision must be locked at requirements time; renaming it post-launch is itself a breaking change.
 
 ---
 
-### Pitfall 3: Latency measured with wall clock, not monotonic
+### Pitfall 3: Entry-point discovery API drift (3.10 → 3.11) and `pkg_resources` import cost
 
 **What goes wrong:**
-Using `time.time()` instead of `time.perf_counter()` to compute durations. NTP adjusts the wall clock mid-call; daylight savings flips it by an hour; a virtualized laptop coming out of sleep can jump by minutes or jump *backwards*. A negative `latency_ms` lands in SQLite. Percentile queries either skip the row, return -200ms as the p50, or (worst case for a UINT column) wrap to a giant positive number. Either way, your latency dashboard is lying.
+Two distinct traps under one name:
+
+1. **API drift.** `importlib.metadata.entry_points()` returned a `dict`-like `SelectableGroups` in 3.10; returns an `EntryPoints` object that no longer supports the dict interface starting 3.12 (selectable API is the only supported shape; the dict shim was removed). The horus-os 3-OS gate covers 3.11 and 3.12. Code written naively as `entry_points()['horus_os.plugins']` works on 3.11 (with a `DeprecationWarning`), raises `TypeError` on 3.12. The bug appears only on the second Python version in CI; a developer who only runs locally on 3.11 will not see it.
+2. **`pkg_resources` is the WRONG mechanism.** [`pypa/setuptools#510`](https://github.com/pypa/setuptools/issues/510) and [`catkin/catkin_tools#297`](https://github.com/catkin/catkin_tools/issues/297) document `pkg_resources` import cost at 1.3-1.5 seconds and entry-point discovery at >200ms. [`unslothai/unsloth#1859`](https://github.com/unslothai/unsloth/issues/1859) reports 60-second `import` times via entry points. If a v0.5 contributor reaches for `pkg_resources` (the older sibling, still widely shown in stale tutorials), the horus-os CLI startup goes from "instant" to "second and a half" — exactly the regression v0.4 Phase 33's capture-overhead benchmark was designed to catch but does not (it does not exercise plugin discovery).
 
 **Why it happens:**
-`time.time()` is the obvious-feeling first choice. It returns a float, it's in the stdlib, every tutorial uses it. The wall-clock semantics aren't visible until you observe the symptom, and the symptom is rare enough to be mistaken for a flake. PEP 418 spelled this out in 2012 and the lesson keeps getting relearned (Ceph's `bluestore` had this exact bug in 2018, see PR #22121 in sources).
+The two APIs (`pkg_resources` and `importlib.metadata`) overlap, and Stack Overflow's top result is still the deprecated one. The selectable-API migration in 3.10→3.12 is documented but easy to miss when copy-pasting old code. The error shape is "works on my machine" because the maintainer's local Python matches the deprecated shim.
 
 **How to avoid:**
-- Use `time.perf_counter()` for every duration computation. Document this as a rule in `docs/CODING-STANDARDS.md`. v0.3's `tools/loop.py` already uses `perf_counter()` correctly, so this is a "don't regress" rule, not a "fix bug" rule.
-- Use `time.time()` (or `datetime.now(UTC).isoformat()`) ONLY for `created_at` timestamps on rows, where wall-clock semantics are exactly what you want.
-- Add a ruff custom rule (or a one-line `grep` CI check) that fails the build if anyone writes `time.time()` inside the `horus_os/observability/` package or the two capture sites in `agent.py` and `tools/loop.py`. Pattern: `grep -rE "time\.time\(\)" src/horus_os/observability src/horus_os/agent.py src/horus_os/tools/loop.py && exit 1`.
-- Add a sanity-check assertion in `SQLitePersister.on_event`: `assert event.latency_ms >= 0`. Refuse to insert negative durations. Log the event for triage instead of corrupting the table.
+- **`src/horus_os/plugins/discovery.py` uses `importlib.metadata.entry_points(group=...)` only.** Already the shape used in `src/horus_os/adapters/base.py:217`; copy that shape verbatim. Forbid `pkg_resources` via a ruff rule: `grep -r "import pkg_resources\|from pkg_resources" src/ && exit 1` in CI.
+- **Entry-point group is namespaced: `horus_os.plugins`** (matching the existing `horus_os.adapters` shape). Sub-groups for tool plugins vs adapter plugins are nested: `horus_os.plugins.tools`, `horus_os.plugins.adapters`. Namespacing per the [Python packaging spec](https://packaging.python.org/specifications/entry-points/) prevents collisions with unrelated `tools` entry-point groups in the global PyPI namespace.
+- **Discovery is lazy.** `src/horus_os/plugins/discovery.py` does NOT call `entry_points(...)` at module import. It exposes `discover_plugins(force_refresh=False) -> list[PluginRecord]`, called once during FastAPI lifespan startup and cached. CLI subcommands that do not touch plugins (e.g. `horus-os --version`) never trigger discovery. A `tests/test_cli_cold_start_perf.py` test asserts `horus-os --version` completes in <100ms cold (per the v0.3 baseline shape).
+- **Test on both 3.11 and 3.12 in CI.** The existing 3-OS matrix already does this; add a parametrized test `tests/test_plugin_discovery_api_shape.py` that walks the EntryPoints object both ways (`select()` and iteration) so a 3.12-only shape is structurally required.
+- **Name-collision handling is explicit and attributed.** If two plugins both declare a tool named `read_file`, the second registration call goes through `ToolRegistry.register(replace=False)` and raises `ValueError("Tool 'read_file' is already registered")` — that v0.3 shape is correct. The plugin loader catches this and surfaces `PluginConflictError: plugin 'bar' tried to register tool 'read_file' but it is already provided by plugin 'foo'. Disable one of them in the dashboard.` Never silently overwrite; never raw-raise the ValueError without plugin attribution.
 
 **Warning signs:**
-- Any row in `llm_calls` or `tool_invocations` with `latency_ms < 0`.
-- p50 latency suddenly jumps to a number that's larger than the wall-clock duration of the whole run.
-- Latency p95 hits maxint or shows a huge anomaly after the user's laptop wakes from sleep.
+- Any `import pkg_resources` in `src/` — fail the build.
+- `entry_points()` called without a `group=` keyword argument — works on 3.10 deprecation shim, breaks 3.12 in unpredictable ways. Lint rule.
+- A `PluginConflictError` raised without a `plugin_name` attribution string in its `__str__` — the user must always know *which* plugin lost.
+- `horus-os --version` cold-start regresses past 100ms.
 
 **Phase to address:**
-v0.4.2 (capture). Owner: METRIC requirement. Lint rule lands in v0.4.1 alongside the schema migration so it's guarding the right files from day one.
+**Phase 42 (discovery + loading)**, owned by PLUG-03 (entry-point discovery) + PLUG-04 (local-directory discovery). The lint rule and cold-start benchmark must land in the same phase so the regression cannot ship.
 
 ---
 
-### Pitfall 4: Latency excludes the parts users actually feel
+### Pitfall 4: `pip install`-wrapped installer can corrupt the host venv
 
 **What goes wrong:**
-The OTel GenAI metrics spec defines `gen_ai.client.operation.duration` as the duration of "the LLM API call." Cheap interpretation: wrap the SDK's `client.messages.create(...)` line and call it done. The user sees a dashboard showing 800ms p50, but their experience is a 4-second wait. The 3.2 seconds that's missing was: provider rate-limit backoff inside the SDK (1s), retry after a 529 (another 1s), HTTP connect on a cold pool (200ms), token-by-token streaming until completion (1s). None of those land in your number.
+`horus-os plugins install foo` shells out to `pip install foo` in the active venv. Six concrete failure shapes, each producing a different broken state:
+
+1. **Network failure mid-install.** Wheel partially downloaded; pip leaves a half-written `.dist-info` directory; subsequent `pip list` shows the package, but the import target is missing files. The next horus-os startup sees the entry point, tries to load it, raises `ModuleNotFoundError`.
+2. **Conflicting dependency pin.** Plugin foo requires `httpx==0.25.0`; horus-os is on `httpx==0.27.0`. `pip install` downgrades httpx without asking and breaks horus-os itself.
+3. **Wheel incompatibility.** Plugin foo ships only manylinux2014 wheels; user is on macOS arm64. pip falls back to sdist, which fails to build because `gcc` is not installed. The installer reports "install failed" and the venv is fine, but the error message is the pip backtrace, not "this plugin is not compatible with your platform."
+4. **Permission denied.** User is running horus-os under a system Python (not a venv). `pip install` tries to write into `/usr/lib/python3.12/site-packages` and fails. Or the user is on Windows with the Python from the Microsoft Store and writes go to `%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.*` — pip succeeds but the entry point is invisible to the horus-os runtime because the import path differs.
+5. **`pip install` triggers `setup.py` arbitrary code execution.** A malicious sdist's `setup.py` runs at install time, in the active venv, BEFORE the manifest is ever validated. The capability-grant prompt happens too late: the attacker already executed code during the pip step.
+6. **`pip install` succeeds, plugin imports successfully, plugin's `.pth` file adds an arbitrary directory to `sys.path`** (the [Checkmarx command-jacking technique](https://checkmarx.com/blog/this-new-supply-chain-attack-technique-can-trojanize-all-your-cli-commands/)). The malicious code runs on every subsequent Python invocation, not just inside horus-os.
 
 **Why it happens:**
-The natural instrumentation point feels like "wrap the API call." But for LLMs, retries, backoff, and streaming-to-completion are inside that envelope and are exactly what makes "slow run" investigations actionable. STACK.md and ARCHITECTURE.md both correctly capture `Conversation.send` as the boundary, but a future contributor who instruments OpenAI or another provider might wrap the bare `client.create()` and not the retry-wrapping wrapper.
+`subprocess.run(["pip", "install", spec])` is the obvious-feeling first implementation. Datasette's `datasette install` shape (a thin wrapper around `pip install` in the same venv) IS what we want for v0.5, but Datasette's documented stance is "trust pip"; horus-os v0.5 cannot accept that wholesale because we have credentials on disk and ship a capability grant model that promises trust boundaries.
 
 **How to avoid:**
-- Define what `latency_ms` MEANS in a docstring on `ObservationEvent.latency_ms` and in `docs/OBSERVABILITY.md`: "wall-clock elapsed from the moment `Conversation.send` is invoked to the moment the final usable response object is available to the caller, inclusive of all SDK-level retries, backoff, queueing, and stream drain." Anchor the contract in prose so future capture sites have a definition to test against.
-- Add a `time_to_first_token_ms` column on `llm_calls` for streaming runs. TTFT is the actual UX number for chat; total `latency_ms` is what matters for cost-per-second-of-compute. Two columns let the dashboard show both honestly without picking one and lying.
-- Capture `retry_count` from the SDK when it exposes it (Anthropic's SDK does expose retry counts via response headers in some configurations; document the access path). When a single `conversation.send` includes N retries, persist N as a separate column and surface "runs that retried more than 2x" on the dashboard.
+- **Refuse to install if not inside a venv.** `sys.prefix == sys.base_prefix` is True for system Python and False for venv/virtualenv. The installer refuses with `RuntimeError: horus-os plugins install must be run inside a virtualenv. See docs/PLUGINS.md.` Documented in `docs/PLUGINS.md`. This is a hard wall; do not paper over with `--user`.
+- **Use the same Python that's running horus-os, never bare `pip`.** Shell out to `[sys.executable, "-m", "pip", "install", "--require-virtualenv", spec]`. The `--require-virtualenv` flag is pip's built-in version of the previous rule, defense-in-depth.
+- **Two-phase install: download-only, then validate, then install.** Phase A: `pip download --no-deps --dest <tmp> <spec>` resolves the wheel/sdist but does NOT execute setup.py. Phase B: unpack the wheel (or refuse if only sdist available — see below), parse `horus-plugin.toml`, surface the capability prompt, get user consent. Phase C: `pip install --no-deps --no-build-isolation <wheel>` actually installs. **Refuse sdist by default.** A `--allow-sdist` flag is available for developers shipping their own plugins; the documented warning is "sdist installs execute arbitrary code in your venv before manifest validation. Only allow sdist installs for plugins you author." This closes the Pitfall 1 / setup.py escape hatch.
+- **Dependency-pin policy: refuse to downgrade horus-os runtime deps.** Phase B parses the wheel's `METADATA` for `Requires-Dist:` lines. If any pin would conflict with horus-os's own pinned deps (the lock file shipped at release), the installer refuses with a precise error: `PluginInstallError: plugin foo requires httpx<0.26 but horus-os requires httpx>=0.27. This plugin is not compatible with this version of horus-os.` Never silently downgrade.
+- **Detect `.pth` files in the wheel before install.** A `.pth` file in a plugin wheel is a red flag (it runs at every Python startup, not just when the plugin is loaded). Phase B refuses any wheel containing `*.pth` in `RECORD` with `PluginInstallError: plugin foo ships a .pth file, which would execute on every Python startup. This is not allowed for horus-os plugins.`
+- **Rollback on partial failure.** If install fails midway (wheel downloaded but install errored), Phase C calls `pip uninstall -y <plugin>` immediately. The `tests/test_installer_rollback.py` fixture simulates a wheel that imports cleanly but raises in its `__post_init__`; assertion: venv state after rollback equals venv state before install (`pip freeze | sha256sum` round-trip).
 
 **Warning signs:**
-- Dashboard latency p50 is much lower than the user reports their experience to be.
-- Provider rate-limit incidents (visible in provider dashboards) do not correlate with a latency spike on the horus-os dashboard.
-- Streaming runs all land at the same suspiciously low latency number (only first-byte was captured, not full drain).
+- A `pip install` step in the installer that runs BEFORE manifest validation. Setup.py executes during install; the prompt is too late.
+- The installer ever calls `pip` with a string command (`subprocess.run("pip install ...", shell=True)`) — both because shell=True invites injection and because it bypasses `sys.executable -m pip`.
+- A plugin install succeeds but `horus-os plugins list` doesn't show the new plugin. Means the entry point is registered to a different Python interpreter than the one running horus-os; the venv check failed.
+- A `pip install` corrupted the venv such that `from horus_os.config import Config` no longer imports. The smoke test in CI must catch this: after every installer test, `python -c "import horus_os; horus_os.__version__"` must succeed.
 
 **Phase to address:**
-v0.4.2 (capture) defines the contract. v0.4.4 (queries) surfaces the columns. Owner: METRIC requirement.
+**Phase 44 (installer flow)**, owned by DIST-01 (installer CLI), DIST-02 (two-phase install), DIST-03 (venv check + sdist refusal + .pth refusal), DIST-04 (rollback on partial failure). The sdist-refusal default must land in v0.5; relaxing it later is easier than tightening it.
 
 ---
 
-### Pitfall 5: `pricing.json` rots silently between releases
+### Pitfall 5: Permission grant model abused via plugin update — silent capability expansion
 
 **What goes wrong:**
-A model releases; its price drops 50% (Sonnet 4.5 → Sonnet 4.6, a normal cadence in 2026); or Anthropic introduces a new tier (prompt-caching write-rate changes from 1.25x to 1.10x of input). Bundled `pricing.json` has the old number. The dashboard reports 50% over the actual bill (acceptable but confusing) or 50% under (catastrophic — user thinks they're spending half what they are). Worse: a new model the user adopts is missing entirely, falls back to the zero-price `fallback` block, and is reported at $0.00 cost forever.
+User installs plugin `foo` v1.0 which requests `filesystem.read`. User grants. User runs `horus-os plugins upgrade foo` and v1.1 has expanded to `filesystem.read, filesystem.write, net.outbound, secrets.read`. If the grant is keyed on `plugin_name` rather than `(plugin_name, plugin_version, requested_capability_set)`, the upgrade silently inherits the v1.0 grant — and the user just gave a plugin author the keys to their notes and outbound network access without a re-prompt. This is the [Wiz LiteLLM TeamPCP](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign) shape: not the v1.0 author being malicious, but the v1.0 author's PyPI account being compromised and a malicious v1.1 being published. The user had no reason to suspect the upgrade.
 
 **Why it happens:**
-PROJECT.md locks "bundled JSON, refreshed each release." Releases happen every few weeks. Pricing changes faster than release cadence. The release-time refresh process is manual (STACK.md §3 confirms a scrape script is not viable). Manual processes get forgotten. AgentOps's [tokencost](https://github.com/AgentOps-AI/tokencost) and LiteLLM's [model_prices_and_context_window.json](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) exist precisely because everyone hits this.
+"Grants are per-plugin" is the obvious-feeling first model; "users hate re-prompts" is the obvious-feeling first UX rule. Both are wrong when combined. The right model is "grants are per (plugin_name, plugin_version)" with an explicit re-prompt on capability change; the right UX is to make the re-prompt zero-friction for the *unchanged* capability set ("foo upgraded from 1.0 to 1.1; no new permissions requested; OK to proceed?" → enter to confirm) and high-friction for the *expanded* set ("foo upgraded from 1.0 to 1.1; it now wants to: WRITE to your filesystem, MAKE OUTBOUND NETWORK CALLS, READ your secrets file. Type 'grant' to allow these new permissions, or 'skip' to upgrade with only the previously-granted permissions.")
 
 **How to avoid:**
-- **Self-disclosure first.** `pricing.json` MUST carry `version`, `updated_at`, and `release_version` fields (already in ARCHITECTURE.md §3 Pattern 6). The dashboard MUST surface a banner: "Pricing data is N days old (last refreshed YYYY-MM-DD). Override at $HOME/.config/horus-os/pricing.json." Surfacing the staleness is the difference between a silent lie and an honest "this might be slightly off."
-- **Refuse silent fallback to zero.** When a model is missing from `pricing.json`, persist the row with `pricing_missing=1`, `cost_usd=NULL`. NULL is honest; 0 is a lie. Dashboard SQL: `SUM(COALESCE(cost_usd, 0))` plus a separate count of "runs with unknown pricing" surfaced as a yellow badge.
-- **Sync-against-source contributor doc.** Add `docs/RELEASE.md` (STACK.md §3 already mandates this). Step 1: diff `pricing.json` against the LiteLLM `model_prices_and_context_window.json` raw URL on GitHub (one curl + one diff). Step 2: copy any updates for models we support. Step 3: bump `updated_at`. This makes the refresh a 5-minute mechanical task instead of a research project.
-- **CI gate at release-tag time:** the release workflow runs a script that asserts `pricing.json`'s `updated_at` is within 14 days of the tag date. Older than that = release blocked until the contributor refreshes.
-- **User override path is documented in the user-facing dashboard staleness banner itself**, not hidden in docs. The cure is one cp-and-edit operation away.
+- **Grants are keyed on `(plugin_name, plugin_version_major_minor, capability)`.** Schema in `plugin_capability_grants`: `(plugin_name TEXT, plugin_version TEXT, capability TEXT, granted_at TIMESTAMP, granted_by TEXT, PRIMARY KEY (plugin_name, plugin_version, capability))`. On upgrade, the grants for v1.0 are NOT inherited by v1.1; the installer computes the diff between v1.0's manifest capability set and v1.1's set.
+- **Three diff outcomes, three UX shapes:**
+  1. **Set unchanged.** Installer auto-grants all v1.1 capabilities (silent inherit) and shows a one-line confirmation: `foo upgraded 1.0 → 1.1; no permission changes.`
+  2. **Set shrunk** (v1.1 wants strictly fewer caps). Installer auto-grants v1.1's set; shows `foo upgraded 1.0 → 1.1; permissions reduced to: filesystem.read.`
+  3. **Set expanded or replaced.** Installer surfaces the diff as a re-prompt; user types `grant` or `skip`. `skip` upgrades the plugin but keeps only the *intersection* of old and new grants; the plugin may fail at runtime when it tries to use an ungranted capability, which is the correct behavior (fail-closed).
+- **Audit log on every grant.** `plugin_capability_grants_log` table appends one row per grant/revoke with `actor` (the user, via the CLI prompt or dashboard click), `timestamp`, `from_state`, `to_state`. Surfaced in the dashboard's plugin detail page so the user can answer "when did I grant write access?"
+- **Grant fatigue mitigation: bundles, not enumeration.** Common capability bundles are named in `capability_catalog.py`: `"basic_tool"` = `{filesystem.read_plugin_dir, net.outbound_for_declared_hosts}`, `"read_only_assistant"` = `{filesystem.read, net.outbound}`. The reference plugin uses a bundle, not a long list of dotted caps, so authors see "use a bundle" as the path of least resistance. Bundles are still backed by individual cap rows in the grants table so revocation can be granular.
+- **The grant prompt is interactive in the CLI, modal in the dashboard.** Never a YAML config the user is expected to edit; that path is the "grant fatigue → curl | bash this YAML" anti-pattern.
 
 **Warning signs:**
-- `SELECT COUNT(*) FROM llm_calls WHERE pricing_missing=1` returns non-zero after a model upgrade.
-- The dashboard cost number diverges > 10% from the user's Anthropic / Gemini console totals over the same window.
-- A model name appears in `llm_calls` that does not appear in `pricing.json.models`.
+- A grant lookup uses `WHERE plugin_name = ?` without `plugin_version`. Code review red flag.
+- Plugin upgrade does not log a row to `plugin_capability_grants_log`. The audit gap is the symptom; the grant inheritance bug is the cause.
+- A capability used by a plugin without a grant row in the table at the requesting version. The shim helper must raise `PermissionDenied` at runtime; if it returns instead, the model is leaking.
+- Dashboard plugin detail page does not show the granted capability set. Users cannot reason about trust they cannot see.
 
 **Phase to address:**
-v0.4.3 (pricing). Self-disclosure banner in v0.4.5 (dashboard). CI release gate in v0.4.8 (release). Owner: PRICE requirement.
+**Phase 43 (permission model substrate)** + **Phase 45 (dashboard plugins tab — UI for grant prompts and audit log)**. Owner: PLUG-05 (per-version grant keying), PLUG-06 (diff-based re-prompt), DASH-5-02 (audit log surface). The per-version keying must land BEFORE the installer ships upgrade support, otherwise v1.0 → v1.1 ships with the inheritance bug baked in.
 
 ---
 
-### Pitfall 6: OTel exporter blocks the request path or leaks on shutdown
+### Pitfall 6: Plugin failures crash horus-os instead of degrading to "plugin error" status
 
 **What goes wrong:**
-Two distinct failure modes, same root cause:
-1. **Blocking on the hot path.** A naive OTel adapter calls `tracer.start_as_current_span(...)` synchronously, then inside the span context block does an `exporter.export([span])` directly (or uses `SimpleSpanProcessor`). The OTLP HTTP request to the user's collector takes 200ms. Every agent run now has 200ms of OTel overhead added to its latency. If the collector is down, the export times out at 10s and the agent's response is delayed by 10s for every call.
-2. **Leaking on shutdown.** `BatchSpanProcessor` runs a daemon thread; `OTLPSpanExporter` holds an HTTP connection pool. If `provider.shutdown()` is not called on app exit, the daemon thread is killed mid-export and the last batch of spans is silently dropped. Worse (per [OTel Python issue #3309](https://github.com/open-telemetry/opentelemetry-python/issues/3309)), if the collector is unreachable at shutdown, the default behavior is to *block for 60 seconds* attempting to flush, and per [issue #4623](https://github.com/open-telemetry/opentelemetry-python/issues/4623) the timeout is not configurable. A user trying to Ctrl-C the server has to wait a minute.
+A third-party plugin's `bind()` raises `TypeError` because the author called `app.add_router` instead of `app.include_router`. If the FastAPI lifespan does not catch it, the entire horus-os process exits at startup. The user has no dashboard to disable the broken plugin, no CLI subcommand to mark it disabled (the CLI starts the same FastAPI app and dies the same way), and no recovery path other than uninstalling the wheel manually. v0.4's `src/horus_os/adapters/base.py:233` already swallows exceptions in `discover_adapters`, but `bind` and `start` lifecycle hooks are NOT wrapped at the same isolation level for third-party plugins.
 
 **Why it happens:**
-Tutorials show `SimpleSpanProcessor` first because it's simpler to demo. The shutdown path is rarely tested because tests do not exit gracefully. The "wait 60 seconds on shutdown" behavior is genuinely surprising and has bitten OTel users in production (see issues linked above and OneUptime's "Prevent Data Loss" piece).
+The v0.1-0.4 adapters are first-party code — if `bind()` raises, the maintainer's CI catches it before users see it. Third-party plugin authors do not run our CI. The first time a malformed `bind()` happens in production is on a user's laptop, and we cannot ship a patch as fast as we can ship a "your plugin foo is in error state; disable it from /plugins" message.
 
 **How to avoid:**
-- **Always use `BatchSpanProcessor`**, never `SimpleSpanProcessor` in production code. Set `max_export_batch_size`, `schedule_delay_millis`, `max_queue_size` explicitly (defaults: 512 / 5000ms / 2048 are sane, but state them so reviewers don't have to know the defaults).
-- **Wrap `BatchSpanProcessor.export` with a tight try/except** at the bus-subscriber boundary. The OTel exporter is a bus subscriber (ARCHITECTURE.md §3 Pattern 5); its `on_event` handler is already invoked sync by `ObservationBus.publish`. The handler does `tracer.start_span(...).end()` only — span creation is microsecond-cheap because BSP just enqueues. If BSP's internal queue is full, the span is dropped silently by the SDK (and a metric is incremented internally). That's fine; better to drop spans than to block the agent.
-- **Implement `OtelAdapter.stop()` with a bounded timeout.** Call `provider.force_flush(timeout_millis=2000)` first, then `provider.shutdown()`. If the exporter is dead, you lose up to 2s of pending spans but the app exits in 2s, not 60s. Document the tradeoff.
-- **Test the shutdown path.** Pytest fixture that starts a FastAPI test app with OTel adapter pointing at a non-existent endpoint, sends one request, then triggers shutdown. Assert shutdown completes in < 3 seconds. This single test catches both the daemon-thread leak and the 60s-block bug.
-- **Subscribe via the adapter's `start()` and unsubscribe in `stop()`.** ARCHITECTURE.md §3 Pattern 5 already mandates this. Reinforce: if the user toggles the adapter off via `/api/adapters/otel/disable`, the unsubscribe must happen, otherwise the disabled adapter keeps consuming events (memory leak + zombie work).
+- **Every third-party plugin entry point is wrapped in `try/except Exception` at every lifecycle boundary** (discover, manifest-load, bind, start, stop, tool-invoke, adapter-event). A failure marks the plugin as `status=error` in `plugin_registry`, records the exception's `type(e).__name__: str(e)` (never the user-supplied content of the exception's args — same rule as Pitfall 9 in v0.4 PITFALLS.md), and continues the rest of startup. Failure modes:
+  - **discover failure** (entry point dotted path does not resolve): plugin record is created in `plugin_registry` with `status=error`, `error_message="ImportError: ..."`, `last_error_at=now`. Other plugins still discover.
+  - **manifest-load failure** (`horus-plugin.toml` invalid): plugin record `status=manifest_error`. Plugin code is NEVER imported until the manifest validates.
+  - **bind failure**: `status=bind_error`. The plugin's tools / adapters are unregistered from the master registries (no half-bound state).
+  - **start/stop failure**: `status=lifecycle_error`. Already the shape used for first-party adapters at `server/api.py:99-116`; extend to plugins.
+  - **tool-invoke failure**: tool returns an error result (the v0.3 `ToolResult.error` shape), increments `plugin_registry.error_count`, does NOT change `status` (a tool error is normal; a *consistently failing* tool is a separate concern handled in Pitfall 8).
+- **Plugins can be disabled without uninstalling.** `plugin_registry.enabled BOOLEAN DEFAULT 1`; the dashboard toggle and `horus-os plugins disable <name>` set it to 0. A disabled plugin is skipped during discovery (not bound, not started, no tools registered). The user has a recovery path that doesn't require touching pip.
+- **Bounded timeouts on lifecycle hooks** — same shape as v0.4 Phase 38's OTel bounded shutdown:
+  - `bind(app, context)` is called synchronously (matches v0.4 adapter shape); a synchronous hang in `bind` is the plugin author's problem to fix and is observable (the lifespan never completes). We DO log `WARN: plugin foo bind() has been running for >5s` from a watchdog task to surface the hang.
+  - `start(context)` is `await asyncio.wait_for(plugin.start(ctx), timeout=2.0)`. Hard 2s budget. Plugins that need a long-running task to be fully ready before serving requests must do their own backgrounding inside the 2s budget — schedule a `loop.create_task(self._connect())` and return; the background task can take as long as it wants. v0.4 Phase 38 used 2000ms for the same reason on OtelAdapter shutdown.
+  - `stop()` is `await asyncio.wait_for(plugin.stop(), timeout=2.0)`. Same shape.
+- **Lifespan continues on plugin failure.** The current `server/api.py:99-116` shape does this for `start`. v0.5 extends it to bound the wait *and* to surface the failure in the dashboard's plugin tab, not just the error log.
 
 **Warning signs:**
-- p95 latency increases by 100ms+ the moment the OTel adapter is enabled.
-- Server takes more than a few seconds to shut down (Ctrl-C feels stuck).
-- The `OtelBatchSpanRecordProcessor` daemon thread name appears in `py-spy dump` output after the server has stopped.
-- A unit test that imports the OTel adapter takes > 10 seconds to tear down.
+- A plugin's `start()` raise that propagates out of the lifespan. Means the wrapper is missing or `wait_for` is missing.
+- The horus-os process exits during startup with a plugin's exception class in the traceback. Hard regression: filed as a P0.
+- `plugin_registry` table never has a row with `status=lifecycle_error` even though the dev-fixture broken-plugin test exists. Means the wrapper is catching too late.
+- `horus-os plugins list` hangs because a plugin's `bind()` is in an infinite loop. The watchdog log should warn at 5s; the user has the option to Ctrl-C and disable the plugin via `--disable-all-plugins` flag.
 
 **Phase to address:**
-v0.4.7 (OTel adapter). Owner: OTEL requirement. Shutdown timeout test is non-negotiable for this phase.
+**Phase 42 (discovery + loading)** for the discover/manifest wrappers, **Phase 43 (lifecycle integration)** for bind/start/stop wrappers with `asyncio.wait_for`, **Phase 46 (failure-isolation tests)** for the broken-plugin fixture. Owned by ISOLATE-01 (status enum), ISOLATE-02 (bounded lifecycle), ISOLATE-03 (broken-plugin fixture in tests). The bounded-timeout pattern is a direct port of the v0.4 TEST-14 contract.
 
 ---
 
-### Pitfall 7: PII leaks through OTel span attributes (the CLAUDE.md zero-PII rule)
+### Pitfall 7: Plugin observability gaps — v0.4 rollups attribute errors to "the registry" not to the plugin
 
 **What goes wrong:**
-A well-meaning contributor adds `span.set_attribute("gen_ai.input.messages", json.dumps(prompt))` because the GenAI semconv defines that attribute. The user's prompt happens to include "my AWS access key is AKIA...". That key now lives in the user's external OTel collector, possibly forwarded to a SaaS backend (Honeycomb, Datadog, Grafana Cloud), possibly logged to a file the user's IT team has read access to. CLAUDE.md hard rule #1 ("no personal information about any contributor or user in committed text") doesn't cover *runtime* leakage to an *external* sink, but the *spirit* of the rule (the project takes user data seriously) is now broken at the exact moment the user added an opt-in flag they thought was safe.
+v0.4's `ObservationBus` publishes `LLMCallEvent`, `ToolCallEvent`, `RunEndEvent`. The `ToolCallEvent.tool_name` field identifies *which tool* was called but does NOT identify *which plugin* registered that tool. When a third-party plugin's tool `read_file` fails on every invocation, the v0.4 observability rollup shows "tool read_file: 47 errors in last 24h" attributed to nothing in particular. The user has no way to answer "which plugin do I disable to make this stop?" — they have to grep the codebase to find out who registered `read_file`, and that's assuming they have the source for every installed plugin.
 
 **Why it happens:**
-The GenAI semconv standardizes these attribute names, so they look like the obvious thing to emit. OpenLLMetry's auto-instrumentation libraries default to emitting them. The "maketocreate.com" writeup on PII in GenAI tracing notes the pattern: people paste API keys into chatbots, paste health information, paste internal URLs. The default-on assumption breaks anyone in a regulated industry, anyone with secrets management norms, anyone exporting to a multi-tenant collector.
+v0.4's bus was designed when all tools were first-party; the bus events did not need to carry plugin attribution because the answer was always "horus-os core." v0.5 changes that assumption silently if we don't update the bus. The v0.4 schema migration (v4→v5) added rollup columns to `traces`; v0.5 needs another migration (v5→v6) to add `plugin_name` to `llm_calls` and `tool_invocations`.
 
 **How to avoid:**
-- **Default-deny content capture.** The `OtelAdapter` does NOT emit prompt or completion bodies. Period. No `gen_ai.input.messages`, no `gen_ai.output.messages`, no `gen_ai.prompt`, no `gen_ai.completion`. Only emit numerical / structural attributes: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cached_tokens`, `horus_os.cost_usd`, `error.type`. STACK.md §"GenAI semconv adoption" already lists this exact set.
-- **Opt-in body capture only with an explicit env var.** `HORUS_OS_OTEL_CAPTURE_CONTENT=true` (mirroring the OneUptime-recommended `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` env var pattern). Default false. Document the risk in the docstring and in `docs/OTEL.md`.
-- **When opt-in is on, apply a redaction allowlist BEFORE the span is emitted.** Reuse the patterns from the maketocreate / OneUptime guides: regex-redact `sk-[a-zA-Z0-9]{20,}`, `AKIA[A-Z0-9]{16}`, `ghp_*`, `xoxb-*`, emails, e164 phone numbers, common AWS / Stripe / Google API key prefixes. Implement as `horus_os/observability/redact.py` with a public `redact(text: str) -> str` function and unit tests over a fixture of known-bad strings. Treat the redaction step as a hard barrier — if the redactor raises, the body is dropped, not emitted.
-- **Tool call arguments are equally sensitive.** Tool invocation arg dicts often contain file paths, URLs, credentials passed to shell commands. The default `tool_invocations` schema already does NOT persist tool args — keep that. The OTel exporter must apply the same default-deny rule for tool span attributes: emit `tool_name`, `latency_ms`, `status`, `error_type` (class name, NOT message). NEVER `tool_input`, NEVER `tool_output`, unless the same opt-in env var + redaction allowlist is in play.
-- **Document in `docs/OTEL.md`:** the exact list of attributes emitted by default, the exact list emitted with content capture on, the redaction set, and a "Threat model" section: "Your OTel collector and any backend it forwards to will receive everything in the default attribute list. If you cannot trust those parties with your token counts and model names, do not enable the OTel adapter."
-- **CI test: an OTel adapter test fires a synthetic event with a prompt containing `"my-test-secret-AKIAIOSFODNN7EXAMPLE"`** and asserts that the exported span attributes (captured via `InMemorySpanExporter`) contain `gen_ai.usage.*` numerical attrs but do NOT contain the literal string `AKIAIOSFODNN7EXAMPLE`. This is a non-negotiable test for the OTel phase.
+- **v5→v6 additive migration adds `plugin_name TEXT NULL` to `llm_calls` and `tool_invocations`.** NULL = first-party tool / core LLM call. Non-NULL = a specific plugin. Index on `(plugin_name, created_at)` for the dashboard rollup.
+- **Every event emitted from a plugin's code path carries `plugin_name`.** The plugin context (`PluginContext`, sibling to `AdapterContext`) holds the plugin's name; the helper shim `ctx.tool_registry.register(...)` injects the plugin name into a closure around the tool's handler so the resulting `ToolCallEvent` carries `plugin_name = ctx.plugin_name` automatically. Plugin authors do not have to remember to do this; the registry wrapper does it for them.
+- **v0.4 rollup queries grow a `GROUP BY plugin_name` axis.** New routes: `/api/observability/plugins` returns `{plugin_name, total_invocations, error_count, p50_latency_ms, last_error_at}` per installed plugin. The dashboard's existing `/observability` tab gains a "by plugin" filter selector. Pre-v0.5 rows (where `plugin_name IS NULL`) roll up under `plugin_name = "horus-os core"` so the math stays honest.
+- **Per-plugin error rate surfaces on the plugins dashboard tab.** Above each plugin's row, the dashboard shows "12 tool invocations in last 24h, 2 errors (16.7% error rate)." A red badge appears if error rate exceeds a configurable threshold (default 50%). The user has a visible signal that one plugin is misbehaving without leaving the plugins page.
+- **`scripts/release_gate.py`** (extending the v0.4 gate from Phase 39) adds a check that `plugin_name` is required-non-NULL in any row inserted via the plugin code path; a fixture plugin emits a tool call and the test asserts `SELECT COUNT(*) FROM tool_invocations WHERE plugin_name IS NULL AND created_at > <fixture_start>` returns 0.
 
 **Warning signs:**
-- Code review on the OTel adapter contains `set_attribute("gen_ai.input.messages", ...)` or `set_attribute("gen_ai.prompt", ...)`.
-- The docs don't mention what's emitted by default.
-- A new contributor opens a PR adding "Capture the user's prompt to the span" without first reading `docs/OTEL.md`.
-- `grep -r "gen_ai.input.messages\|gen_ai.output.messages\|gen_ai.prompt\|gen_ai.completion" src/horus_os/` returns anything outside the opt-in code path.
+- A plugin's tool fails repeatedly but the dashboard's observability tab shows the error count rolling up under no plugin attribution. Means the `ctx.plugin_name` injection is not wired.
+- A SELECT against `tool_invocations` after a real plugin invocation returns a row with `plugin_name IS NULL`. Hard regression.
+- The v0.4 dashboard's `/observability` tab shows new plugin tools without any per-plugin rollup. Means Phase 45 (dashboard plugins tab) shipped without the v0.4 backend extension.
 
 **Phase to address:**
-v0.4.7 (OTel adapter). Owner: OTEL requirement. The default-deny rule is the most important single design decision in the whole milestone; getting it wrong creates the worst possible user trust failure (silent data exfiltration). Verify in code review at PR time AND in CI.
+**Phase 41 (manifest schema includes plugin_name as a required field)** sets up the attribution; **Phase 42-43 (loading + lifecycle)** wires `PluginContext.plugin_name` through to tool/adapter registration; **Phase 45 (dashboard + new /api/observability/plugins route)**. v5→v6 migration must land in Phase 41 alongside the manifest schema; the new columns must be NULLABLE so v0.4 databases continue to read (per Pitfall 10).
 
 ---
 
-### Pitfall 8: SQLite write amplification kills the agent loop
+### Pitfall 8: The reference plugin is either too simple to teach or too coupled to internals
 
 **What goes wrong:**
-v0.4 adds two new tables that get a row per LLM call and per tool call. A tool-heavy agent run with 8 turns × 4 tool calls = 40 INSERTs per run. At default SQLite settings, each INSERT is its own transaction with `PRAGMA synchronous=FULL`, fsync per insert. On a Mac SSD that's ~5ms per insert; on a slow rotational disk on a Raspberry Pi (a real horus-os deployment target) it's 30-50ms. The agent loop blocks on persistence for 200ms-2s per run, perceived as the system "got slower" with the v0.4 upgrade.
+v0.5 ships `horus-os-example-plugin` as the "this is how you write a plugin" reference. Two failure shapes:
 
-A subtler version: the persister is in the bus dispatch path; ARCHITECTURE.md §3 Pattern 1 explicitly says sync dispatch is the contract because "the row is committed before `record_trace` returns, so a crash mid-loop never loses partial cost data." That's the right design, but it makes write amplification a first-class hot-path concern.
+1. **Too simple to be useful.** The example plugin registers one tool that returns `"hello world"`. Plugin authors copy it and immediately have questions the example does not answer: how do I declare capabilities? How do I read config? How do I store state? What does `bind()` actually look like for a real adapter? The example becomes a starting point that nobody can extend. They copy patterns from the first-party adapters in `src/horus_os/adapters/` instead, which couples them to internal APIs that we may refactor.
+2. **Too coupled to internals.** The example plugin imports from `horus_os._private` (or the equivalent leading-underscore module) because that's what the maintainer reaches for when they need the helpers. Now every third-party plugin imports `horus_os._private.foo`, and we cannot refactor it without breaking the ecosystem. This is the trap the Pelican 4.5 namespace-package migration walked into and had to clean up by carving out a stable public API.
+
+**Why it happens:**
+The example plugin is the last thing built before release, when the maintainer is fatigued and reaches for whatever's easiest. There's no rule that says "the example may only import from the public API" because there's no documented public API surface yet — v0.5 *is* the moment we draw that line.
 
 **How to avoid:**
-- **WAL + `PRAGMA synchronous=NORMAL`** in the v0.4 storage init. WAL is already on (storage.py:pragmas in v0.3). `synchronous=NORMAL` (instead of FULL) trades a vanishingly small durability risk (the last few INSERTs may be lost on a hard power loss) for ~10x INSERT throughput. This is the documented best practice for SQLite WAL per the SQLite docs and the `phiresky` performance tuning guide cited in sources. Acceptable for an observability database where occasional row loss is preferable to multi-second user-visible latency.
-- **Use a per-trace batched insert at `RUN_END` for `tool_invocations`.** Per-LLM-call inserts can stay individual (low frequency, high information density per row); per-tool-call inserts can be queued in the `ObservationBus` and flushed in one `executemany` on `RUN_END`. Trade: lose tool granularity if the process dies mid-run. Acceptable: that's the same trade we already make for the loop's interim state.
-- **Index intentionally, not defensively.** Each index adds write amplification. ARCHITECTURE.md §5 already specifies the minimum useful set: `(trace_id)`, `(created_at DESC)`, `(provider, model)` on `llm_calls`; `(trace_id)`, `(tool_name, created_at DESC)`, `(created_at DESC)` on `tool_invocations`. Do not add more "just in case." Each one slows every INSERT.
-- **Add a benchmark to the CI matrix** that runs a 5-iteration / 3-tool-call agent run against a stubbed SDK and asserts total wall-clock time is within 50ms of a baseline measured at v0.3 (recorded once at v0.4 start and pinned). If a future PR adds 100ms of v0.4 overhead, the benchmark fails.
-- **Document `VACUUM` and `wal_checkpoint(TRUNCATE)` in `docs/MAINTENANCE.md`** for users who run the system for years. WAL files grow without bound under heavy write load until a checkpoint runs. SQLite auto-checkpoints at 1000-page increments by default, but a long-running idle dashboard reader can pin checkpoints. Periodic `pragma wal_checkpoint(TRUNCATE)` at low-traffic times solves it.
+- **Define `src/horus_os/plugins/api.py` as the SINGLE public API surface for plugin authors.** Everything a third-party plugin needs is re-exported here: `PluginContext`, `Capability`, `Tool`, `Adapter`, `LifecycleAdapter`, `register_tool`, `require_capability`, `PluginConfig`. The example plugin's only `from horus_os` imports are `from horus_os.plugins.api import ...`. A CI lint rule rejects any other `from horus_os` import in the example: `grep -E "from horus_os\\.(?!plugins\\.api)" examples/horus-os-example-plugin/ && exit 1`.
+- **Example covers four scenarios in one repo:**
+  1. A simple tool that takes a capability (filesystem.read) and returns structured data — teaches capability checks.
+  2. A "needs config" tool that reads from `ctx.plugin_config` — teaches plugin-local config.
+  3. A "lifecycle adapter" with `start()` / `stop()` — teaches the async lifecycle shape.
+  4. A "registers two tools and one adapter" plugin — teaches the manifest's `entry_points` table.
+- **Example is shipped as a separate PyPI package** (`horus-os-example-plugin`) installed via the actual installer: `horus-os plugins install horus-os-example-plugin`. The example proves the install flow works end-to-end at every release. The release gate asserts the example installs cleanly into a fresh venv on each OS.
+- **Example's README is THE plugin authoring guide.** It explains the manifest, the capability model, the registry, and the lifecycle in the order an author needs to learn them. `docs/PLUGINS.md` is a one-page "where to find what" pointer to the example's README and the api.py docstrings. Avoids the dual-source-of-truth trap where docs drift from code.
+- **Reference plugin is dogfooded.** The example plugin's tools are wired into the existing `pytest` suite as a fixture so they run on every CI build. If we accidentally break the public API, the example's tests turn red BEFORE we cut a release. This is the v0.4 lesson learned the hard way: docs that aren't tested drift; examples that are tested don't.
 
 **Warning signs:**
-- Agent runs are perceptibly slower under v0.4 than under v0.3 with the same workload.
-- `db.sqlite3-wal` file is growing larger than `db.sqlite3` itself.
-- A user with a slow disk (Raspberry Pi, Windows on HDD) reports the dashboard "feels laggy" after upgrade.
-- The v0.4 capture-overhead benchmark fails in CI.
+- The example's source has any `from horus_os._` (leading underscore) imports. CI rejects.
+- A third-party plugin author opens an issue asking "how do I do X?" where X is something the example doesn't cover but the first-party adapters do. Means the example needs scenario expansion.
+- The example's manifest uses a field that's not documented in `docs/PLUGINS.md`. Drift signal.
+- `docs/PLUGINS.md` describes a pattern that the example doesn't implement. Same drift signal in reverse.
 
 **Phase to address:**
-v0.4.1 (schema + persister) sets the pragmas and the indexes. v0.4.2 (capture) adds the benchmark. Owner: STORE requirement.
+**Phase 48 (reference plugin)** — owned by REL-10 (example plugin). The `plugins/api.py` public API surface must be **defined in Phase 41** (manifest schema phase) and the example built against it — not the other way around. Building the example first and then "deciding what's public" is how you end up exporting internal helpers.
 
 ---
 
-### Pitfall 9: Tool reliability counts the wrong thing
+### Pitfall 9: v5→v6 schema migration breaks v0.4 databases
 
 **What goes wrong:**
-The naive implementation: `success = 1 if no exception else 0`, count grouped by tool name. The dashboard's "tool error rate" panel says 35%. The user investigates and discovers:
-- 20% of those "failures" are actually retries that succeeded on the second attempt (counted once as failure, once as success).
-- 10% are intentional `not_found` returns (e.g. a `read_file` for a missing path; the tool worked correctly, the answer was "no such file").
-- 5% are real bugs.
-
-The dashboard is now an oracle that's right 14% of the time and wrong 86%. The user stops trusting it within a week.
+v0.5 needs new tables (`plugin_registry`, `plugin_capability_grants`, `plugin_capability_grants_log`) and new columns (`plugin_name` on `llm_calls`, `tool_invocations`). A naive migration ALTER-TABLEs in `NOT NULL` columns, or DROP-TABLEs an old table that "we don't need anymore," or renames a column. Every one of those is a breaking change for v0.4 databases. A user who upgrades horus-os from 0.4.0 to 0.5.0 in place watches their database get corrupted at first startup. v0.4 Phase 32 set the precedent (v4→v5 was additive only, v0.3 fixture continued to read); v0.5 must hold the same line.
 
 **Why it happens:**
-"Did the tool raise?" is the easy question. "Did the tool produce the intended outcome?" is the hard one. Helicone's docs on retries explicitly call out that each retry is logged as a separate request, which means retry-aware reliability has to be a deliberate aggregate, not a default count.
+The "we're adding plugin attribution; tool_invocations.tool_name and llm_calls.model_name should now be `NOT NULL`" is a tempting clean-up. So is "the schema_version table from v0.1 is awkward; let's normalize it." Both feel like good engineering hygiene; both break migration.
 
 **How to avoid:**
-- **Two distinct columns: `status` and `error_type`.** `status` ∈ {`success`, `error`, `retry_then_success`, `expected_no_result`}. `error_type` is the exception class name when status is `error` (NEVER the error message — messages contain user-supplied paths, URLs, credentials; per Pitfall 7 these don't belong in indexable columns).
-- **Tool handlers opt into "expected no-result" semantics.** A tool's `execute` can return `ToolResult(status='expected_no_result', message='no such file')` instead of raising. The reliability panel groups by `status`, so the user sees three numbers per tool: `success_count`, `expected_no_result_count`, `error_count`. Total = denominator; error_count / total = the headline error rate; expected_no_result_count is informational.
-- **Retry-aware aggregation.** When the agent loop retries a failed tool, increment a `retry_count` field on the SAME `tool_invocations` row instead of writing a new row. The row's final `status` reflects the eventual outcome. The dashboard shows: "tool X: 95% success, 5% error, 18% of successful calls required retry (median retries: 1)." Now the user sees both reliability AND flakiness as separate signals.
-- **"Last-error preview" uses `error_type` + a redacted snippet.** The dashboard tile shows `tool: read_file | status: error | type: FileNotFoundError | last_at: 2 min ago`. Click-through to a redacted message (paths replaced with `<path>`, URLs with `<url>`). NEVER show the raw message inline on a panel that might be screenshotted.
-- **Minimum sample threshold for the "most failing tool" callout.** A tool that's been called 2 times with 1 error has a 50% error rate but tells you nothing. Surface "most failing" only when `total_calls >= 5` in the window. Below threshold, surface "insufficient data."
+- **`SCHEMA_VERSION = 6` in `src/horus_os/storage.py`. The v5→v6 migration is additive ONLY.** Concretely:
+  - `CREATE TABLE IF NOT EXISTS plugin_registry (...)` — new table.
+  - `CREATE TABLE IF NOT EXISTS plugin_capability_grants (...)` — new table.
+  - `CREATE TABLE IF NOT EXISTS plugin_capability_grants_log (...)` — new table.
+  - `ALTER TABLE llm_calls ADD COLUMN plugin_name TEXT` — NULLABLE; existing rows get NULL.
+  - `ALTER TABLE tool_invocations ADD COLUMN plugin_name TEXT` — NULLABLE.
+  - `CREATE INDEX IF NOT EXISTS idx_tool_invocations_plugin ON tool_invocations(plugin_name, created_at)`.
+  - **Nothing dropped. Nothing renamed. Nothing made NOT NULL.**
+- **`tests/fixtures/v0_4_database.sqlite3` is checked into the repo** (same pattern as `v0_3_database.sqlite3` for v4→v5). The test `tests/test_v5_to_v6_migration.py` opens the v0.4 fixture, calls `Database.init()`, asserts (a) all old tables still exist with their original schemas, (b) all old rows still read with their original values, (c) new tables exist and are empty, (d) new columns exist on old tables with NULL on pre-v0.5 rows, (e) running `init()` a second time is a no-op (idempotent).
+- **Idempotency: running `init()` against an already-v6 database is a no-op.** SQLite's `IF NOT EXISTS` handles tables. For columns, the migration wraps each `ALTER TABLE` in a try/except for `sqlite3.OperationalError: duplicate column name` and swallows. Same pattern v0.4 Phase 32 used.
+- **No DROP statements, anywhere.** Even for tables we are "sure" nobody uses. The cost of keeping them is one disk page; the cost of dropping them is a data-loss bug we cannot recall.
+- **Migration runs BEFORE the bus and persister are wired** (matches v0.4 Phase 32's ordering). If migration raises, the rest of the app does not start; the database is in a known state (still v5, untouched).
 
 **Warning signs:**
-- A tool whose error rate jumps from 5% to 35% after a refactor that added retries.
-- A tool that's "always failing" but actually working as designed (the `expected_no_result` case).
-- Dashboard tile shows a tool name with `error_rate=100%` and `call_count=1`.
-- An error_message column contains user-supplied paths (verify with a regex check at CI time).
+- A code review PR that adds `ALTER TABLE ... DROP COLUMN` or `ALTER TABLE ... RENAME COLUMN` — both are breaking changes, both should fail the review.
+- A migration adds a column with `NOT NULL` default — works on empty databases, breaks on populated ones. Lint rule: `grep -E "ADD COLUMN.*NOT NULL" src/horus_os/storage.py && exit 1`.
+- `tests/test_v5_to_v6_migration.py` fixture missing or test deleted. Hard block on release-gate.
+- The v0.4 fixture's data does not survive the migration intact. Run a hash of `SELECT * FROM traces ORDER BY trace_id` before and after migration; it must match.
 
 **Phase to address:**
-v0.4.2 (capture) defines the columns. v0.4.4 (queries) writes the aggregations. v0.4.5 (dashboard) applies the sample threshold. Owner: METRIC requirement, REL category.
+**Phase 41 (schema migration)** must land BEFORE any plugin code that writes to the new tables. Owner: MIG-05 (v5→v6 additive migration), TEST-16 (v0.4 fixture round-trip test). Same shape as v0.4 Phase 32's BASELINE-01 ordering — schema infrastructure first, behavior change second.
 
 ---
 
-### Pitfall 10: Percentile math is wrong because the sample is too small or the window is wrong
+### Pitfall 10: Default-deny vs default-allow first-run friction
 
 **What goes wrong:**
-The dashboard shows p95 latency = 3.2s for the past hour. The user investigates. The hour had 4 runs. p95 of 4 samples is mathematically undefined or by convention = the max. Tomorrow with 400 samples the same workload shows p95 = 1.1s. The user concludes the system "got faster" when actually the prior number was statistical noise. Or: a default window of 24h is set, but the user wants per-hour granularity for debugging a regression; computing p50 over the last 24h vs the previous 24h smooths out a 4-hour spike that was the actual incident. Either way, the percentile chart is misleading.
+The two failure modes are equally bad:
 
-The averaging-of-percentiles version (per the Last9 "Latency Percentiles are Incorrect P99 of the Times" piece): if a future contributor adds "per-hour rollups" and the dashboard shows "p95 over 24h" by averaging 24 hourly p95s, the resulting number is mathematically wrong by construction. p95 of a population is NOT the mean of p95s of subgroups.
+- **Default-deny is principled but creates friction.** User installs `horus-os-foo-plugin`, types `horus-os run`, sees `PermissionDenied: plugin foo requires capability filesystem.read which has not been granted.` User does not know what to do. The plugin's tools never run. The user uninstalls horus-os, writes a HN comment about how it's "too restrictive."
+- **Default-allow gets adoption but undermines the model.** User installs a plugin, all capabilities are silently granted at install time, plugin works immediately. The capability declaration becomes decorative; the grant prompt becomes a TODO. When a malicious plugin ships, the user is unprotected.
+
+The trap is choosing the wrong default to keep momentum.
 
 **Why it happens:**
-`NTILE(100)` doesn't complain about small samples. SQL returns what you asked for. Time windows feel like an obvious UI control. The "average of percentiles" trap is one of the most reliable industry mistakes — even mature engineers do it.
+"Adoption first, security later" is the obvious startup intuition. It's wrong for a single-user desktop product with credentials on disk because "later" never happens — the user base now expects the default-allow behavior and tightening it is a breaking change.
 
 **How to avoid:**
-- **Always show the sample count alongside the percentile.** Dashboard tile: `p95: 1.2s (n=87 over 7d)`. CLI output column: `p95_ms,sample_count`. If `sample_count < 30`, render the percentile in muted color with a tooltip: "small sample, treat as estimate."
-- **Hide percentiles below a minimum sample size.** `n < 10` → render "—" with hover text "need ≥ 10 runs for percentile." Picking 10 not 30 because we're a single-user system, not a production fleet; 30 is unreachable in some legitimate windows.
-- **Never aggregate percentiles of percentiles.** All dashboard / CLI percentile computations operate on the raw `latency_ms` column. NEVER pre-aggregate into hourly buckets and then take a percentile of hourly bucket p95s. Document this rule in `observability/queries.py` as a top-of-file comment. If a future contributor proposes rollups for performance, the rollup must store raw samples per bucket (e.g. as a sketch like t-digest), not pre-computed percentiles.
-- **Default window = 7d, options = 24h / 7d / 30d.** Default of 7d gives enough samples for stability; 24h is for active debugging (user explicitly accepts noise); 30d shows trend. Do NOT default to 1h.
-- **Test: assert that `p95(N runs all at 100ms) == 100`.** Boundary test. Assert that `p95([])` raises or returns None, never 0 or NaN.
+- **The v0.5 default IS default-deny, but with a frictionless first-prompt UX.** Concrete shape:
+  - `horus-os plugins install foo` runs the two-phase install (Pitfall 4). Phase B's prompt is interactive in the CLI and modal in the dashboard. The prompt is ALWAYS shown — never skipped with a `-y` flag in v0.5. (A `-y` flag IS available but documented as "for CI use; not recommended for personal installs." That's the right balance: power users can script it, accidental users cannot click-through.)
+  - The prompt's content is plain-English (per Pitfall 1's catalog), with the plugin's declared `description` field surfaced verbatim and an explicit link to the plugin's PyPI page so the user can see who published it.
+  - **No grant carries forward from `pip install` itself.** The user explicitly granted `pip install` the ability to download and install packages; the user has NOT explicitly granted plugin foo `filesystem.read`. These are separate consents.
+  - On first plugin run after install (if the user somehow installed via raw `pip install` and bypassed the prompt), the helper shim raises `PermissionDenied` with a recovery path: `Run 'horus-os plugins grant foo' to grant the required capabilities, or 'horus-os plugins disable foo' to disable.`
+- **The reference plugin and the docs lean into the prompt as a *feature*, not a tax.** `docs/PLUGINS.md` opens with "Plugins declare what they want; you decide what they get. The first install of a plugin always shows you the requested capabilities." Users who read this know what to expect; users who don't read it see the prompt and learn.
+- **Bundles (per Pitfall 5) reduce per-cap clicks.** A reference plugin that uses `basic_tool` bundle has one prompt: "Allow plugin foo to do the things a basic tool does: read its own plugin directory and make outbound HTTPS calls to declared hosts? [y/N]". Three caps under the hood; one clickable prompt on the surface.
+- **No "remember this choice for this plugin family" mass-grant.** That would re-introduce default-allow through the back door. Per-(plugin, version, cap) grants only; no wildcards.
 
 **Warning signs:**
-- Dashboard p95 wildly fluctuates day to day on similar workloads.
-- A new percentile column was added that operates on a `_hourly` table without a comment justifying why aggregating-of-aggregates is okay (hint: it's not).
-- The percentile panel renders `p95: 0ms` (n=0 case rendered as 0 instead of "—").
+- A `-y` / `--yes` flag on `plugins install` that is documented as "the default for personal use." Reverse it: the default IS interactive.
+- The dashboard's plugin install flow has a "skip permission review" toggle. Should not exist.
+- A user-facing doc page that uses the word "frictionless" to describe the permission flow. The permission flow is the friction; the rest of the install should be frictionless to compensate.
 
 **Phase to address:**
-v0.4.4 (queries) implements the SQL correctly. v0.4.5 (dashboard) handles the small-sample render and the n display. Owner: METRIC requirement.
+**Phase 43 (permission model)** + **Phase 44 (installer)** + **Phase 45 (dashboard prompt)**. The default-deny posture is a one-line constant in `src/horus_os/plugins/permissions.py` (`DEFAULT_GRANT_POLICY = "deny"`). The complete UX is the rest of the milestone. Owner: PLUG-01 (default-deny), PLUG-07 (bundles), DIST-05 (interactive prompt with `-y` documented as CI-only).
 
 ---
 
-### Pitfall 11: Migration breaks v0.3 trace readers
+### Pitfall 11: Plugin tests pollute the host venv or the entry-point cache
 
 **What goes wrong:**
-A user upgrades from v0.3.0 to v0.4.0. The migration runs `ALTER TABLE traces ADD COLUMN turn_count INTEGER NOT NULL`. SQLite refuses (existing rows have no value). Or: the migration runs `DROP COLUMN usage` to "clean up" the old JSON blob now that typed columns exist. The dashboard at v0.4 keeps working; the user's third-party script that read `traces.usage` directly breaks. Or: the dashboard reads from the new typed columns; v0.3 rows have NULL there; the cost panel shows zeros for the user's first month of history and they think v0.4 deleted their data.
+Plugin tests need to exercise: (a) the discovery path (pip-installed plugins via entry points), (b) the local-directory path (`~/.horus-os/plugins/`), (c) the installer end-to-end (pip install / uninstall / list), (d) failure modes (broken manifest, broken bind, broken stop). The straightforward test approach is to actually `pip install` a fixture plugin into the test venv. That has three failure modes:
+
+1. **Test order dependence.** Test A installs `horus-os-test-fixture-plugin v1.0`; Test B installs v1.1. If they run in the wrong order or in parallel, one's assertions become the other's setup. Worse: the test runner's own venv is now permanently dirty for the rest of the CI job.
+2. **`entry_points()` cache.** `importlib.metadata.entry_points()` is cached at the OS path level; a plugin installed mid-test is not visible until `importlib.metadata.distributions()` is re-invoked. Tests that don't refresh see stale state and pass spuriously.
+3. **Three-OS hard gate amplification.** v0.5 must pass the 3-OS install matrix. A test that subprocess-installs into the test venv on Ubuntu may behave differently on macOS (different cache paths) and very differently on Windows (different path separators, different default user site-packages location). One platform's flake is another platform's hard failure.
 
 **Why it happens:**
-Migrations are usually written by someone who has a fresh database in mind. The v0.3-data-in-v0.4-schema case is forgettable. The "rewrite the old data to match the new shape" temptation is strong because it makes the dashboard look cleaner.
+"Just use a real pip install in tests, it's more honest" is intuitive. It's also slow (5-30 seconds per install on a fresh wheel) and brittle for the reasons above. Mocking `pip install` entirely is the opposite extreme and misses the actual install path bugs (Pitfall 4) that need real coverage.
 
 **How to avoid:**
-- **Every new column is nullable. No exceptions.** ARCHITECTURE.md §3 Pattern 3 already mandates this; reinforce in the migration test.
-- **Never DROP any column** in an additive migration. The `traces.usage` JSON blob stays forever. v0.4 readers prefer the typed columns; v0.3 readers (or hand-written user SQL) still see the blob.
-- **Migration test against a v0.3 database fixture.** Check in a `tests/fixtures/v0_3_database.sqlite3` with a few real traces. The migration test opens it, runs `Database.init()`, asserts: (a) the new columns exist, (b) the old `traces.usage` column still exists and reads correctly, (c) `SELECT * FROM traces WHERE total_input_tokens IS NULL` returns the pre-v0.4 rows. Run this test on every PR.
-- **Dashboard handles NULL gracefully.** Cost panel SQL: `SELECT agent, SUM(COALESCE(total_cost_usd, 0)) AS cost, COUNT(*) FILTER (WHERE total_cost_usd IS NULL) AS uncosted_runs FROM traces ...`. Surface "uncosted_runs" as "N runs from before v0.4 with no cost data" — explains the missing dollars without hiding them.
-- **Rollback survival.** A user who installs v0.4.0, runs for a week, then `pip install horus-os==0.3.0` must keep reading their database. Because we only ADD, not RENAME or DROP, this works. Validate it: a test that installs v0.3.0 in a separate venv and opens a v0.4-written database.
-- **Migration is idempotent.** Use `ALTER TABLE ... ADD COLUMN` wrapped in `try/except sqlite3.OperationalError` (the exact pattern at v0.3 `storage.py:137-146`). Running `Database.init()` twice on a v5 schema must be a no-op.
+- **Three-tier test fixture strategy:**
+  1. **In-memory plugin records.** For testing the registry, lifecycle hooks, permission model, observability attribution. Use `PluginRecord(name="foo", version="1.0", entry_points={"tool": "fake.module:foo"}, capabilities=["filesystem.read"])` constructed directly in the test. No pip, no entry points. Covers >80% of plugin logic.
+  2. **Monkeypatched entry-point discovery.** For testing the discovery path. `tests/conftest.py` exposes a `fake_plugin_entry_points` fixture that monkeypatches `horus_os.plugins.discovery.entry_points` (rebound at module level for exactly this reason, mirroring `src/horus_os/adapters/base.py:22` which already does this for first-party adapters). Tests inject a list of `EntryPoint` objects whose `load()` returns in-memory fakes. Covers the discovery code path without touching the venv.
+  3. **Per-test temp venv for installer end-to-end.** For testing `horus-os plugins install` itself. `tests/conftest.py` exposes a `clean_venv` fixture: creates a venv in `tmp_path`, returns the python executable, tears it down after the test. The fixture is `@pytest.mark.installer_e2e` opt-in so the slow tests don't run by default; CI runs them once per OS in a dedicated job. Each test pip-installs a fixture wheel (`tests/fixtures/fake_plugin-1.0.whl`, checked into the repo, hand-built once) into the temp venv and asserts horus-os in that venv discovers it. Covers the actual install path on each OS.
+- **Never `pip install` into the test runner's venv.** A CI lint rule: `grep -rE "pip.*install" tests/ --include="*.py" | grep -v "clean_venv\|sys\.executable" && exit 1`. The only allowed pattern is shelling into the per-test temp venv.
+- **`importlib.metadata.distributions()` cache invalidation pattern.** The monkeypatched fixture in tier 2 already side-steps the cache. For tier 3, after a `pip install` in the temp venv, the test invokes horus-os IN that temp venv via subprocess (`[venv_python, "-m", "horus_os.cli", "plugins", "list"]`); the subprocess has its own fresh `importlib.metadata` state, so no cache invalidation is needed.
+- **One test per pitfall in this document.** `tests/test_plugin_pitfalls/` directory mirrors this file: `test_pitfall_01_default_allow.py`, `test_pitfall_02_manifest_drift.py`, etc. Each test enforces the prevention pattern as a property of the system. When a future PR breaks Pitfall N's prevention, exactly one test turns red and the failure message points back to this document.
 
 **Warning signs:**
-- A PR adds `ALTER TABLE ... DROP COLUMN` or `RENAME COLUMN`.
-- A new column declared `NOT NULL` without a `DEFAULT`.
-- The migration test against the v0.3 fixture is missing or skipped.
-- Schema version logic uses `==` instead of `<` (skipping a migration step when the user upgrades from a much older version).
+- Test count balloons by 50+ but CI runtime balloons by 20+ minutes. Means too many tests fell into tier 3 instead of tiers 1-2.
+- Tests pass locally on Ubuntu, fail in macOS CI. Almost always a path-separator or `tempfile.gettempdir()` difference in tier 3 fixture handling.
+- A test calls `subprocess.run(["pip", "install", ...])` directly without going through the `clean_venv` fixture. Lint rule catches; review rejects.
+- The `horus-os plugins list` CLI subcommand has no test that exercises it end-to-end. Means the installer e2e tier is empty and the install-flow bugs from Pitfall 4 are uncovered.
 
 **Phase to address:**
-v0.4.1 (schema). Owner: STORE requirement and MIG continuation category. The v0.3 fixture test is the single highest-leverage check for this whole pitfall class.
+**Phase 46 (test surface)** for the three-tier fixture strategy and the `tests/test_plugin_pitfalls/` directory; **Phase 49 (3-OS install verification)** for the installer-e2e tier running against the 3-OS matrix. Owner: TEST-16 (in-memory + monkeypatch fixtures), TEST-17 (clean_venv fixture + installer e2e), TEST-18 (pitfall regression tests).
 
 ---
 
-### Pitfall 12: OTel adapter pulls in `opentelemetry-*` even without the `[otel]` extra
+### Pitfall 12: Documentation drift between manifest spec, reference plugin, and `docs/PLUGINS.md`
 
 **What goes wrong:**
-A contributor adds `from opentelemetry import trace` at the top of `horus_os/adapters/otel_adapter.py`. `pip install horus-os` (without the `[otel]` extra) installs cleanly, but `python -c "import horus_os"` crashes with `ModuleNotFoundError: No module named 'opentelemetry'`. The whole local-first promise breaks for everyone who doesn't want OTel — which is most users by definition (it's an opt-in extra).
-
-Or, subtler: the entry-point discovery for adapters happens at `create_app` time. Even if individual file imports are lazy, the entry-point machinery imports the module to register it. If that import fails, FastAPI startup fails.
+The plugin contract has at least three sources of truth: (a) the manifest schema in `src/horus_os/plugins/manifest.py`, (b) the reference plugin in `examples/horus-os-example-plugin/`, (c) the prose guide in `docs/PLUGINS.md`. The first time these drift is the first time a third-party author files a bug. The second time is when they file three. The third time is when they stop trying.
 
 **Why it happens:**
-The "import at top of file" reflex is universal. Optional dependencies require deliberate care. STACK.md §"What NOT to Use" called out that `opentelemetry-instrumentation-*` auto-patches at import time and is therefore banned; same reasoning applies to the adapter's own imports.
+The docs are written before the code lands and never updated. The example uses a field that the docs don't mention. The schema adds a field in PR #237 and the docs are "to be updated in a follow-up." Same shape as v0.4's `docs/OTEL.md` Threat-model section, which Phase 38 had to add explicitly to the success criteria to avoid landing OTel without it.
 
 **How to avoid:**
-- **Lazy import inside `start()`.** ARCHITECTURE.md §3 Pattern 5 already mandates this; reinforce. The module-top imports are only stdlib + typing. All `opentelemetry.*` imports live inside the async `start(self, context)` body. If the user doesn't enable the adapter, the imports never execute.
-- **Entry-point registration uses string paths.** `pyproject.toml`'s `[project.entry-points."horus_os.adapters"]` block points at `horus_os.adapters.otel_adapter:OtelAdapter`. Python's entry-point machinery only resolves this when a discovery call asks for it. `AdapterRegistry.discover()` should catch `ImportError` per-entry-point and mark the adapter as `status=unavailable` with a clear message, not crash the whole app.
-- **Top-of-file `from __future__ import annotations`** plus type-only imports in `if TYPE_CHECKING:` blocks. Adapter type signatures can reference `opentelemetry` symbols without importing the package at runtime.
-- **CI test variant: install matrix.** Run two parallel jobs: (a) `pip install -e ".[dev]"` (no otel) — assert `python -c "import horus_os; from horus_os.adapters.otel_adapter import OtelAdapter"` works AND `OtelAdapter().start(ctx)` raises a clean "OTel extra not installed" error, not `ModuleNotFoundError`. (b) `pip install -e ".[dev,otel]"` — assert `start(ctx)` succeeds when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
-- **Graceful runtime check.** Inside `start()`, before importing OTel symbols: `try: import opentelemetry; except ImportError: raise RuntimeError("OTel adapter requires 'pip install horus-os[otel]'") from None`. The user sees a clear message in the Adapters tab status pill, not a confusing import traceback in the server logs.
+- **Single source of truth for the manifest schema: a `MANIFEST_V1_SCHEMA` constant in `src/horus_os/plugins/manifest.py`** that is both the validator and the JSON-Schema export. The validator runs on every manifest load. The JSON-Schema export feeds `docs/PLUGINS.md` via a docs-build step that errors if the rendered schema in the docs differs from the runtime constant. (Mechanism: docs build runs `python -c "from horus_os.plugins.manifest import MANIFEST_V1_SCHEMA; import json; print(json.dumps(MANIFEST_V1_SCHEMA, indent=2))"`, diffs against `docs/manifest-v1.schema.json`, fails if drift.)
+- **The reference plugin's manifest is parsed by the v0.5 loader as part of the test suite.** `tests/test_reference_plugin_manifest.py`: `assert load_manifest(EXAMPLE_PLUGIN_PATH / "horus-plugin.toml")` succeeds. If a future PR changes the schema in a way the reference plugin doesn't satisfy, the test turns red, the PR doesn't merge until the example is updated.
+- **`docs/PLUGINS.md` includes the reference plugin's manifest verbatim via include.** Same `docs/<file>` includes the example's full manifest as a code block, generated at docs-build from the live file. Authors reading the doc see the actual current manifest; not a stale screenshot.
+- **A "Threat Model" section in `docs/PLUGINS.md`** (mandated by Pitfall 1) with explicit copy: "Plugins execute in the horus-os Python process. Granted capabilities are de-facto access to your machine within those domains. The capability model reduces the attack surface but does not sandbox plugins."
+- **Plugin authoring guide order: manifest → first tool → capability → adapter.** Mirroring the four scenarios in the reference plugin (Pitfall 8). The doc is a walkthrough of the example, not a separate independent treatise.
+- **The release gate (Phase 49, REL-11) checks docs.** Concretely: `scripts/release_gate.py` (extending the v0.4 gate) adds a check that `docs/PLUGINS.md`, `docs/PLUGIN-SECURITY.md`, and `docs/MIGRATION-v0.4-to-v0.5.md` all exist; that the manifest schema in the docs matches the runtime constant; that the reference plugin's manifest validates against the current schema.
 
 **Warning signs:**
-- `grep -E "^from opentelemetry|^import opentelemetry" src/horus_os/adapters/otel_adapter.py` returns matches at module top (anything outside `start()` or a `TYPE_CHECKING` block).
-- The (no-otel) install-smoke CI variant fails with `ModuleNotFoundError`.
-- A user reports the app won't start after upgrading; logs show `opentelemetry` import error and they never installed `[otel]`.
+- A code review PR that changes the manifest schema and does NOT touch the reference plugin or the docs. Pre-merge check fails.
+- A third-party author asks "what does field X do?" where X is in the schema but not in the docs. The schema is the source of truth; the docs are the cache, and the cache is stale.
+- The reference plugin's `horus-plugin.toml` uses a field that the docs don't list. Drift the other direction; same fix.
+- `docs/PLUGINS.md` was last updated more than one minor version ago. Release gate flags.
 
 **Phase to address:**
-v0.4.7 (OTel adapter). Owner: OTEL requirement. The two-variant install-smoke matrix lands in v0.4.8 (release gate).
+**Phase 47 (documentation refresh)** lands the docs trio (`PLUGINS.md`, `PLUGIN-SECURITY.md`, `MIGRATION-v0.4-to-v0.5.md`); **Phase 49 (3-OS gate)** wires the docs-freshness check into the release gate. Owner: REL-11 (docs trio), REL-12 (release-gate docs check). The "single source of truth for manifest schema" constant must exist by Phase 41 so the docs build can read from it.
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
+Shortcuts that look reasonable but compound. v0.5-specific only; v0.4 patterns are out of scope here.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Store the SDK's `usage` dict as a JSON blob and parse on read | One column, no migration, "we'll add typed columns later" | Every query parses JSON in SQL, percentiles can't use an index, dashboards stay slow forever. Already the source of Pitfall 1 in v0.3. | Never for v0.4. The whole point is typed columns. |
-| `synchronous=FULL` for "safety" | Survives hard power loss | 10x INSERT latency, every agent run waits on fsync | Never. WAL + `synchronous=NORMAL` is the documented best practice. We're an observability table, not a financial ledger. |
-| Hardcode `pricing.json` defaults in `cost.py` as a fallback for tests | Tests stop touching the package data file | Real bugs from typos in test fixtures hide bugs in `pricing.json`; release-time pricing-refresh test can't run against real data | Never. Tests should use a tiny fixture `pricing.json` placed via `monkeypatch` of `cfg.pricing_path`. |
-| Skip the v0.3-database migration fixture test "because it's annoying to maintain" | One less test file | Migrations break on upgrade; user data appears lost; recovery cost is HIGH (Pitfall 11) | Never. This is the highest-leverage single test in the milestone. |
-| Use `time.time()` for latency "just this once" | One line of code | Negative durations corrupt percentiles; bug hides for months until laptop NTP-skews | Never. (Pitfall 3.) |
-| Add an in-memory ring buffer "for fast dashboard response" | Dashboard feels snappy on first load | Restart loses data; CLI and dashboard show different numbers; violates SQLite-as-source-of-truth | Never. ARCHITECTURE.md §7 Anti-Pattern 3 already forbids it. |
-| Capture prompt/completion bodies "for debugging, off by default in prod" | Easier to diagnose user-reported issues | One config flag flip + one outbound OTel connection = secret leak. (Pitfall 7.) | Acceptable only under the explicit env var + redactor gate documented in Pitfall 7. Never as a "just turn this on for a sec" debug aid. |
-| Use `SimpleSpanProcessor` in tests "because BSP is harder to flush deterministically" | Tests are easier to write | Tests pass with semantics that don't match production; production deploys hit Pitfall 6 | Acceptable in dedicated unit tests of the exporter ONLY (with `InMemorySpanExporter`). Integration tests use BSP. |
-| Skip retry-count tracking on tool invocations "we'll add it later" | One less column, one less code path | Pitfall 9 ships as a feature; user trust in the reliability panel collapses | Acceptable only if the panel surfaces "retry semantics not tracked, error counts include retried-then-succeeded calls" in the dashboard help text. Better to ship it right. |
+| Default-allow at install time | Frictionless adoption, lower churn | Capability model becomes decorative; first malicious plugin compromises every user; tightening later is a breaking change | **Never.** Per Pitfall 10. |
+| Grants keyed on plugin_name only (not version) | Upgrades feel seamless | Silent permission expansion on `pip upgrade`; the LiteLLM TeamPCP attack shape | **Never.** Per Pitfall 5. |
+| `pkg_resources` for entry-point discovery | "Tutorial used it" / first thing that searches | 1.3s import cost on every CLI startup; deprecated API; `EntryPoint` shape will keep shifting | **Never.** Per Pitfall 3. Use `importlib.metadata`. |
+| `pip install` plugin code BEFORE manifest validation | Simplest installer | `setup.py` arbitrary code execution before the capability prompt — defeats the model | **Never.** Per Pitfall 4. Two-phase install or wheel-only. |
+| Allowing sdist installs by default | Plugin authors don't need to wheel-build | Same `setup.py` problem; also blocks the Phase B "parse METADATA before install" check | **Never** by default. `--allow-sdist` flag for plugin authors developing their own. |
+| Lifecycle hooks with no timeout | Looks like the v0.4 adapter shape (it is); simpler code | A buggy third-party plugin's `start()` hangs the entire FastAPI lifespan → server unreachable | **Never** for plugins. `asyncio.wait_for(timeout=2.0)` always. v0.4 first-party adapters can be exempted because we own the code. |
+| `manifest_version` as optional field, defaulting to 1 | One less field for authors to remember | Cannot tell v1 from v2 manifests; cannot evolve the schema safely | **Never.** Required from day one. |
+| Plugin observability inheriting v0.4 schema without plugin_name | "v0.4 just shipped, don't churn it" | Dashboard rollups attribute plugin failures to no one; users can't diagnose which plugin to disable | **Never.** v5→v6 must add the column. |
+| Reference plugin importing from `horus_os._private` | Maintainer reaches for the helper that exists | Every plugin author copies the pattern; we can't refactor internals without breaking the ecosystem | **Never.** Plugin-facing API is `horus_os.plugins.api` and nothing else. |
+| `pip install` in CI test runner's own venv | "More honest than mocking" | Test order dependence; entry-point cache pollution; CI runtime balloon; cross-OS flakes | **Never.** Use the three-tier fixture strategy from Pitfall 11. |
+| Skipping the permission prompt on `horus-os plugins install -y` (default-on `-y`) | Faster install for known-good plugins | Re-introduces default-allow through the back door; users learn to type `-y` reflexively | Only when `-y` is OFF by default and documented as "CI use only." |
+| Dropping or renaming a SQLite table/column on v5→v6 | Schema hygiene | Every v0.4 user's database breaks on upgrade; data loss | **Never.** Additive only. Same rule as v0.4 Phase 32. |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Anthropic SDK streaming | Reading `usage` from the first chunk (it's not there) or from any intermediate chunk | Call `stream.get_final_message().usage` after the stream is drained. Both `input_tokens` and `output_tokens` are populated on the terminal message object. Documented and stable. |
-| Anthropic SDK prompt-caching | Treating `cache_creation_input_tokens` and `cache_read_input_tokens` as part of `input_tokens` (double-counts) or ignoring them (under-costs by up to 90% on cached reads) | They are distinct counters. The Anthropic SDK returns all four (input, output, cache_creation, cache_read) on `usage`. Persist all four. Price each at its model-specific rate per `pricing.json` (cache_read is ~10% of input, cache_creation is ~125% of input). |
-| Gemini SDK streaming | Same as Anthropic — assuming usage is in stream chunks | `response.usage_metadata` is populated on the response object after iterating to completion. Read after the loop, not during. |
-| Gemini SDK `cached_content_token_count` | Treating it as part of `prompt_token_count` (Gemini's own semantics differ from Anthropic's) | Per [Gemini docs](https://ai.google.dev/gemini-api/docs/tokens), `prompt_token_count` is the *total* input including cache; `cached_content_token_count` is the cached *subset*. The non-cached input is `prompt_token_count - cached_content_token_count`. Pricing math differs from Anthropic; document both formulas in `cost.py`. |
-| OTel collector (any backend) | Hardcoding `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces` (trailing path) when the user actually wants base URL; or omitting the path when the SDK appends it; or appending `/v1/traces` twice | The OTLP HTTP exporter defaults to appending `/v1/traces` to whatever `OTEL_EXPORTER_OTLP_ENDPOINT` is set to. Document this clearly: "Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` (base URL only). The exporter appends `/v1/traces`." Pass through to the SDK and let it handle the suffix logic. |
-| OTel collector authentication | Putting bearer tokens in a config file, then accidentally committing it | Use `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20xyz` env var. Document in `docs/OTEL.md` with explicit "do not commit" warning. The adapter reads from env, not from config files. |
-| OTLP gRPC vs HTTP | Choosing gRPC because tutorials show it | STACK.md §"What NOT to Use" already forbids gRPC: `grpcio` has Windows-wheel gaps on fresh Pythons. Use HTTP. Reinforce in code review. |
-| OTel resource attributes | Forgetting `service.name` so every span shows up as "unknown_service" in the backend | Set `service.name = "horus-os"`, `service.version = <pkg version>`, `host.name = socket.gethostname()` at `TracerProvider` creation time. Documented in STACK.md §1 integration example. |
-| LiteLLM pricing JSON | Adopting it as the bundled file (it's MIT) | STACK.md §"Alternatives Considered" already rejects this — too big, models we don't support, schema churn. We curate our own small file, optionally diff against LiteLLM at release time to catch missed updates. |
-| Anthropic billing endpoint | Trying to call it from our app to verify token counts in real time | There is no public Anthropic billing endpoint that returns per-key token totals. Cross-checking is a manual process or a CSV download — codify in `docs/RELEASE.md` and `docs/COST-VERIFICATION.md`. |
+| `importlib.metadata.entry_points()` | `entry_points()['horus_os.plugins']` — dict shim works on 3.10/3.11, raises on 3.12 | `entry_points(group='horus_os.plugins')` — selectable API; works on every supported version |
+| `subprocess.run(["pip", "install", ...])` | Bare `pip` resolves to whatever's first on PATH; may not be the venv's pip | `[sys.executable, "-m", "pip", "install", "--require-virtualenv", ...]` |
+| Plugin's `setup.py` | Runs at install time as arbitrary Python code | Refuse sdist by default (`--allow-sdist` flag for plugin developers); wheels only for end-user installs |
+| Plugin's `.pth` file in the wheel | Executes on every Python startup (Checkmarx `.pth` attack shape) | Refuse wheels containing `*.pth` in RECORD during Phase B validation |
+| `entry_points()` cache during tests | Caches by interpreter; tests that install mid-run see stale state | Per-test temp venv (tier 3 fixture from Pitfall 11) or monkeypatch (`fake_plugin_entry_points` fixture, tier 2) |
+| FastAPI lifespan unbounded `await plugin.start()` | A hung plugin blocks the entire server startup | `asyncio.wait_for(plugin.start(ctx), timeout=2.0)` — same shape as v0.4 OTel adapter shutdown |
+| Plugin tool registration | Two plugins both want tool name `read_file`; second one raw-raises `ValueError` from ToolRegistry | Loader catches and wraps with `PluginConflictError` carrying both plugin names; user disables one in the dashboard |
+| Permission shim's `check_capability` | TOCTOU pattern: check, return True, caller-then-uses-the-cap | Helper shim MUST raise if the cap is missing; never return True without performing the privileged op |
+| Anthropic / Gemini SDK calls from a plugin | Plugin imports `from horus_os._providers.anthropic import client` directly | Plugin requests `llm.call` capability and goes through `ctx.llm.call_anthropic(...)` which respects rate limits and observability |
+| `plugin_capability_grants` lookup | `WHERE plugin_name = ?` only — inherits across versions | `WHERE plugin_name = ? AND plugin_version = ?` — pinned per version |
 
 ## Performance Traps
 
+Patterns that look fine for one plugin and fall over as the plugin count grows. Hand-sized for a single-user desktop product; not Datasette-scale.
+
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Synchronous OTel export on the agent's hot path | Each LLM call adds 100-500ms; with a downed collector, adds the export timeout (~10s) per call | Always `BatchSpanProcessor`; never `SimpleSpanProcessor` in production. Bus subscriber handler does span-creation only, lets BSP enqueue. (Pitfall 6) | The moment OTel is enabled, especially if collector is misconfigured or slow. |
-| Computing percentiles in Python over fetched-all-rows lists | Dashboard pages take seconds to render; memory spikes per request | SQLite-side `NTILE(100) OVER (...)` (ARCHITECTURE.md §3 Pattern 4); pure-SQL aggregation, no Python data manipulation | At ~10k rows the dashboard is noticeably slow; at ~100k it OOMs the dev box. |
-| Per-row INSERT under `synchronous=FULL` | Agent runs feel slow under v0.4 compared to v0.3 | `synchronous=NORMAL` + WAL; consider per-trace batched insert for tool_invocations (Pitfall 8) | At ~3-4 tool calls per turn on a slow disk, the marginal latency is user-visible. |
-| Dashboard polls without `?since=` filter | Query scans whole `llm_calls` table; gets slower over time | `?since=24h|7d|30d` always required; queries always include a `WHERE created_at >= ?` clause; an index on `(created_at DESC)` exists (ARCHITECTURE.md §5) | At ~50k LLM calls (mid-second-year of heavy use), unfiltered queries take seconds. |
-| `pricing.json` reload on every cost computation | Disk I/O per LLM call; cost annotator becomes the bottleneck | Load once at `create_app` startup, hold in module-level `PricingTable` instance; reload only on `cfg.pricing_path` mtime change (Pitfall 5 prevention) | Within hours of v0.4 enablement under any meaningful load. |
-| WAL file grows unbounded | `db.sqlite3-wal` is 10x the size of `db.sqlite3`; first dashboard query after a long idle takes seconds | Periodic `PRAGMA wal_checkpoint(TRUNCATE)`; document in `docs/MAINTENANCE.md`; consider a cron-friendly `horus-os maintain` subcommand later | Heavy continuous writes for weeks without a checkpoint. Common on Raspberry-Pi-like deployments. |
-| Span attribute cardinality explosion | OTel backend bills per unique attribute combination; user is surprised by collector storage costs | Cap attribute values to known low-cardinality sets: `gen_ai.system` ∈ {anthropic, google_genai}, `gen_ai.request.model` ∈ pricing.json keys, NEVER set per-user-id or per-trace-id as a span attribute (use span.id which the backend already indexes) | Anytime a contributor adds a per-request unique attribute (request UUID, prompt hash). Within days the user's backend gets noisy and expensive. |
+| Eager entry-point scan at module import | `horus-os --version` takes >1s cold | Lazy discovery: `discover_plugins()` called once during FastAPI lifespan, cached on `app.state.plugins`; CLI subcommands that don't need plugins never trigger it | Past ~10 installed plugins; or any installed plugin that re-exports a heavy ML library at import time |
+| `pkg_resources` import in any code path | `horus-os --version` takes 1.3-1.5s cold | Lint rule: `grep -r "import pkg_resources" src/ && exit 1` | Always; the cost is in the import itself, not the call |
+| Synchronous IO in plugin `start()` | Server startup takes longer per plugin installed; a network blip on one plugin's connect hangs all of them | `asyncio.wait_for(plugin.start(ctx), timeout=2.0)`; plugins that need to wait on a network do it in a background task scheduled from `start()` | At 3+ network-using plugins (Discord adapter style) installed |
+| Per-event subscriber inside `ObservationBus` doing SQL writes synchronously | Capture-overhead benchmark from v0.4 Phase 33 regresses past +50ms baseline | SQLitePersister batches writes (already the v0.4 shape); plugin observability lives ON the same bus and inherits the batching | Past ~100 events/second sustained — unlikely for a single user but plausible during a multi-agent fan-out |
+| Plugin's tool handler doing blocking IO inside the agent loop | Streaming responses stall; user sees the SSE pause | Tool handlers are sync but should not block longer than a single agent turn budget (~10s); plugins doing long IO must use an async tool handler or a background task | Past one plugin doing >2s blocking IO per tool call |
+| Manifest loaded from disk on every tool invocation | CPU spike on hot loops; first symptom is laptop fan during agent runs | Manifest loaded once at discovery, cached on `PluginRecord`; only re-loaded on `plugins refresh` or restart | Past ~10 tool invocations per second |
+| Capability check doing SQL lookup on every shim call | Same pattern; SQLite is fast but not free | `PermissionCache` in-memory dict per-process, populated at startup from `plugin_capability_grants`; invalidated on grant change | Past ~100 capability checks per second; not realistic for v0.5 but cheap to do right |
+| Three-OS install matrix has flaky teardown | CI minutes balloon; tests pass-then-fail on retry | `clean_venv` fixture uses `pytest`'s `tmp_path` (auto-cleaned) and never leaves writes outside it; never tampers with the runner's venv | Always; CI flakes compound |
 
 ## Security Mistakes
 
-Domain-specific security issues beyond general web security.
+Plugin-system-specific. The v0.4 OTel/PII pitfalls in the prior PITFALLS.md are not duplicated here.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Emit `gen_ai.input.messages` / `gen_ai.output.messages` / `gen_ai.prompt` / `gen_ai.completion` by default in the OTel exporter | User prompts (which may contain API keys, secrets, PII) flow to whatever backend the user's OTLP endpoint points at | Default-deny. Numerical attributes only. Body capture requires `HORUS_OS_OTEL_CAPTURE_CONTENT=true` + the redactor allowlist. (Pitfall 7) |
-| Persist raw tool-invocation arguments to `tool_invocations.error_message` for "debug context" | Tool args contain file paths, shell commands, credentials passed as arguments; the column is indexed and queryable | Persist `error_type` (exception class) only; never `error_message` content. If users genuinely need full args for debugging, expose via `HORUS_OS_DEBUG_TOOL_ARGS=true` with the same opt-in pattern as OTel content capture. |
-| Log the prompt to `horus.err` (Python logging) for "easier debugging" | Logs end up on the filesystem (Pitfall 7 scope), often with weaker access controls than the SQLite db | Logging discipline: log structural info (trace_id, model, latency, status), never bodies. Add a CI grep check: `grep -rE "log.*(prompt|completion|messages)" src/horus_os/observability/` returns nothing. |
-| Include `error_message` text in the dashboard's "last error preview" tile, unredacted | Errors often quote user input back; screenshotting the dashboard leaks the input | Redact through the same `redact()` function as Pitfall 7. Truncate to 200 chars. Show `error_type` prominently, message in a click-to-reveal tooltip. |
-| Use the OTel adapter's status output (in the Adapters tab) to display the configured `OTEL_EXPORTER_OTLP_HEADERS` for "verification" | The Authorization bearer token shows up in the dashboard UI, screenshots, browser cache | Display ONLY the endpoint URL and the names of headers configured (not values). Adapter health endpoint never returns secret values. |
-| Cache the `pricing.json` user-override file in a world-readable directory | Custom rates for negotiated enterprise pricing become readable by other users on a shared system | Default override path is `$XDG_CONFIG_HOME/horus-os/pricing.json` (mode 0600 on creation); document the file mode expectation. Reject world-readable override files with a warning in the dashboard, allowing the user to override the warning with an explicit flag. |
-| Pricing-file override pulled from a network URL "for convenience" | A compromised pricing source = a misreporting cost dashboard, or worse, a code-injection vector if YAML/pickle were used | JSON only; load only from local filesystem paths; never `requests.get` from a remote URL in the cost path. |
-| Allow the OTel adapter to attach the span body via a query param on `/api/observability/llm-calls` | Anyone with localhost access (browser plugin, local malware) can scrape bodies | All `/api/observability/*` endpoints return only the same fields the dashboard shows: numerical metrics, no bodies. To inspect bodies, the user uses SQLite directly (where the local OS file permissions are the trust boundary). |
+| In-process plugin code with read access to `~/.horus-os/secrets.json` | Plugin reads Anthropic API key, exfiltrates via the `net.outbound` capability | `secrets.read` is a separate capability from `filesystem.read`; the secrets file is read via a `ctx.secrets.get(provider="anthropic")` shim that checks the capability AND scrubs the returned key with a `RevealedSecret` wrapper that only stringifies for the inner SDK call site |
+| Plugin sets env vars in the parent process | Plugin's `os.environ['ANTHROPIC_API_KEY'] = '...'` overrides horus-os's own key for the rest of the process | Capability `env.write` is its own narrow capability; default-deny; the helper shim makes a private env-overlay scoped to the plugin's own subprocesses, never mutates `os.environ` |
+| Plugin reads from `os.environ` directly | Bypasses the secrets capability; reads `ANTHROPIC_API_KEY` straight from the process env | Documented anti-pattern in `docs/PLUGIN-SECURITY.md`; we cannot strictly enforce this in v0.5 (no OS sandbox), but the docs warn and the linter for the reference plugin rejects `os.environ` access outside of declared env vars |
+| Plugin imports `from horus_os._providers.anthropic import client` and uses it raw | Bypasses observability, rate limits, capability checks for LLM use | `horus_os._providers` is a leading-underscore (private) module; the public API `horus_os.plugins.api.LLM` re-exports a wrapped client that respects the `llm.call` capability and ObservationBus; lint rejects `_providers` imports in any plugin |
+| Plugin's manifest declares a capability the plugin never uses | The user grants more than the plugin needs; on supply-chain compromise the unused grants become the attacker's playground | Dashboard plugins tab shows "requested but never used in 30d" badge; periodic re-prompt offers to revoke unused caps; the Wiz LiteLLM writeup specifically called out over-broad pre-grants as the foothold |
+| Plugin loads code from a URL at runtime | Pre-install review is moot; the plugin pulls live code | `net.outbound` capability is required even for the plugin to make any HTTP call; in v0.5 we don't strictly enforce "no code-loading endpoints" — we DO require the plugin to declare which hosts it talks to in its manifest, and the helper HTTP shim refuses requests to undeclared hosts |
+| Plugin spawns subprocess (e.g. shells out to `git`) | Bypasses every check; subprocess inherits all of horus-os's privileges | `process.spawn` is a separate capability; default-deny; the helper shim is the only path that respects it; raw `subprocess.run(...)` from plugin code is a documented anti-pattern (we cannot strictly enforce without OS sandbox in v0.5) |
+| Manifest signed-by field is unverified | Anyone can claim to be plugin author "foo"; users trust the wrong identity | v0.5 deliberately ships WITHOUT signature verification (out of scope for the milestone); manifest carries an `author` and `homepage` field that the installer surfaces verbatim with a "verify on PyPI" link; signature verification is v0.6+ (documented in `docs/PLUGIN-SECURITY.md` as a known gap) |
+| `pip install` from a path outside PyPI (`pip install ./local-foo`) skips PyPI's malware scanning | Local-dev path is also the local-malware path | Local-directory install (`~/.horus-os/plugins/` per PROJECT.md) is allowed for "dev plugins"; documented warning that local plugins are unscanned; same capability prompt applies; future v0.6+ could add a "dev mode" flag that's off by default |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Dashboard shows "Total cost: $0.42" with no time window indication | User thinks that's lifetime cost when it's actually last-7d; or vice versa | Always render with explicit window label: "Total cost: $0.42 (last 7 days)". Window selector is prominent, not hidden in a dropdown. |
-| Pre-v0.4 trace rows render as "Cost: $0.00" alongside v0.4 rows showing real cost | User panics that v0.4 deleted their cost data | Render pre-v0.4 rows as "—" with hover "no cost data captured before v0.4". A separate dashboard tile shows "N runs from before v0.4 with no cost data" to set expectation. (Pitfall 11 prevention) |
-| Tool error rate panel renders "100% errors" for a tool with 1 invocation | User thinks the tool is fully broken when it's a single noisy datapoint | Sample threshold (`call_count >= 5` for headline); below threshold render "—" with tooltip "insufficient data." (Pitfall 9 prevention) |
-| Latency p95 shows `0ms` for an empty window | User reads "0ms = perfect performance" instead of "no data" | Empty window renders "—" not 0; p95 only renders with `n` count alongside. (Pitfall 10 prevention) |
-| OTel adapter status shows "running" even when collector is unreachable and spans are silently dropping | User assumes export is healthy when it isn't | Adapter status reflects exporter health: track BSP's internal counters (spans queued, spans dropped, last successful export); surface `last_export_at`, `spans_dropped_last_hour`. If dropped > 0, status = `degraded` not `running`. |
-| `horus-os usage --format table` truncates long agent names mid-word | User can't tell which agent is which in the table | Use the existing CLI table formatter from `horus-os traces` (already handles truncation with ellipsis). Add `--no-truncate` flag for piping to `less -S`. |
-| `pricing.json` staleness banner reads as scary alarm even at 7-day staleness | User panics, files an issue, asks "is my cost data wrong?" | Banner copy is precise: "Pricing data is N days old. Most rates change quarterly. Override at $HOME/.config/horus-os/pricing.json if you need newer rates." Color: yellow at 30-60 days, red only at 90+. |
-| Streaming runs and non-streaming runs are visually identical in the dashboard, but streaming runs have estimated tokens | User sees `Cost: $0.03` for a streaming run and `Cost: $0.04` for an identical non-streaming run, thinks the dashboard is broken | Streaming runs render with an `~` prefix or a "streaming (est.)" badge. (Pitfall 2 prevention) |
-| `horus-os usage --format json` includes float-precision noise (`0.04200000000000001`) | User pipes to `jq`, the noise breaks downstream tools | Round costs to 6 decimal places (sub-cent precision is meaningless), durations to integer ms, in the JSON serializer. Document the precision contract in `docs/CLI.md`. |
+| Permission prompt shows raw capability dotted-keys (`filesystem.read`) | User has no idea what filesystem.read actually permits; click-throughs the prompt | Plain-English per-cap descriptions from `capability_catalog.py`; the prompt shows the description, the dotted-key is in tooltip / `--verbose` mode |
+| Re-prompt on every plugin upgrade even when capability set is unchanged | Grant fatigue; user reflexively types `y` | Three-outcome diff (Pitfall 5): silent auto-grant when unchanged or reduced, re-prompt only on expansion |
+| Plugin error rolls up under "registry error" with no plugin name | User can't diagnose which plugin broke; suspects horus-os itself | Per-plugin attribution column (`plugin_name`) on every observability event; per-plugin rollup tile on dashboard |
+| `horus-os plugins list` shows enabled status but not grant status | User installs a plugin, doesn't realize they declined a capability, plugin "doesn't work" | `plugins list` shows `(2/3 capabilities granted)`; `plugins info <name>` shows the full grant table |
+| Manifest error during install dumps a JSON-Schema validation error | User sees `"properties.capabilities.0: not in enum"` and has no clear next step | Manifest validation errors are formatted by `src/horus_os/plugins/manifest.py:format_validation_error()` into "Field 'capabilities[0]' has value 'fs.read'. Valid values are: filesystem.read, filesystem.write, net.outbound, ..." with a doc link |
+| `pip install` fails for a non-plugin reason (network, wheel build) and the user thinks it's a plugin bug | They give up on horus-os | Installer's error handler classifies failures: NetworkError → "Check connection and retry"; WheelBuildError → "This plugin doesn't ship a wheel for your platform; contact the plugin author"; ManifestError → "This plugin is incompatible with horus-os v0.5" |
+| The dashboard plugins tab takes >1s to load because it shells out to `pip list` | First-impression of "the plugin system is slow" | Plugin list is cached on `app.state.plugins` from lifespan discovery; refreshed only on explicit refresh button or `horus-os plugins refresh`; not on every page load |
+| "Plugin disabled" hides the plugin from `plugins list` | User forgets they disabled it; can't find it to re-enable | Disabled plugins appear in `plugins list` with `(disabled)` tag and an `enable` action; never hidden |
+| No way to test a plugin without publishing it | Plugin authors can't iterate locally | `~/.horus-os/plugins/<name>/` local-directory discovery (per PROJECT.md); plus `horus-os plugins install --editable .` runs `pip install -e .` for local development |
 
 ## "Looks Done But Isn't" Checklist
 
-Run before declaring v0.4 ready. Each item is something that often passes review but fails in the wild.
+Plugin-system completeness verification. Use during execution.
 
-- [ ] **Streaming cost capture:** every streaming run produces a non-zero `llm_calls` row with the terminal `usage` read from `stream.get_final_message()`. Verify by hitting `/api/chat/stream` then `SELECT input_tokens, output_tokens FROM llm_calls ORDER BY id DESC LIMIT 1`. (Pitfall 2)
-- [ ] **Per-iteration token sum:** a 3-iteration agent run shows `traces.total_input_tokens` equal to the SUM of the iteration `llm_calls.input_tokens`, not just the last iteration's. (Pitfall 1)
-- [ ] **`time.perf_counter` everywhere:** grep `src/horus_os/observability/`, `agent.py`, `tools/loop.py` for `time.time()` — should be empty. (Pitfall 3)
-- [ ] **Negative-latency guard:** unit test inserting a `latency_ms=-100` event triggers an assertion failure in `SQLitePersister`, not a corrupt row. (Pitfall 3)
-- [ ] **OTel default-deny content:** unit test that fires an event with a prompt containing `AKIAIOSFODNN7EXAMPLE` and verifies the exported span (via `InMemorySpanExporter`) does NOT contain that string. (Pitfall 7)
-- [ ] **OTel shutdown bound:** unit test that starts the adapter pointing at `http://127.0.0.1:1` (closed port), sends one event, calls `OtelAdapter.stop()`, asserts wall-clock < 3 seconds. (Pitfall 6)
-- [ ] **OTel adapter without `[otel]` extra:** in a venv with `pip install -e ".[dev]"` (no otel), `from horus_os.adapters.otel_adapter import OtelAdapter` succeeds AND `await adapter.start(ctx)` raises a clean RuntimeError with a "pip install horus-os[otel]" hint. (Pitfall 12)
-- [ ] **v0.3 database fixture migrates cleanly:** test runs `Database.init()` against `tests/fixtures/v0_3_database.sqlite3`, asserts new columns exist, old `traces.usage` blob still readable, pre-v0.4 rows have NULL on new columns. (Pitfall 11)
-- [ ] **Pricing staleness banner renders:** dashboard shows the `updated_at` from `pricing.json`. Test with a fixture where `updated_at` is 60 days old, assert the banner appears. (Pitfall 5)
-- [ ] **Pricing fallback is NULL not zero:** unit test that records a call to a model NOT in `pricing.json`, asserts `llm_calls.cost_usd IS NULL` and `pricing_missing = 1`. Dashboard query separates these from costed runs. (Pitfall 5)
-- [ ] **Tool reliability ignores small samples:** dashboard renders "—" not "100%" for a tool with `call_count=1`. (Pitfall 9)
-- [ ] **Percentile small-sample handling:** `p95` over an empty window returns NULL / "—", not 0. Over n=5 returns the value with a sample-count badge. (Pitfall 10)
-- [ ] **OTel HTTP exporter, not gRPC:** `pyproject.toml`'s `[otel]` extra lists `opentelemetry-exporter-otlp-proto-http`, NOT `*-grpc`. (STACK.md, reinforced here.)
-- [ ] **No `gen_ai.input.messages` or `gen_ai.output.messages` in default OTel output:** `grep -E "(input|output)\.messages|gen_ai\.(prompt|completion)" src/horus_os/adapters/` returns matches ONLY inside the explicit opt-in code path. (Pitfall 7, OpenLLMetry issue #3515 awareness)
-- [ ] **Capture-overhead benchmark:** v0.4 end-to-end time for a fixture 5-iteration / 3-tool-call run is within 50ms of the recorded v0.3 baseline. (Pitfall 8)
+- [ ] **Capability declaration:** Every declared cap is in `capability_catalog.py`; unknown caps are rejected at manifest load (Pitfall 1).
+- [ ] **Capability enforcement:** Every helper shim (`ctx.filesystem`, `ctx.secrets`, `ctx.net`, `ctx.process`, `ctx.env`) raises `PermissionDenied` if the cap is missing — verify by removing a grant and asserting the test plugin fails (Pitfall 1).
+- [ ] **Manifest schema:** `manifest_version` is required; unknown fields warn but do not refuse; v1 fixture continues to load (Pitfall 2).
+- [ ] **Discovery API:** Only `importlib.metadata.entry_points(group=...)` is used; `pkg_resources` is lint-rejected; 3.11 and 3.12 both green in CI (Pitfall 3).
+- [ ] **Discovery is lazy:** `horus-os --version` cold start <100ms; CLI subcommands that don't need plugins do not call `discover_plugins()` (Pitfall 3).
+- [ ] **Installer venv check:** `sys.prefix == sys.base_prefix` rejection works; tested with system Python in CI (Pitfall 4).
+- [ ] **Two-phase install:** Manifest validation happens BEFORE `pip install`; sdist rejected by default; `.pth`-containing wheels rejected (Pitfall 4).
+- [ ] **Rollback:** A failed install leaves the venv state byte-identical to pre-install (`pip freeze` hash round-trip) (Pitfall 4).
+- [ ] **Grant per-version keying:** `plugin_capability_grants` schema has `(plugin_name, plugin_version, capability)` as PK; upgrade does not inherit (Pitfall 5).
+- [ ] **Grant diff UX:** Three outcomes (unchanged/reduced/expanded) wired in CLI prompt and dashboard modal (Pitfall 5).
+- [ ] **Bounded lifecycle:** Every `plugin.start()` and `plugin.stop()` call wrapped in `asyncio.wait_for(timeout=2.0)`; broken-plugin fixture test asserts the lifespan completes (Pitfall 6).
+- [ ] **Failure isolation:** Broken plugin marks `status=error` and other plugins continue; horus-os server stays up (Pitfall 6).
+- [ ] **Plugin can be disabled without uninstalling:** `plugin_registry.enabled = 0` skips discovery for that plugin (Pitfall 6).
+- [ ] **Observability attribution:** Every `ToolCallEvent` and `LLMCallEvent` from a plugin carries `plugin_name`; pre-v0.5 rows are NULL and roll up under "horus-os core" (Pitfall 7).
+- [ ] **`/api/observability/plugins`:** Returns per-plugin rollups; dashboard plugins tab shows error rate (Pitfall 7).
+- [ ] **Reference plugin:** Imports only from `horus_os.plugins.api`; covers four scenarios; installs via the actual installer flow; tests run in CI (Pitfall 8).
+- [ ] **v5→v6 migration is additive only:** No DROP, no RENAME, no NOT NULL on existing columns; v0.4 fixture survives the migration (Pitfall 9).
+- [ ] **Default-deny posture:** `DEFAULT_GRANT_POLICY = "deny"` in code; `-y` flag is documented as CI-only; no skip-permissions toggle in the dashboard (Pitfall 10).
+- [ ] **Three-tier test fixtures:** In-memory PluginRecord, monkeypatched entry-points, per-test `clean_venv`; no `pip install` ever touches the runner's venv (Pitfall 11).
+- [ ] **Docs / schema / example parity:** `docs/PLUGINS.md` includes the live example manifest verbatim; release-gate test asserts no drift between code and docs (Pitfall 12).
+- [ ] **Threat model is written down:** `docs/PLUGIN-SECURITY.md` exists; first-paragraph statement: "Plugins execute in the horus-os Python process" — linked from the installer prompt (Pitfall 1).
 
 ## Recovery Strategies
 
@@ -428,87 +491,98 @@ When pitfalls occur despite prevention.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Cost drift discovered (Pitfall 1, 2, 5) | LOW | Bug-fix release. Document on the changelog that prior costs were under/over by N%. Add a "data may be inaccurate before vX.Y.Z" footnote to dashboard for historical periods. SQLite rows stay; the dashboard query gets a sub-window exclusion or a recompute path. |
-| Negative latency rows in SQLite (Pitfall 3) | LOW | One-time cleanup query: `DELETE FROM llm_calls WHERE latency_ms < 0; DELETE FROM tool_invocations WHERE latency_ms < 0;`. Ship as a migration helper or a `horus-os maintain --fix-latency` subcommand. Document the cause. |
-| Streaming runs at $0.00 (Pitfall 2) | MEDIUM | Forward-fix only; cannot back-fill (the usage data wasn't captured). Dashboard adds a tooltip on streaming rows: "estimated; not captured before vX.Y.Z." User-visible explanation > silent gap. |
-| OTel exporter leaked process / 60s shutdowns (Pitfall 6) | LOW | Hotfix release with bounded `force_flush` timeout. Document the change. No data loss (BSP queue dropped is acceptable; the SQLite source of truth is intact). |
-| PII leaked through OTel span attributes (Pitfall 7) | HIGH | Patch release immediately. Public security advisory. Contact affected users via release notes and (if known) directly. Users must rotate any credentials that may have been in prompts. Add a CHANGELOG entry under a `### Security` heading per the keep-a-changelog convention. This is the highest-stakes failure mode in the milestone — the recovery cost is mostly reputational and is paid in user trust. |
-| Migration broke v0.3 readers (Pitfall 11) | HIGH | Emergency release that re-adds whatever was DROP-ed or RENAME-d. Users who already upgraded may need to restore from backup. The fix is so painful that it's why the rule is "never DROP, never RENAME, period." |
-| `pricing.json` rotted, costs systematically wrong (Pitfall 5) | LOW | Ship a patch release with refreshed `pricing.json`. Users who care can override locally. No data loss; cost numbers are derived, not stored as ground truth (we store token counts, the derived cost is a property of the join with pricing). Future dashboard queries can recompute against fresher pricing. |
-| Tool reliability panel misleading (Pitfall 9) | MEDIUM | Add the missing columns (`status`, `retry_count`, `expected_no_result`); migrate is additive; backfill via UPDATE for the recoverable cases (success/error binary at minimum). Until the backfill, surface a tooltip "reliability data before vX.Y.Z is approximate." |
-| Write amplification regression (Pitfall 8) | LOW | Audit recent PRs for added indexes, added pragmas, changed batching. Roll back or fix. The benchmark in CI should have caught it; add the benchmark if not present. |
-| OTel adapter broke `pip install horus-os` (no extra) (Pitfall 12) | LOW | Hotfix release with lazy import. The two-variant CI install matrix should have caught it; verify the matrix is actually running. |
+| Default-allow shipped accidentally | HIGH | Emergency v0.5.1 that flips to default-deny; reset all grants in users' databases; force re-prompt on next install; mailing-list announcement with explanation. Painful but survivable; the alternative is shipping a permanent CVE class. |
+| Manifest schema drift (v1 manifests break under v2 loader) | HIGH | Ship a v0.5.x patch that loads v1 manifests via the v2 loader's normalize() function; add the missing forward-compat test fixture; document the regression in CHANGELOG |
+| `pkg_resources` snuck into the import path | MEDIUM | Identify the import chain via `python -X importtime -c "import horus_os"`; replace with `importlib.metadata`; add the lint rule that should have caught it |
+| Plugin corrupted the venv | MEDIUM | Document the manual fix in `docs/PLUGIN-RECOVERY.md`: `rm -rf venv && python -m venv venv && pip install horus-os && horus-os plugins reinstall-all`; harden the rollback test |
+| Capability silent expansion bug shipped | HIGH | Audit `plugin_capability_grants` for any row where `plugin_version` is the latest but `granted_at` predates the version's release date — those are the silently inherited grants; revoke them, force re-prompt; release announcement |
+| Plugin hung the server | LOW | User runs `horus-os --disable-all-plugins` (CLI flag that loads with empty plugin list); identifies the offending plugin via `plugin_registry.status`; disables it; restarts; opens an issue. The bounded-lifecycle fix lands in a patch release. |
+| v0.4 database broke on v0.5 upgrade | HIGH | Patch release that rolls the migration forward in a safer order; provide `horus-os migrate --from v0.4` rescue script; back up the database before running |
+| Reference plugin used internal API | LOW | Refactor the example, ship a patch, mark the offending internal symbol as `__deprecated__` for one minor version, then move it out from underscore-prefix |
+| Plugin observability has no attribution | MEDIUM | Backfill `plugin_name` on existing rows where the trace_id can be cross-referenced with the active plugin at the time; ship the column-required-non-NULL gate in a patch |
+| Default-deny created adoption friction | LOW | Improve copy in the prompt; add bundles for common patterns; do NOT relax the default. Adoption-friction is a UX problem; default-allow is a security problem. |
+| Test isolation broke (pip in test runner venv) | MEDIUM | Reset CI runner image; refactor to three-tier fixtures; add the lint rule |
+| Docs drift caught after release | LOW | Patch release with docs only; release-gate check enforces no future drift |
 
 ## Pitfall-to-Phase Mapping
 
-How v0.4 phases prevent each pitfall. (Roadmap phase numbering per ARCHITECTURE.md §9; final phase numbers will be assigned by the roadmap.)
+Maps each pitfall to the v0.5 phase that owns its prevention. Phase numbers continue from v0.4's Phase 39, so v0.5 phases start at 40.
 
-| # | Pitfall | Prevention Phase | Verification |
-|---|---------|------------------|--------------|
-| 1 | Per-iteration token undercount | v0.4.1 (schema) + v0.4.2 (capture) + v0.4.3 (cost) | 3-iter test asserts `SUM(llm_calls.input_tokens) == traces.total_input_tokens` |
-| 2 | Streaming records $0.00 | v0.4.2 (capture, SSE branch) | Streaming-path integration test reads terminal usage; assert non-zero |
-| 3 | Wall-clock latency | v0.4.1 (lint rule) + v0.4.2 (capture) | Ruff/grep rule, negative-latency assertion test |
-| 4 | Latency excludes retries / queue / streaming | v0.4.2 (capture) defines contract; v0.4.4 (queries) surfaces TTFT + retry_count columns | Contract docstring on `ObservationEvent.latency_ms`; columns exist; docs reference |
-| 5 | `pricing.json` rot | v0.4.3 (pricing fields) + v0.4.5 (banner) + v0.4.8 (release CI gate) | Banner renders on stale fixture; release CI fails on 14d+ staleness |
-| 6 | OTel blocks request / leaks on shutdown | v0.4.7 (OTel adapter) | Shutdown-timeout test (< 3s with closed-port collector) |
-| 7 | OTel PII leak | v0.4.7 (OTel adapter) | InMemorySpanExporter test asserts no AKIAI* string in default-mode output |
-| 8 | SQLite write amplification | v0.4.1 (pragmas + indexes) + v0.4.2 (benchmark) | Capture-overhead benchmark in CI; WAL + synchronous=NORMAL set |
-| 9 | Tool reliability counts wrong | v0.4.2 (capture status enum + retry_count) + v0.4.4 (queries) + v0.4.5 (dashboard threshold) | Test for retry-then-success case; dashboard renders "—" for n<5 |
-| 10 | Percentile math wrong | v0.4.4 (queries) + v0.4.5 (dashboard rendering) | Test for empty window (returns NULL), small-sample (returns with badge), no aggregate-of-aggregates SQL |
-| 11 | Migration breaks v0.3 readers | v0.4.1 (schema, additive only) | v0.3 fixture database migration test in CI |
-| 12 | OTel adapter import without `[otel]` extra | v0.4.7 (lazy imports) + v0.4.8 (install matrix) | Two-variant install-smoke CI; clean RuntimeError on `start()` without extra |
+| Pitfall | Prevention Phase(s) | Verification |
+|---------|---------------------|--------------|
+| 1: Default-allow normalizes compromise | 41 (manifest), 43 (permission model), 47 (docs) | Test removing a grant and asserting helper shim raises `PermissionDenied`; `docs/PLUGIN-SECURITY.md` exists; capability catalog is closed |
+| 2: Manifest schema drift | 41 (manifest) | v1 fixture loads unmodified through every future loader version; `manifest_version` is required; unknown fields warn |
+| 3: Entry-point API drift + `pkg_resources` cost | 42 (discovery) | Lint rejects `pkg_resources`; 3.11 + 3.12 both green; cold-start <100ms benchmark |
+| 4: Installer corrupts venv | 44 (installer) | `clean_venv` fixture tests round-trip pip-freeze hash; sdist rejected; `.pth` rejected; venv check enforced |
+| 5: Grant expansion on upgrade | 43 (permission model), 44 (installer upgrade) | Per-(name,version,cap) PK; diff-based re-prompt test; audit log appended |
+| 6: Plugin failures crash horus-os | 42 (discovery), 43 (lifecycle), 46 (tests) | Broken-plugin fixture causes `status=error`; lifespan completes; bounded `wait_for(2.0)` |
+| 7: Observability attribution gap | 41 (schema migration), 45 (dashboard + new route) | Every plugin event has non-NULL `plugin_name`; per-plugin rollup query returns correct counts |
+| 8: Reference plugin trap | 41 (define `plugins/api.py`), 48 (reference plugin) | Reference plugin imports only from `horus_os.plugins.api`; tested in CI; covers four scenarios |
+| 9: v5→v6 breaks v0.4 databases | 41 (schema migration) | v0.4 fixture round-trip test; no DROP/RENAME/NOT-NULL in migration; idempotent re-run |
+| 10: Default-deny friction tradeoff | 43 (permission model), 44 (installer), 45 (dashboard) | `DEFAULT_GRANT_POLICY = "deny"` constant; `-y` flag is opt-in; bundles surface; reference plugin uses a bundle |
+| 11: Test isolation pollution | 46 (test surface), 49 (3-OS gate) | Three-tier fixture strategy; lint rejects `pip install` in runner venv; cross-OS tests use `clean_venv` only |
+| 12: Documentation drift | 41 (single source of truth in `MANIFEST_V1_SCHEMA`), 47 (docs), 49 (release-gate docs check) | Docs include live example verbatim; release gate diffs schema-in-docs vs runtime constant |
+
+**Suggested v0.5 phase outline (for the roadmapper to refine):**
+
+- **Phase 40** — v0.4 retrospective + v0.5 baseline artifact (mirror Phase 32's structure): commit `tests/perf/v0_4_baseline.json` so a future plugin-discovery-overhead benchmark has a pinned reference.
+- **Phase 41** — Manifest schema, `MANIFEST_V1_SCHEMA` constant, `plugins/api.py` public API surface, v5→v6 migration, plugin_name column additions, `capability_catalog.py`. Pure infrastructure. Pitfalls 2, 7, 8, 9, 12.
+- **Phase 42** — Discovery and loading: `entry_points`-based + local-directory; failure-isolation wrappers (discover, manifest-load); lint rule for `pkg_resources`. Pitfalls 3, 6.
+- **Phase 43** — Permission model: `plugin_capability_grants`, helper shims, `check_capability`, `DEFAULT_GRANT_POLICY = "deny"`, bounded lifecycle (start/stop with `wait_for(2.0)`). Pitfalls 1, 5, 6, 10.
+- **Phase 44** — Installer flow: `horus-os plugins install/uninstall/list/info`, two-phase install, venv check, sdist refusal, `.pth` refusal, rollback, upgrade-with-diff prompt. Pitfalls 4, 5, 10.
+- **Phase 45** — Dashboard plugins tab: list, enable/disable, grant prompt modal, audit log surface, per-plugin observability rollup; `/api/observability/plugins` route. Pitfalls 5, 7, 10.
+- **Phase 46** — Test surface expansion: three-tier fixtures (in-memory PluginRecord, monkeypatched entry points, `clean_venv`), broken-plugin fixture, `tests/test_plugin_pitfalls/` directory. Pitfall 11.
+- **Phase 47** — Documentation refresh: `docs/PLUGINS.md`, `docs/PLUGIN-SECURITY.md` (with explicit Threat Model section), `docs/MIGRATION-v0.4-to-v0.5.md`. Pitfalls 1, 12.
+- **Phase 48** — Reference plugin (`horus-os-example-plugin` as a separate package): four scenarios, dogfooded tests, README is the authoring guide. Pitfall 8.
+- **Phase 49** — Three-OS install verification (v0.5) + release gate (`scripts/release_gate.py` extension): docs-drift check, plugin install-smoke on each OS for 3.11 and 3.12. Pitfalls 4, 11, 12.
+- **Phase 50** — v0.5.0 release: tag, CHANGELOG, GitHub Release with migration notes.
+
+Execution order is mostly sequential because each phase consumes the prior phase's substrate. Legitimate parallel opportunity: Phase 44 (installer) and Phase 45 (dashboard) can run in parallel once Phase 43 (permission model) ships, since both consume the same grant-table schema without depending on each other — mirrors the v0.4 (36 ∥ 37) opportunity.
 
 ## Sources
 
-OpenTelemetry Python SDK behaviour and known issues:
-- [opentelemetry-python issue #3309 — Exporters shutdown takes longer than a minute when failing to send](https://github.com/open-telemetry/opentelemetry-python/issues/3309) (the 60s-shutdown-block bug behind Pitfall 6)
-- [opentelemetry-python issue #4623 — tracer_provider.shutdown() does not provide a configurable timeout](https://github.com/open-telemetry/opentelemetry-python/issues/4623) (configurability gap)
-- [OpenTelemetry SDK trace export module docs](https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.export.html) (BatchSpanProcessor API)
-- [OneUptime: How to Handle OpenTelemetry SDK Shutdown in Python with atexit Hooks](https://oneuptime.com/blog/post/2026-02-06-otel-sdk-shutdown-python-atexit-sigterm/view) (signal-handler shutdown patterns)
-- [OneUptime: How to Prevent Data Loss in Seven Common OpenTelemetry Scenarios](https://oneuptime.com/blog/post/2026-02-06-prevent-data-loss-opentelemetry-scenarios/view) (drop / leak failure modes)
-- [OneUptime: How to Create OpenTelemetry Batch Span Processor](https://oneuptime.com/blog/post/2026-01-30-opentelemetry-batch-span-processor/view) (BSP config)
+**`importlib.metadata` API evolution:**
+- [importlib.metadata 3.10 docs](https://docs.python.org/3.10/library/importlib.metadata.html) — selectable entry points introduced; dict shim with deprecation warning
+- [importlib.metadata 3.12 docs](https://docs.python.org/3.12/library/importlib.metadata.html) — dict interface removed; only EntryPoints returned
+- [importlib.metadata 3.13 docs](https://docs.python.org/3.13/library/importlib.metadata.html) — `EntryPoint` no longer presents tuple-like interface
 
-GenAI semantic conventions and PII risk:
-- [OpenLLMetry issue #3515 — `gen_ai.prompt` and `gen_ai.completion` deprecated in latest semconv](https://github.com/traceloop/openllmetry/issues/3515) (informs attribute-naming decisions, cross-referenced from FEATURES.md)
-- [maketocreate: OpenTelemetry GenAI — Tracing AI Agents Without Leaking PII](https://maketocreate.com/opentelemetry-genai-tracing-ai-agents-without-leaking-pii/) (Pitfall 7 grounding)
-- [OneUptime: How to Redact Sensitive User Prompts in GenAI OpenTelemetry Traces](https://oneuptime.com/blog/post/2026-02-06-redact-sensitive-prompts-genai-opentelemetry-traces/view) (redaction approach)
-- [OneUptime: How to Capture GenAI Prompt and Completion Events in OpenTelemetry Traces](https://oneuptime.com/blog/post/2026-02-06-capture-genai-prompt-completion-events-opentelemetry/view) (the opt-in env-var pattern)
-- [OTel GenAI semantic conventions index](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (cross-referenced from STACK.md / FEATURES.md)
+**Entry-point discovery cost:**
+- [pypa/setuptools#510](https://github.com/pypa/setuptools/issues/510) — `pkg_resources` import is 1.3-1.5s
+- [catkin/catkin_tools#297](https://github.com/catkin/catkin_tools/issues/297) — `pkg_resources.entry_points` >200ms latency
+- [unslothai/unsloth#1859](https://github.com/unslothai/unsloth/issues/1859) — 60s import via entry points
+- [Python Packaging spec: Entry points](https://packaging.python.org/specifications/entry-points/) — namespacing best practice
 
-Percentile and aggregation traps:
-- [Last9: Latency Percentiles are Incorrect P99 of the Times](https://last9.io/blog/your-percentiles-are-incorrect-p99-of-the-times/) (averaging-of-percentiles antipattern, Pitfall 10)
-- [TheAIOps: What is Latency p95/p99? Meaning, Examples, Use Cases](https://www.theaiops.com/latency-p95-p99/) (small-sample bias)
-- [CloudOpsNow: What is p95 latency?](https://www.cloudopsnow.in/p95-latency/) (time-window aggregation tradeoffs)
+**Plugin-system precedents:**
+- [Datasette plugins](https://docs.datasette.io/en/stable/plugins.html) and [Datasette plugin system deep dive](https://deepwiki.com/simonw/datasette/5-plugin-system) — `datasette install` as a thin wrapper around `pip install` in the same venv; pluggy hook-based architecture
+- [Pelican plugins (4.5+ namespace packages)](https://docs.getpelican.com/en/latest/plugins.html) — namespace-package migration lessons
+- [pluggy framework](https://pluggy.readthedocs.io/en/latest/) — hook signature conflicts, plugin manager design
+- [validate-pyproject conflict resolution](https://validate-pyproject.readthedocs.io/en/latest/dev-guide.html) — priority-based duplicate-entry-point resolution
 
-SQLite WAL and write amplification:
-- [phiresky: SQLite performance tuning — Scaling SQLite databases to 100k SELECTs/s](https://phiresky.github.io/blog/2020/sqlite-performance-tuning/) (WAL + synchronous=NORMAL rationale)
-- [DEV: SQLite WAL Mode: 10x Performance for Python Apps](https://dev.to/lumin-playstar/sqlite-wal-mode-10x-performance-for-python-apps-4ic) (per-row INSERT performance under WAL)
-- [SQLite Forum: WAL Checkpoints and Performance Tuning](https://www.sqliteforum.com/p/checkpoint-algorithms-and-wal-performance) (checkpoint cadence)
+**Supply-chain attack surface (in-process plugin code):**
+- [Wiz LiteLLM TeamPCP writeup](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign) — PyPI 1.82.7/1.82.8 trojanized
+- [Truesec LiteLLM compromise](https://www.truesec.com/hub/blog/malicious-pypi-package-litellm-supply-chain-compromise) — same incident, defender angle
+- [Checkmarx Command-Jacking](https://checkmarx.com/blog/this-new-supply-chain-attack-technique-can-trojanize-all-your-cli-commands/) — entry-point hijacks, `.pth`-file arbitrary execution
+- [Bolster PyPI security](https://bolster.ai/blog/pypi-supply-chain-attacks) — 2025 PyPI attack-vector landscape
+- [Designing Secure Plugin Architectures](https://dev.to/cyberpath/designing-secure-plugin-architectures-for-desktop-applications-1meh) — capability-based vs identity-based access control
 
-Streaming token-usage capture (Anthropic + Gemini):
-- [Anthropic Python SDK — Streaming docs](https://docs.anthropic.com/en/api/messages-streaming) (`MessageStream.get_final_message()` shape; cross-referenced from STACK.md)
-- [Gemini API token-counting docs](https://ai.google.dev/gemini-api/docs/tokens) (`usage_metadata` after stream completion; cross-referenced from STACK.md)
-- [Traceloop: From Bills to Budgets — Tracking LLM Token Usage and Cost Per User](https://www.traceloop.com/blog/from-bills-to-budgets-how-to-track-llm-token-usage-and-cost-per-user) (streaming gotchas)
+**Schema evolution discipline:**
+- [Confluent schema evolution](https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html) — Forward/Backward/Full compatibility classes
+- [Conduktor schema evolution best practices](https://www.conduktor.io/glossary/schema-evolution-best-practices)
+- [Zuplo API backwards-compatibility](https://zuplo.com/learning-center/api-versioning-backward-compatibility-best-practices)
 
-Clock semantics:
-- [PEP 418 — Add monotonic time, performance counter, and process time functions](https://peps.python.org/pep-0418/) (monotonic vs wall-clock spec; Pitfall 3)
-- [Python docs: time.perf_counter()](https://docs.python.org/3/library/time.html#time.perf_counter)
-- [Ceph PR #22121 — Use monotonic clock for perf counters latencies](https://github.com/ceph/ceph/pull/22121) (real-world bug exemplar)
+**FastAPI lifespan and bounded timeouts:**
+- [FastAPI Lifespan events](https://fastapi.tiangolo.com/advanced/events/)
+- [FastAPI lifespan startup timeout discussion](https://github.com/fastapi/fastapi/discussions/13346)
+- v0.4 internal precedent: `tests/test_otel_bounded_shutdown.py` and Phase 38 success criterion 3 — `await adapter.stop()` completes in <3s with `BatchSpanProcessor.force_flush(2000)` then `shutdown()`
 
-Pricing data sources:
-- [LiteLLM `model_prices_and_context_window.json`](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (the community canonical pricing dataset; informs Pitfall 5 sync strategy)
-- [tokencost — AgentOps-AI/tokencost](https://github.com/AgentOps-AI/tokencost) (sibling project, same pricing-rot problem)
-- [implicator.ai: Anthropic Usage-Based Billing Is Exact, Plan Limits Are Not](https://www.implicator.ai/anthropics-usage-based-billing-is-exact-its-plan-limits-are-vague-by-design/) (per-token rates are exact, no provider-side rounding to mask drift)
-
-Retry / reliability metric pitfalls:
-- [Helicone docs: Retries](https://docs.helicone.ai/features/advanced-usage/retries) (each retry logged separately; informs Pitfall 9)
-
-Direct source reads (already cross-referenced in ARCHITECTURE.md):
-- `/Users/santino/Projects/horus-os/src/horus_os/agent.py` — `run_agent_loop` capture site for Pitfall 1
-- `/Users/santino/Projects/horus-os/src/horus_os/tools/loop.py` — `_execute_one` capture site for Pitfall 9
-- `/Users/santino/Projects/horus-os/src/horus_os/server/api.py` — `_event_stream` SSE branch for Pitfall 2
-- `/Users/santino/Projects/horus-os/src/horus_os/storage.py` — migration pattern for Pitfall 11
+**Internal cross-references:**
+- `/Users/santino/Projects/horus-os/src/horus_os/adapters/base.py:22` — `entry_points` rebinding pattern (monkeypatch-friendly)
+- `/Users/santino/Projects/horus-os/src/horus_os/adapters/base.py:233` — broad `Exception` catch in `discover_adapters`
+- `/Users/santino/Projects/horus-os/src/horus_os/server/api.py:99-116` — lifespan `start`/`stop` wrapping without `wait_for` (the v0.5 must-fix)
+- `/Users/santino/Projects/horus-os/src/horus_os/storage.py:28` — `SCHEMA_VERSION = 5` baseline for v5→v6 additive migration
+- `/Users/santino/Projects/horus-os/src/horus_os/tools/registry.py:23` — duplicate-tool-name `ValueError` already in place
+- `/Users/santino/Projects/horus-os/.planning/research/PITFALLS.md` (v0.4 prior art, committed 2026-05-25) — pitfall format precedent; v0.4 ObservationBus / OTel pitfalls inherited as substrate for Pitfalls 6, 7, 9
 
 ---
-*Pitfalls research for: v0.4 Observability instrumentation on horus-os*
-*Researched: 2026-05-25*
+*Pitfalls research for: v0.5 third-party plugin system*
+*Researched: 2026-05-26*
