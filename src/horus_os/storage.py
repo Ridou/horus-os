@@ -25,7 +25,7 @@ from typing import Any
 
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -46,7 +46,11 @@ CREATE TABLE IF NOT EXISTS traces (
     status              TEXT NOT NULL DEFAULT 'success',
     error_message       TEXT,
     parent_trace_id     TEXT,
-    agent_profile_name  TEXT
+    agent_profile_name  TEXT,
+    total_input_tokens  INTEGER,
+    total_output_tokens INTEGER,
+    total_cost_usd      REAL,
+    total_duration_ms   INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_traces_created_at ON traces(created_at DESC);
@@ -80,6 +84,51 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     updated_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_agent_profiles_name ON agent_profiles(name);
+
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id                       TEXT NOT NULL UNIQUE,
+    trace_id                      TEXT NOT NULL,
+    iteration_idx                 INTEGER NOT NULL,
+    created_at                    TEXT NOT NULL,
+    provider                      TEXT NOT NULL,
+    model                         TEXT NOT NULL,
+    input_tokens                  INTEGER NOT NULL DEFAULT 0,
+    output_tokens                 INTEGER NOT NULL DEFAULT 0,
+    cache_creation_input_tokens   INTEGER NOT NULL DEFAULT 0,
+    cache_read_input_tokens       INTEGER NOT NULL DEFAULT 0,
+    cost_usd                      REAL,
+    pricing_missing               INTEGER NOT NULL DEFAULT 0,
+    latency_ms                    INTEGER NOT NULL,
+    status                        TEXT NOT NULL DEFAULT 'success',
+    error_message                 TEXT,
+    error_type                    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_calls_trace_id ON llm_calls(trace_id);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_created_at ON llm_calls(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_model ON llm_calls(provider, model);
+
+CREATE TABLE IF NOT EXISTS tool_invocations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    invocation_id   TEXT NOT NULL UNIQUE,
+    trace_id        TEXT NOT NULL,
+    parent_trace_id TEXT,
+    created_at      TEXT NOT NULL,
+    tool_name       TEXT NOT NULL,
+    latency_ms      INTEGER NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'success',
+    error_message   TEXT,
+    error_type      TEXT,
+    retry_count     INTEGER,
+    output_size     INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_trace_id ON tool_invocations(trace_id);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_tool_name
+    ON tool_invocations(tool_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_created_at
+    ON tool_invocations(created_at DESC);
 """
 
 
@@ -138,6 +187,23 @@ class Database:
                 for ddl in (
                     "ALTER TABLE traces ADD COLUMN parent_trace_id TEXT",
                     "ALTER TABLE traces ADD COLUMN agent_profile_name TEXT",
+                ):
+                    try:
+                        conn.execute(ddl)
+                    except sqlite3.OperationalError:
+                        # Column already exists; safe to ignore.
+                        pass
+            # v4 -> v5: four nullable rollup columns on traces. ADD COLUMN is not
+            # idempotent; guard with OperationalError. New columns stay NULL on
+            # existing v0.3 rows because SQLite refuses NOT NULL ADD COLUMN
+            # without a DEFAULT on a populated table, and a default of zero
+            # would lie about pre-v0.4 rows that simply had no measurement.
+            if stored_version is not None and stored_version < 5:
+                for ddl in (
+                    "ALTER TABLE traces ADD COLUMN total_input_tokens INTEGER",
+                    "ALTER TABLE traces ADD COLUMN total_output_tokens INTEGER",
+                    "ALTER TABLE traces ADD COLUMN total_cost_usd REAL",
+                    "ALTER TABLE traces ADD COLUMN total_duration_ms INTEGER",
                 ):
                     try:
                         conn.execute(ddl)
