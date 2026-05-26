@@ -476,7 +476,7 @@ Plans:
   3. `docs/PLUGIN-SECURITY.md` exists with a section titled "Threat model" containing the literal sentence `plugins execute in the horus-os Python process` and enumerating the capability-grant trust contract; the install-prompt screen (from Phase 44) links to this doc by URL; the doc is short enough (<400 lines) to read in one sitting (REL-12, Pitfall 1)
   4. `docs/MIGRATION-v0.4-to-v0.5.md` documents: the v5→v6 schema migration (three new tables + two NULLABLE columns + one index, all additive); the two new base direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) and why they were added; how to roll back (`horus-os --disable-all-plugins` boot flag); the breaking-change-free upgrade path for existing v0.4 users (REL-12 consumer, MIG-05 consumer)
   5. README.md updated with v0.5 capability call-outs and a link to `docs/PLUGINS.md`; CHANGELOG `[0.5.0]` section drafted (final tag lands in Phase 50)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 47-01: docs/PLUGINS.md + docs/PLUGIN-SECURITY.md (Threat model) + docs/MIGRATION-v0.4-to-v0.5.md + README + CHANGELOG draft
