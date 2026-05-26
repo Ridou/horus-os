@@ -261,10 +261,10 @@ Plans:
   3. An unknown-model event lands with `pricing_missing=1` and `cost_usd=NULL`; never `cost_usd=0` for an uncovered model (PRICE-03, Pitfall 5)
   4. `HORUS_OS_PRICING_PATH` env var (and `cfg.pricing_path` config field) override the bundled file; a fixture test confirms the override path takes precedence (PRICE-04)
   5. `pricing.json` carries `version`, `updated_at`, and `release_version` top-level fields; `PricingTable.is_stale(now, threshold_days=30)` returns True past 30 days for the dashboard banner Phase 36 will render (PRICE-05)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 34-01: PricingTable, pricing.json bundle, CostAnnotator subscriber, user override path
+- [ ] 34-01-PLAN.md: PricingTable, bundled pricing.json + package-data wiring, CostAnnotator subscriber with cache-aware math, user override, Pitfall 5 defence-in-depth
 
 ### Phase 35: Query module and read APIs
 **Goal**: Build `observability/queries.py` once so the dashboard (Phase 36) and CLI (Phase 37) cannot drift. All percentiles via SQLite-side `NTILE(100) OVER (...)`, never aggregate-of-aggregates. Ship the four new `/api/observability/*` GET routes and the `/api/agents` extension that adds rollup columns to the existing v0.3 surface.
