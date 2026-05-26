@@ -37,6 +37,7 @@ Conventions baked into every function:
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +51,7 @@ __all__ = [
     "cost_by_model",
     "latency_p50_p95",
     "parse_window",
+    "per_plugin_rollup",
     "tool_reliability",
 ]
 
@@ -519,6 +521,198 @@ def tool_reliability(db: Database, window: str) -> list[dict[str, Any]]:
                     "success_rate": success_rate,
                     "last_error_type": row["last_error_type"],
                     "last_error_at": row["last_error_at"],
+                }
+            )
+    return rows
+
+
+def per_plugin_rollup(db: Database, window: str) -> list[dict[str, Any]]:
+    """Per-plugin invocation / error / latency / cost rollup over the window.
+
+    Returns one dict per plugin that has at least one tool_invocations row
+    OR one llm_calls row in the window. The dict carries:
+
+        plugin_name        : str         (literal 'horus-os core' for NULL bucket)
+        total_invocations  : int         (COUNT of tool_invocations rows)
+        error_rate         : float | None (status='error' / (success+error),
+                                          rounded to 4dp; None when denominator==0)
+        latency_p50_ms     : int | None  (None when total_invocations < 10;
+                                          Pitfall 10 applied in Python)
+        latency_p95_ms     : int | None  (same n<10 contract as p50)
+        total_cost_usd     : float | None (SUM(cost_usd) across the plugin's
+                                          llm_calls, rounded to 6dp; None when
+                                          SUM is NULL, never 0.0; Pitfall 11)
+
+    SQL shape: two windowed CTEs (tool_invocations + llm_calls), each
+    bucketed by ``COALESCE(plugin_name, 'horus-os core')``. The NTILE(100)
+    rank partitions by the bucketed name (mirrors the ``agent_totals``
+    pattern on the per-agent partition). The Python boundary applies the
+    n<10 em-dash rule for percentiles AND the NULL-cost honesty rule for
+    cost. Ordering: by ``plugin_name`` ASC for deterministic test output.
+
+    Pre-v0.6 rows (rows from before plugin_name columns existed) all
+    have ``plugin_name IS NULL`` so they bucket as 'horus-os core'.
+
+    Index hit: tool_invocations uses ``idx_tool_invocations_plugin``
+    (plugin_name, created_at) added in Phase 41. llm_calls has no
+    plugin_name index but the window filter already prunes most rows
+    via ``idx_llm_calls_created_at``.
+    """
+    threshold = parse_window(window)
+    sql = """
+        WITH windowed_tools AS (
+            SELECT COALESCE(plugin_name, 'horus-os core') AS plugin_name,
+                   status, latency_ms
+            FROM tool_invocations
+            WHERE created_at >= ?
+        ),
+        ranked_tools AS (
+            SELECT plugin_name, latency_ms,
+                   NTILE(100) OVER (PARTITION BY plugin_name
+                                    ORDER BY latency_ms) AS pct
+            FROM windowed_tools
+        ),
+        per_plugin_lat AS (
+            SELECT plugin_name,
+                   MAX(CASE WHEN pct <= 50 THEN latency_ms END) AS p50_ms,
+                   MAX(CASE WHEN pct <= 95 THEN latency_ms END) AS p95_ms
+            FROM ranked_tools
+            GROUP BY plugin_name
+        ),
+        per_plugin_tools AS (
+            SELECT plugin_name,
+                   COUNT(*) AS total_invocations,
+                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count,
+                   SUM(CASE WHEN status IN ('success', 'retry_then_success') THEN 1 ELSE 0 END)
+                       AS success_count
+            FROM windowed_tools
+            GROUP BY plugin_name
+        ),
+        windowed_calls AS (
+            SELECT COALESCE(plugin_name, 'horus-os core') AS plugin_name, cost_usd
+            FROM llm_calls
+            WHERE created_at >= ?
+        ),
+        per_plugin_cost AS (
+            SELECT plugin_name,
+                   SUM(cost_usd) AS total_cost_usd
+            FROM windowed_calls
+            GROUP BY plugin_name
+        )
+        SELECT COALESCE(t.plugin_name, c.plugin_name) AS plugin_name,
+               COALESCE(t.total_invocations, 0)       AS total_invocations,
+               COALESCE(t.error_count, 0)             AS error_count,
+               COALESCE(t.success_count, 0)           AS success_count,
+               lat.p50_ms                             AS p50_ms,
+               lat.p95_ms                             AS p95_ms,
+               c.total_cost_usd                       AS total_cost_usd
+        FROM per_plugin_tools t
+        FULL OUTER JOIN per_plugin_cost c ON c.plugin_name = t.plugin_name
+        LEFT JOIN per_plugin_lat lat ON lat.plugin_name = COALESCE(t.plugin_name, c.plugin_name)
+        ORDER BY plugin_name ASC
+    """
+    rows: list[dict[str, Any]] = []
+    with db._connect() as conn:
+        try:
+            cursor = conn.execute(sql, (threshold, threshold))
+            fetched = cursor.fetchall()
+        except sqlite3.OperationalError:
+            # FULL OUTER JOIN landed in SQLite 3.39 (2022-09). Fall back
+            # to the LEFT JOIN + missing-side UNION shape for older builds.
+            fallback_sql = """
+                WITH windowed_tools AS (
+                    SELECT COALESCE(plugin_name, 'horus-os core') AS plugin_name,
+                           status, latency_ms
+                    FROM tool_invocations
+                    WHERE created_at >= ?
+                ),
+                ranked_tools AS (
+                    SELECT plugin_name, latency_ms,
+                           NTILE(100) OVER (PARTITION BY plugin_name
+                                            ORDER BY latency_ms) AS pct
+                    FROM windowed_tools
+                ),
+                per_plugin_lat AS (
+                    SELECT plugin_name,
+                           MAX(CASE WHEN pct <= 50 THEN latency_ms END) AS p50_ms,
+                           MAX(CASE WHEN pct <= 95 THEN latency_ms END) AS p95_ms
+                    FROM ranked_tools
+                    GROUP BY plugin_name
+                ),
+                per_plugin_tools AS (
+                    SELECT plugin_name,
+                           COUNT(*) AS total_invocations,
+                           SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count,
+                           SUM(CASE WHEN status IN ('success', 'retry_then_success') THEN 1 ELSE 0 END)
+                               AS success_count
+                    FROM windowed_tools
+                    GROUP BY plugin_name
+                ),
+                windowed_calls AS (
+                    SELECT COALESCE(plugin_name, 'horus-os core') AS plugin_name, cost_usd
+                    FROM llm_calls
+                    WHERE created_at >= ?
+                ),
+                per_plugin_cost AS (
+                    SELECT plugin_name,
+                           SUM(cost_usd) AS total_cost_usd
+                    FROM windowed_calls
+                    GROUP BY plugin_name
+                )
+                SELECT t.plugin_name AS plugin_name,
+                       t.total_invocations,
+                       t.error_count,
+                       t.success_count,
+                       lat.p50_ms,
+                       lat.p95_ms,
+                       c.total_cost_usd
+                FROM per_plugin_tools t
+                LEFT JOIN per_plugin_cost c ON c.plugin_name = t.plugin_name
+                LEFT JOIN per_plugin_lat lat ON lat.plugin_name = t.plugin_name
+                UNION
+                SELECT c.plugin_name AS plugin_name,
+                       0 AS total_invocations,
+                       0 AS error_count,
+                       0 AS success_count,
+                       NULL AS p50_ms,
+                       NULL AS p95_ms,
+                       c.total_cost_usd
+                FROM per_plugin_cost c
+                WHERE c.plugin_name NOT IN (SELECT plugin_name FROM per_plugin_tools)
+                ORDER BY plugin_name ASC
+            """
+            cursor = conn.execute(fallback_sql, (threshold, threshold))
+            fetched = cursor.fetchall()
+
+        for row in fetched:
+            success = int(row["success_count"] or 0)
+            error = int(row["error_count"] or 0)
+            total_invocations = int(row["total_invocations"] or 0)
+            denominator = success + error
+            error_rate: float | None
+            if denominator > 0:
+                error_rate = round(error / denominator, 4)
+            else:
+                error_rate = None
+            # Pitfall 10: hide percentiles when sample is small.
+            if total_invocations < 10:
+                p50 = None
+                p95 = None
+            else:
+                p50 = row["p50_ms"]
+                p95 = row["p95_ms"]
+            # Pitfall 11: NULL cost stays NULL, never 0.
+            total_cost = row["total_cost_usd"]
+            if total_cost is not None:
+                total_cost = round(float(total_cost), 6)
+            rows.append(
+                {
+                    "plugin_name": row["plugin_name"],
+                    "total_invocations": total_invocations,
+                    "error_rate": error_rate,
+                    "latency_p50_ms": p50,
+                    "latency_p95_ms": p95,
+                    "total_cost_usd": total_cost,
                 }
             )
     return rows
