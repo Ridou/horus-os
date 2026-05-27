@@ -8,7 +8,7 @@ yet?" question has a clear, dated answer.
 For the deep planning detail, read `ROADMAP.md` and `.planning/`.
 For release contents, read `CHANGELOG.md`.
 
-**Last updated:** 2026-05-26.
+**Last updated:** 2026-05-27.
 
 ## TL;DR
 
@@ -31,23 +31,47 @@ For release contents, read `CHANGELOG.md`.
 | v0.1 Foundation | Single-agent runtime, two providers, CLI, dashboard, three-OS install gate | **SHIPPED** | `v0.1.0` | 2026-05-23 |
 | v0.2 Multi-Agent + Streaming | Named agent profiles, `delegate_to_agent`, provider streaming, adapter plugin contract | **SHIPPED** | `v0.2.0` | 2026-05-23 |
 | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
-| v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **PLANNING** | `v0.4.0` (target) | TBD |
-| v0.5 Plugin system | Third-party tools and agents load from a manifest. Shape decided in flight. | **NOT PLANNED** | TBD | TBD |
+| v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
+| v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPING** | `v0.5.0` (target) | 2026-05-27 |
 | v0.6+ Contribution gate | Earliest possible window for opening outside contributions. Tied to internal readiness. | **NOT PLANNED** | TBD | TBD |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
+**SHIPPING** means all phases complete, version bumped, final
+release gate in progress (tag and GitHub Release imminent).
 **PLANNING** means roadmap drafted, plan or execution in progress.
 **NOT PLANNED** means scope is sketched but no commitment, no
 schedule.
 
 ## Currently working on
 
-**v0.4 Observability** roadmap was created on 2026-05-26. Phases
-32-39 map 41 requirements covering cost, latency, tool
-reliability, dashboard observability tab, an opt-in OpenTelemetry
-exporter (with bounded shutdown and PII-leak guards), and a
-`horus-os usage` CLI subcommand. Execution order is
-`32 → 33 → 34 → 35 → (36 ∥ 37) → 38 → 39`.
+**v0.5 Plugin System** is shipping. All 11 phases (40-50) shipped
+to `main` on 2026-05-27. 1011 tests passing across the 3-OS × 2-Python
+matrix. Final release gate is running through CI; once green, the
+maintainer tags `v0.5.0` and publishes the GitHub Release.
+
+v0.5 introduces:
+- TOML manifest contract (`horus-plugin.toml`) with pydantic-backed
+  schema validation, capability declarations, and PEP 440 compat
+  ranges.
+- Discovery via Python entry points (`horus_os.plugins` group) plus
+  a `~/.horus-os/plugins/` filesystem path for dev plugins.
+- Default-deny capability grants (filesystem.read/write, net.outbound,
+  secrets.read) keyed on `(plugin_name, plugin_version, capability)`
+  and tied to a manifest hash so upgrades that widen requested
+  capabilities re-prompt instead of silently inheriting.
+- Two-phase installer (`horus-os plugins install <spec>` — download,
+  validate, grant prompt, install) that refuses sdists, wheels with
+  `.pth` files, and any spec that would downgrade runtime deps.
+- Bounded `asyncio.wait_for(timeout=2.0)` on plugin lifecycle hooks
+  so a hung `start()` cannot block server boot.
+- `/plugins` dashboard tab plus per-plugin observability rollups
+  on top of v0.4's `ObservationBus` (new `plugin_name` column on
+  `llm_calls` and `tool_invocations`).
+- Reference plugin (`examples/horus-os-example-plugin/`) shipping
+  as a separate package, with a ruff custom rule pinning the
+  public API surface to `horus_os.plugins.api` only.
+- v5→v6 additive SQLite schema migration; v0.4 databases continue
+  to read.
 
 For the live phase pointer, read `.planning/STATE.md`. For the
 phase breakdown, read `.planning/ROADMAP.md`. For the requirement
@@ -86,6 +110,22 @@ the roadmap.
 
 For the in-depth breakdown of every shipped phase, see the matching
 section of `ROADMAP.md`. Highlights below.
+
+### v0.4 Observability (shipped 2026-05-26)
+
+- `ObservationBus` + SQLite persister capture cost, latency, and
+  tool reliability per agent run, per LLM call, per tool invocation.
+- Bundled `pricing.json` (LiteLLM-sourced) with user-overridable
+  rate cards; 14-day freshness check at release time.
+- `/observability` dashboard tab (cost by agent, latency p50/p95,
+  tool reliability) plus the `horus-os usage --since 7d` CLI
+  subcommand with JSON/CSV/table output.
+- Opt-in `OtelAdapter` behind a `[otel]` extra; default-deny content
+  capture with a redactor allowlist; bounded `force_flush(2000)`
+  shutdown.
+- 718 tests across the matrix; three-OS install-smoke green on both
+  the `[dev]` no-otel and `[dev,otel]` variants.
+- See `docs/MIGRATION-v0.3-to-v0.4.md` and `docs/OBSERVABILITY.md`.
 
 ### v0.3 Adapter Ecosystem (shipped 2026-05-24)
 
