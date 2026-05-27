@@ -31,18 +31,18 @@ import pytest
 from horus_os_example_plugin.adapter import ExampleAdapter
 from horus_os_example_plugin.tools import echo_text_tool, lookup_secret_tool
 
+# Test-only internal imports (exempt from TEST-21; the surface lock
+# applies to src/, not tests/).
+from horus_os.plugins.api import Capability, PluginContext
+from horus_os.plugins.manifest import validate_manifest
+from horus_os.plugins.permissions import CapabilityGuard, PermissionDenied
+
 # Resolve the underlying impl callable from each Tool factory once, so
 # the tier-1 tests can drive the function directly without going through
 # the loader's CapabilityGuard wrap site (which is the loader-level
 # integration concern, not the per-handler unit concern).
 _echo_impl = echo_text_tool().handler
 _lookup_impl = lookup_secret_tool().handler
-
-# Test-only internal imports (exempt from TEST-21; the surface lock
-# applies to src/, not tests/).
-from horus_os.plugins.api import Capability, PluginContext
-from horus_os.plugins.manifest import validate_manifest
-from horus_os.plugins.permissions import CapabilityGuard, PermissionDenied
 
 REF_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REF_PLUGIN_ROOT / "src" / "horus_os_example_plugin" / "horus-plugin.toml"
