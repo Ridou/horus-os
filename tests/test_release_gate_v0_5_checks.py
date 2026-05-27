@@ -144,7 +144,14 @@ def test_plugin_install_smoke_ci_fails_when_file_missing(tmp_path: Path) -> None
 def test_reference_plugin_manifest_valid_passes() -> None:
     """The bundled reference plugin manifest validates cleanly."""
     mod = _load_release_gate_module()
-    manifest_path = REPO_ROOT / "examples" / "horus-os-example-plugin" / "horus-plugin.toml"
+    manifest_path = (
+        REPO_ROOT
+        / "examples"
+        / "horus-os-example-plugin"
+        / "src"
+        / "horus_os_example_plugin"
+        / "horus-plugin.toml"
+    )
     result = mod.check_reference_plugin_manifest_valid(manifest_path)
     assert result.ok is True, result.diagnostic
     # Diagnostic names the plugin so the maintainer knows which one passed.

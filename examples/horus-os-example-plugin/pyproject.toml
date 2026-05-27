@@ -32,3 +32,6 @@ Issues = "https://github.com/Ridou/horus-os/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+horus_os_example_plugin = ["horus-plugin.toml"]

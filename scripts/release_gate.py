@@ -116,7 +116,12 @@ DEFAULT_CI_YML_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 # v0.5 default paths
 DEFAULT_DOCS_SCHEMA_PATH = REPO_ROOT / "docs" / "manifest-v1.schema.json"
 DEFAULT_REFERENCE_PLUGIN_MANIFEST_PATH = (
-    REPO_ROOT / "examples" / "horus-os-example-plugin" / "horus-plugin.toml"
+    REPO_ROOT
+    / "examples"
+    / "horus-os-example-plugin"
+    / "src"
+    / "horus_os_example_plugin"
+    / "horus-plugin.toml"
 )
 DEFAULT_V0_4_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "v0_4_database.sqlite3"
 

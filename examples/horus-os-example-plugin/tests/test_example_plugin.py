@@ -38,7 +38,7 @@ from horus_os.plugins.manifest import validate_manifest
 from horus_os.plugins.permissions import CapabilityGuard, PermissionDenied
 
 REF_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = REF_PLUGIN_ROOT / "horus-plugin.toml"
+MANIFEST_PATH = REF_PLUGIN_ROOT / "src" / "horus_os_example_plugin" / "horus-plugin.toml"
 
 
 def _build_context(granted: set[Capability], tmp_path: Path) -> PluginContext:

@@ -87,17 +87,16 @@ def _read_entry_point_manifest_bytes(ep: object) -> bytes:
     while leaving ``discover_plugins`` itself free of importlib.resources
     internals.
     """
-    dist = getattr(ep, "dist", None)
-    if dist is None:
+    module_name = getattr(ep, "value", None)
+    if not module_name:
         raise FileNotFoundError(
-            f"entry point {getattr(ep, 'name', '<unknown>')!r} has no distribution metadata"
+            f"entry point {getattr(ep, 'name', '<unknown>')!r} has no module value"
         )
-    dist_name = getattr(dist, "name", None) or getattr(dist, "metadata", {}).get("Name")
-    if not dist_name:
-        raise FileNotFoundError(
-            f"entry point {getattr(ep, 'name', '<unknown>')!r} distribution lacks a name"
-        )
-    return importlib.resources.files(dist_name).joinpath(PLUGIN_MANIFEST_FILENAME).read_bytes()
+    # The entry point value is the importable module name (e.g.
+    # "horus_os_example_plugin"). The manifest ships as package data
+    # inside that module so importlib.resources can locate it next to
+    # the package's __init__.py.
+    return importlib.resources.files(module_name).joinpath(PLUGIN_MANIFEST_FILENAME).read_bytes()
 
 
 def _validate_with_source(toml_bytes: bytes, *, source: str, source_detail: str) -> PluginSpec:
