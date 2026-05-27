@@ -289,23 +289,24 @@ jobs:
           assert set(r['pending_capabilities']) == {'filesystem.read', 'secrets.read'}, r
           print('OK pre-grant:', r['status'], r['pending_capabilities'])
           "
-      - name: Grant all capabilities via new --all flag (linux/macos)
+      - name: Grant capabilities per cap (linux/macos)
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          python -m horus_os plugins grant horus-os-example-plugin --all --data-dir "$HOME/horus-smoke-data" | tee /tmp/grant.out
-          grep -q "Granted 2 capabilities" /tmp/grant.out
-      - name: Grant all capabilities via new --all flag (windows)
+          # pip-discovered plugins (no horus-os plugins install) have empty
+          # plugin_capabilities rows until grant; per-cap upsert is the
+          # canonical seed path for entry-point installs. --all is the
+          # post-install convenience for users who came through the CLI
+          # installer (Phase 44).
+          python -m horus_os plugins grant horus-os-example-plugin filesystem.read --data-dir "$HOME/horus-smoke-data"
+          python -m horus_os plugins grant horus-os-example-plugin secrets.read --data-dir "$HOME/horus-smoke-data"
+      - name: Grant capabilities per cap (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          $out = python -m horus_os plugins grant horus-os-example-plugin --all --data-dir $env:HORUS_DATA
-          Write-Host $out
-          if ($out -notmatch "Granted 2 capabilities") {
-            Write-Error "expected 'Granted 2 capabilities' in stdout; got: $out"
-            exit 1
-          }
+          python -m horus_os plugins grant horus-os-example-plugin filesystem.read --data-dir $env:HORUS_DATA
+          python -m horus_os plugins grant horus-os-example-plugin secrets.read --data-dir $env:HORUS_DATA
       - name: Stop serve and relaunch (linux/macos)
         if: runner.os != 'Windows'
         shell: bash
