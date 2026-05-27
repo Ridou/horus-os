@@ -31,6 +31,13 @@ import pytest
 from horus_os_example_plugin.adapter import ExampleAdapter
 from horus_os_example_plugin.tools import echo_text_tool, lookup_secret_tool
 
+# Resolve the underlying impl callable from each Tool factory once, so
+# the tier-1 tests can drive the function directly without going through
+# the loader's CapabilityGuard wrap site (which is the loader-level
+# integration concern, not the per-handler unit concern).
+_echo_impl = echo_text_tool().handler
+_lookup_impl = lookup_secret_tool().handler
+
 # Test-only internal imports (exempt from TEST-21; the surface lock
 # applies to src/, not tests/).
 from horus_os.plugins.api import Capability, PluginContext
@@ -62,7 +69,7 @@ def test_echo_text_tool_denied_without_grant(tmp_path: Path) -> None:
     target = tmp_path / "secret.txt"
     target.write_text("hello", encoding="utf-8")
     with pytest.raises(PermissionDenied) as exc_info:
-        echo_text_tool(ctx, str(target))
+        _echo_impl(ctx, str(target))
     assert exc_info.value.plugin_name == "horus-os-example-plugin"
     assert exc_info.value.capability == "filesystem.read"
 
@@ -72,7 +79,7 @@ def test_echo_text_tool_returns_content_with_grant(tmp_path: Path) -> None:
     ctx = _build_context(granted={Capability.FILESYSTEM_READ}, tmp_path=tmp_path)
     target = tmp_path / "note.txt"
     target.write_text("reference plugin payload", encoding="utf-8")
-    result = echo_text_tool(ctx, str(target))
+    result = _echo_impl(ctx, str(target))
     assert result == "reference plugin payload"
 
 
@@ -83,17 +90,17 @@ def test_lookup_secret_tool_denied_and_granted(
     # Denied path.
     ctx_denied = _build_context(granted=set(), tmp_path=tmp_path)
     with pytest.raises(PermissionDenied) as exc_info:
-        lookup_secret_tool(ctx_denied, "HORUS_OS_EXAMPLE_KEY")
+        _lookup_impl(ctx_denied, "HORUS_OS_EXAMPLE_KEY")
     assert exc_info.value.capability == "secrets.read"
 
     # Granted path with missing key -> None (not an exception).
     monkeypatch.delenv("HORUS_OS_EXAMPLE_KEY", raising=False)
     ctx_granted = _build_context(granted={Capability.SECRETS_READ}, tmp_path=tmp_path)
-    assert lookup_secret_tool(ctx_granted, "HORUS_OS_EXAMPLE_KEY") is None
+    assert _lookup_impl(ctx_granted, "HORUS_OS_EXAMPLE_KEY") is None
 
     # Granted path with key set -> the env var value.
     monkeypatch.setenv("HORUS_OS_EXAMPLE_KEY", "ref-value")
-    assert lookup_secret_tool(ctx_granted, "HORUS_OS_EXAMPLE_KEY") == "ref-value"
+    assert _lookup_impl(ctx_granted, "HORUS_OS_EXAMPLE_KEY") == "ref-value"
 
 
 def test_example_adapter_start_stop_bounded(tmp_path: Path) -> None:
