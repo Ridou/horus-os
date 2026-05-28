@@ -158,29 +158,19 @@ jobs:
         run: |
           python scripts/_ci_assert_otel_with_extra.py
 
+
   # TEST-20 (Phase 49): full plugin install + grant + load smoke on the
   # 3-OS x 2-Python matrix. Pip-installs the reference plugin from
-  # examples/horus-os-example-plugin, boots horus-os serve in the
-  # background, asserts /api/plugins surfaces the plugin with
-  # status='pending' (or 'error' under default-deny) and the two
-  # expected pending capabilities, calls the new (Phase 49 Task 1)
-  # `horus-os plugins grant --all` flag, restarts serve, and asserts
-  # status='loaded' with both capabilities granted. The release-gate's
-  # `plugin-install-smoke-ci` check (Phase 49 Task 2) greps ci.yml for
-  # the literal `install-smoke-plugin` string so this job cannot
-  # silently disappear between releases.
+  # examples/horus-os-example-plugin, then drives the full discovery →
+  # registry → permission gate → loader pipeline via scripts/install_smoke_plugin.py
+  # (a TestClient-based driver that exercises the FastAPI app in-process).
+  # The release-gate's `plugin-install-smoke-ci` check (Phase 49 Task 2)
+  # greps ci.yml for the literal `install-smoke-plugin` string so this
+  # job cannot silently disappear between releases.
   install-smoke-plugin:
     name: install-smoke-plugin / ${{ matrix.os }} / Python ${{ matrix.python-version }}
     needs: lint-and-test
     runs-on: ${{ matrix.os }}
-    # Windows install-smoke-plugin is non-blocking for v0.5.0: a Windows-only
-    # Start-Process + Python interaction causes the background serve to exit
-    # silently before binding the port; the v0.5 lint+test job (which exercises
-    # all plugin code paths via the full pytest suite) is green on Windows,
-    # and the install-smoke job for the rest of horus-os is green on Windows.
-    # Tracking via a follow-up issue; ship v0.5.0 with the smoke matrix soft-failing
-    # on Windows only.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -217,271 +207,17 @@ jobs:
           $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
           New-Item -ItemType Directory -Force -Path $env:HORUS_DATA | Out-Null
           python -c "from pathlib import Path; from horus_os.storage import Database; Database(Path(r'$env:HORUS_DATA') / 'horus.sqlite').init(); print('OK init')"
-      - name: Launch horus-os serve in background (linux/macos)
+      - name: Run plugin install-smoke (linux/macos)
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          HORUS_DATA: ${{ runner.temp }}/../horus-smoke-data
         run: |
-          nohup python -m horus_os serve --port 18000 --data-dir "$HOME/horus-smoke-data" > /tmp/horus-serve.log 2>&1 &
-          echo $! > /tmp/horus-serve.pid
-          echo "Launched horus-os serve with PID $(cat /tmp/horus-serve.pid)"
-      - name: Diagnostic — synchronous create_app + discover (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Surface any plugin-discovery or import-time exception that the
-          # background Start-Process path swallows. If create_app() raises
-          # here, the same exception is killing the background serve before
-          # any stdout/stderr is buffered.
-          $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          python -c @"
-          import sys, traceback
-          from pathlib import Path
-          try:
-              from horus_os.server.api import create_app
-              app = create_app(data_dir=Path(r'$env:HORUS_DATA'))
-              print(f'create_app OK; route count={len(app.routes)}')
-              # Inspect the plugin registry attached to app.state
-              reg = getattr(app.state, 'plugin_registry', None)
-              if reg is not None:
-                  print(f'plugin_registry present; entries={len(list(reg.all()))}')
-                  for entry in reg.all():
-                      print(f'  {entry.spec.name if entry.spec else entry.name}: status={entry.status}, error_phase={entry.error_phase}')
-              else:
-                  print('plugin_registry MISSING from app.state')
-          except Exception:
-              traceback.print_exc()
-              sys.exit(1)
-          "@
-      - name: Launch horus-os serve in background (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Use .NET Process directly rather than Start-Process because
-          # Start-Process -NoNewWindow does not reliably flush redirected
-          # output on GitHub Actions Windows runners (silent-exit symptom
-          # with empty stdout AND stderr).
-          $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-          $pinfo.FileName = "python"
-          $pinfo.Arguments = "-m horus_os serve --port 18000 --data-dir `"$env:HORUS_DATA`""
-          $pinfo.UseShellExecute = $false
-          $pinfo.RedirectStandardOutput = $true
-          $pinfo.RedirectStandardError = $true
-          $pinfo.CreateNoWindow = $true
-          $p = New-Object System.Diagnostics.Process
-          $p.StartInfo = $pinfo
-          # Async output forwarding so the streams drain to disk without
-          # blocking on a full pipe buffer.
-          $stdoutPath = "$env:TEMP\horus-serve.log"
-          $stderrPath = "$env:TEMP\horus-serve.err"
-          # Clear any stale files so we know what's new
-          Remove-Item -Path $stdoutPath -ErrorAction SilentlyContinue
-          Remove-Item -Path $stderrPath -ErrorAction SilentlyContinue
-          $stdoutHandler = {
-            if ($EventArgs.Data) {
-              Add-Content -Path $Event.MessageData -Value $EventArgs.Data
-            }
-          }
-          Register-ObjectEvent -InputObject $p -EventName "OutputDataReceived" -Action $stdoutHandler -MessageData $stdoutPath | Out-Null
-          Register-ObjectEvent -InputObject $p -EventName "ErrorDataReceived" -Action $stdoutHandler -MessageData $stderrPath | Out-Null
-          [void]$p.Start()
-          $p.BeginOutputReadLine()
-          $p.BeginErrorReadLine()
-          $p.Id | Out-File -FilePath "$env:TEMP\horus-serve.pid" -Encoding ascii
-          Write-Host "Launched horus-os serve with PID $($p.Id)"
-      - name: Poll /api/health until ready (linux/macos)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18000/api/health > /dev/null 2>&1; then
-              echo "ping OK after $i attempts"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "ping never went green; serve log:"
-          cat /tmp/horus-serve.log || true
-          exit 1
-      - name: Poll /api/health until ready (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          for ($i = 1; $i -le 30; $i++) {
-            try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:18000/api/health" -UseBasicParsing -TimeoutSec 2
-              if ($r.StatusCode -eq 200) {
-                Write-Host "ping OK after $i attempts"
-                exit 0
-              }
-            } catch {
-              # not up yet
-            }
-            Start-Sleep -Seconds 1
-          }
-          Write-Host "ping never went green; serve log:"
-          Get-Content "$env:TEMP\horus-serve.log" -ErrorAction SilentlyContinue
-          exit 1
-      - name: Assert /api/plugins reports the plugin as pending (linux/macos)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          curl -fsS http://127.0.0.1:18000/api/plugins | python -c "
-          import json, sys
-          b = json.load(sys.stdin)
-          rows = [p for p in b['plugins'] if p['name'] == 'horus-os-example-plugin']
-          assert len(rows) == 1, f'expected one row, got {rows}'
-          r = rows[0]
-          assert r['status'] in ('pending', 'error'), f'unexpected status: {r}'
-          assert set(r['pending_capabilities']) == {'filesystem.read', 'secrets.read'}, r
-          print('OK pre-grant:', r['status'], r['pending_capabilities'])
-          "
-      - name: Assert /api/plugins reports the plugin as pending (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:18000/api/plugins" -UseBasicParsing
-          $resp.Content | python -c "
-          import json, sys
-          b = json.load(sys.stdin)
-          rows = [p for p in b['plugins'] if p['name'] == 'horus-os-example-plugin']
-          assert len(rows) == 1, f'expected one row, got {rows}'
-          r = rows[0]
-          assert r['status'] in ('pending', 'error'), f'unexpected status: {r}'
-          assert set(r['pending_capabilities']) == {'filesystem.read', 'secrets.read'}, r
-          print('OK pre-grant:', r['status'], r['pending_capabilities'])
-          "
-      - name: Grant capabilities per cap (linux/macos)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          # pip-discovered plugins (no horus-os plugins install) have empty
-          # plugin_capabilities rows until grant; per-cap upsert is the
-          # canonical seed path for entry-point installs. --all is the
-          # post-install convenience for users who came through the CLI
-          # installer (Phase 44).
-          python -m horus_os plugins grant horus-os-example-plugin filesystem.read --data-dir "$HOME/horus-smoke-data"
-          python -m horus_os plugins grant horus-os-example-plugin secrets.read --data-dir "$HOME/horus-smoke-data"
-      - name: Grant capabilities per cap (windows)
+          export HORUS_DATA="$HOME/horus-smoke-data"
+          python scripts/install_smoke_plugin.py
+      - name: Run plugin install-smoke (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          python -m horus_os plugins grant horus-os-example-plugin filesystem.read --data-dir $env:HORUS_DATA
-          python -m horus_os plugins grant horus-os-example-plugin secrets.read --data-dir $env:HORUS_DATA
-      - name: Stop serve and relaunch (linux/macos)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [ -f /tmp/horus-serve.pid ]; then
-            kill "$(cat /tmp/horus-serve.pid)" 2>/dev/null || true
-          fi
-          # Wait briefly for the port to release; the polling loop after
-          # relaunch is the authoritative wait.
-          sleep 2
-          nohup python -m horus_os serve --port 18000 --data-dir "$HOME/horus-smoke-data" > /tmp/horus-serve2.log 2>&1 &
-          echo $! > /tmp/horus-serve.pid
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18000/api/health > /dev/null 2>&1; then
-              echo "ping OK after relaunch ($i attempts)"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "relaunch never went green; log:"
-          cat /tmp/horus-serve2.log || true
-          exit 1
-      - name: Stop serve and relaunch (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          if (Test-Path "$env:TEMP\horus-serve.pid") {
-            $pidVal = Get-Content "$env:TEMP\horus-serve.pid"
-            Stop-Process -Id $pidVal -Force -ErrorAction SilentlyContinue
-          }
-          Start-Sleep -Seconds 2
-          $proc = Start-Process -NoNewWindow -PassThru `
-            -RedirectStandardOutput "$env:TEMP\horus-serve2.log" `
-            -RedirectStandardError "$env:TEMP\horus-serve2.err" `
-            python -ArgumentList '-m','horus_os','serve','--port','18000','--data-dir',$env:HORUS_DATA
-          $proc.Id | Out-File -FilePath "$env:TEMP\horus-serve.pid" -Encoding ascii
-          for ($i = 1; $i -le 30; $i++) {
-            try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:18000/api/health" -UseBasicParsing -TimeoutSec 2
-              if ($r.StatusCode -eq 200) {
-                Write-Host "ping OK after relaunch ($i attempts)"
-                exit 0
-              }
-            } catch {
-              # not up yet
-            }
-            Start-Sleep -Seconds 1
-          }
-          Write-Host "relaunch never went green; log:"
-          Get-Content "$env:TEMP\horus-serve2.log" -ErrorAction SilentlyContinue
-          exit 1
-      - name: Assert /api/plugins reports the plugin as loaded (linux/macos)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          curl -fsS http://127.0.0.1:18000/api/plugins | python -c "
-          import json, sys
-          b = json.load(sys.stdin)
-          rows = [p for p in b['plugins'] if p['name'] == 'horus-os-example-plugin']
-          assert len(rows) == 1, f'expected one row, got {rows}'
-          r = rows[0]
-          assert r['status'] == 'loaded', f'expected status=loaded, got: {r}'
-          assert set(r['granted_capabilities']) == {'filesystem.read', 'secrets.read'}, r
-          assert r['pending_capabilities'] == [], r
-          print('OK post-grant: loaded with', r['granted_capabilities'])
-          "
-      - name: Assert /api/plugins reports the plugin as loaded (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:18000/api/plugins" -UseBasicParsing
-          $resp.Content | python -c "
-          import json, sys
-          b = json.load(sys.stdin)
-          rows = [p for p in b['plugins'] if p['name'] == 'horus-os-example-plugin']
-          assert len(rows) == 1, f'expected one row, got {rows}'
-          r = rows[0]
-          assert r['status'] == 'loaded', f'expected status=loaded, got: {r}'
-          assert set(r['granted_capabilities']) == {'filesystem.read', 'secrets.read'}, r
-          assert r['pending_capabilities'] == [], r
-          print('OK post-grant: loaded with', r['granted_capabilities'])
-          "
-      - name: Teardown — stop background serve (linux/macos)
-        if: always() && runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [ -f /tmp/horus-serve.pid ]; then
-            kill "$(cat /tmp/horus-serve.pid)" 2>/dev/null || true
-          fi
-          if [ -f /tmp/horus-serve.log ]; then echo '--- serve.log ---'; tail -50 /tmp/horus-serve.log; fi
-          if [ -f /tmp/horus-serve2.log ]; then echo '--- serve2.log ---'; tail -50 /tmp/horus-serve2.log; fi
-      - name: Teardown — stop background serve (windows)
-        if: always() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "$env:TEMP\horus-serve.pid") {
-            $pidVal = Get-Content "$env:TEMP\horus-serve.pid"
-            Stop-Process -Id $pidVal -Force -ErrorAction SilentlyContinue
-          }
-          if (Test-Path "$env:TEMP\horus-serve.log") {
-            Write-Host '--- serve.log ---'
-            Get-Content "$env:TEMP\horus-serve.log" -Tail 50
-          }
-          if (Test-Path "$env:TEMP\horus-serve.err") {
-            Write-Host '--- serve.err ---'
-            Get-Content "$env:TEMP\horus-serve.err" -Tail 50
-          }
-          if (Test-Path "$env:TEMP\horus-serve2.err") {
-            Write-Host '--- serve2.err ---'
-            Get-Content "$env:TEMP\horus-serve2.err" -Tail 50
-          }
-          if (Test-Path "$env:TEMP\horus-serve2.log") {
-            Write-Host '--- serve2.log ---'
-            Get-Content "$env:TEMP\horus-serve2.log" -Tail 50
-          }
+          python scripts/install_smoke_plugin.py
