@@ -45,10 +45,8 @@ schedule.
 **v0.5 Plugin System** shipped 2026-05-27 as `v0.5.0`. All 11
 phases (40-50) complete; 1011 tests pass on `main` across the
 3-OS × 2-Python matrix. All 8 release-gate checks green at tag
-time. The Windows install-smoke-plugin job is soft-failing while a
-diagnostic is added; the v0.5 unit test suite covers every plugin
-code path on Windows so the milestone is shipped without a Windows
-regression.
+time. The full 6-job install-smoke-plugin matrix (macOS / Ubuntu /
+Windows × Python 3.11 / 3.12) is required and green.
 
 v0.5 introduces:
 - TOML manifest contract (`horus-plugin.toml`) with pydantic-backed
@@ -140,8 +138,8 @@ section of `ROADMAP.md`. Highlights below.
   a separate package, with a ruff custom rule pinning the public API
   surface to `horus_os.plugins.api` only.
 - 1011 tests across the 3-OS × 2-Python matrix; three-OS
-  install-smoke green on macOS and Linux; Windows variant
-  soft-fails pending diagnostic.
+  install-smoke (including the new plugin-install variant driven
+  by `scripts/install_smoke_plugin.py`) green on all 6 combos.
 - v5→v6 additive SQLite schema migration; v0.4 databases continue
   to read.
 - See `docs/PLUGINS.md`, `docs/PLUGIN-SECURITY.md`,
