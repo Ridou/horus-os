@@ -224,17 +224,71 @@ jobs:
           nohup python -m horus_os serve --port 18000 --data-dir "$HOME/horus-smoke-data" > /tmp/horus-serve.log 2>&1 &
           echo $! > /tmp/horus-serve.pid
           echo "Launched horus-os serve with PID $(cat /tmp/horus-serve.pid)"
+      - name: Diagnostic — synchronous create_app + discover (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Surface any plugin-discovery or import-time exception that the
+          # background Start-Process path swallows. If create_app() raises
+          # here, the same exception is killing the background serve before
+          # any stdout/stderr is buffered.
+          $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
+          python -c @"
+          import sys, traceback
+          from pathlib import Path
+          try:
+              from horus_os.server.api import create_app
+              app = create_app(data_dir=Path(r'$env:HORUS_DATA'))
+              print(f'create_app OK; route count={len(app.routes)}')
+              # Inspect the plugin registry attached to app.state
+              reg = getattr(app.state, 'plugin_registry', None)
+              if reg is not None:
+                  print(f'plugin_registry present; entries={len(list(reg.all()))}')
+                  for entry in reg.all():
+                      print(f'  {entry.spec.name if entry.spec else entry.name}: status={entry.status}, error_phase={entry.error_phase}')
+              else:
+                  print('plugin_registry MISSING from app.state')
+          except Exception:
+              traceback.print_exc()
+              sys.exit(1)
+          "@
       - name: Launch horus-os serve in background (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Use .NET Process directly rather than Start-Process because
+          # Start-Process -NoNewWindow does not reliably flush redirected
+          # output on GitHub Actions Windows runners (silent-exit symptom
+          # with empty stdout AND stderr).
           $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
-          $proc = Start-Process -NoNewWindow -PassThru `
-            -RedirectStandardOutput "$env:TEMP\horus-serve.log" `
-            -RedirectStandardError "$env:TEMP\horus-serve.err" `
-            python -ArgumentList '-m','horus_os','serve','--port','18000','--data-dir',$env:HORUS_DATA
-          $proc.Id | Out-File -FilePath "$env:TEMP\horus-serve.pid" -Encoding ascii
-          Write-Host "Launched horus-os serve with PID $($proc.Id)"
+          $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+          $pinfo.FileName = "python"
+          $pinfo.Arguments = "-m horus_os serve --port 18000 --data-dir `"$env:HORUS_DATA`""
+          $pinfo.UseShellExecute = $false
+          $pinfo.RedirectStandardOutput = $true
+          $pinfo.RedirectStandardError = $true
+          $pinfo.CreateNoWindow = $true
+          $p = New-Object System.Diagnostics.Process
+          $p.StartInfo = $pinfo
+          # Async output forwarding so the streams drain to disk without
+          # blocking on a full pipe buffer.
+          $stdoutPath = "$env:TEMP\horus-serve.log"
+          $stderrPath = "$env:TEMP\horus-serve.err"
+          # Clear any stale files so we know what's new
+          Remove-Item -Path $stdoutPath -ErrorAction SilentlyContinue
+          Remove-Item -Path $stderrPath -ErrorAction SilentlyContinue
+          $stdoutHandler = {
+            if ($EventArgs.Data) {
+              Add-Content -Path $Event.MessageData -Value $EventArgs.Data
+            }
+          }
+          Register-ObjectEvent -InputObject $p -EventName "OutputDataReceived" -Action $stdoutHandler -MessageData $stdoutPath | Out-Null
+          Register-ObjectEvent -InputObject $p -EventName "ErrorDataReceived" -Action $stdoutHandler -MessageData $stderrPath | Out-Null
+          [void]$p.Start()
+          $p.BeginOutputReadLine()
+          $p.BeginErrorReadLine()
+          $p.Id | Out-File -FilePath "$env:TEMP\horus-serve.pid" -Encoding ascii
+          Write-Host "Launched horus-os serve with PID $($p.Id)"
       - name: Poll /api/health until ready (linux/macos)
         if: runner.os != 'Windows'
         shell: bash
