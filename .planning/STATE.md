@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Plugin System
-status: milestone_complete (v0.5 shipped pending maintainer tag per STOP-BEFORE-TAG block in .planning/phases/50-v0-5-0-release/50-01-SUMMARY.md)
-last_updated: "2026-05-26T22:30:00.000Z"
-last_activity: "2026-05-26: Phase 50 prepared; v0.5.0 version bump + CHANGELOG promotion + STOP-BEFORE-TAG handed to maintainer (REL-10 complete; 1011 tests green; 6 release-gate active checks OK + 2 SKIP under executor env overrides)"
+status: milestone_shipped
+last_updated: "2026-05-28T03:30:00.000Z"
+last_activity: "2026-05-28: v0.5.0 tagged + GitHub Release published; full 6-job install-smoke-plugin matrix green after Windows TestClient-driver fix (commit 1860414)"
 progress:
   total_phases: 33
   completed_phases: 33
