@@ -120,6 +120,30 @@ recorded responses and adapters.
    `pip install` works on every supported OS. PRs that break the
    matrix are not merged.
 
+## Releasing
+
+Releases are built by `.github/workflows/release.yml`.
+
+To create a GitHub Release with versioned artifacts:
+
+1. Update the version in `pyproject.toml` and add release notes to
+   `CHANGELOG.md`.
+2. Commit and merge the release prep to `main`.
+3. Create and push a semantic version tag:
+   ```
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+4. The release workflow builds a wheel and source distribution with
+   `python -m build`, then attaches both files from `dist/` to the
+   matching GitHub Release.
+
+PyPI publishing is manual by default. Run the `Release` workflow from
+GitHub Actions with `publish_pypi` enabled only after the tag artifact
+build is correct and the repository secret `PYPI_API_TOKEN` exists.
+If the secret is missing, the PyPI job is skipped and the GitHub
+Release artifact build still works.
+
 ## Code style
 
 - **Linter and formatter:** ruff. Configuration is in `pyproject.toml`.
