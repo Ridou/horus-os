@@ -206,11 +206,17 @@ def test_sbom_stub_returns_skipped() -> None:
     )
 
 
-def test_full_run_all_checks_with_canonical_fixture() -> None:
-    """SIGN-04: full main() invocation across the 5 checks exits 0 on success.
+def test_wheel_check_with_canonical_fixture() -> None:
+    """SIGN-04: --check wheel exits 0 on the canonical fixture.
 
+    Scoped to the wheel-signature check only. A full main() run would
+    also invoke check_tag_signature (needs the real `v0.6.0-rc1` git tag
+    in the working tree) and check_changelog_cross_ref (needs a real
+    `gh release view v0.6.0-rc1`); neither exists at developer-test
+    time, so the wider run would always fail once the fixture lands.
     Skipped checks (ok=None) do NOT count as failure per release_gate
-    precedent.
+    precedent. The wider end-to-end run is the Manual-Only verification
+    documented in VALIDATION.md (recorded at rehearsal time).
     """
     wheel, bundle = _canonical_fixture_paths()
     if wheel is None or bundle is None:
@@ -222,6 +228,8 @@ def test_full_run_all_checks_with_canonical_fixture() -> None:
             "0.6.0-rc1",
             "--cert-oidc-issuer",
             EXPECTED_ISSUER,
+            "--check",
+            "wheel",
             "--bundle",
             str(bundle),
             "--artifact",
@@ -229,7 +237,7 @@ def test_full_run_all_checks_with_canonical_fixture() -> None:
         ]
     )
     assert exit_code == 0, (
-        f"main() must exit 0 when all non-skipped checks pass; got exit_code={exit_code}."
+        f"main() with --check wheel must exit 0 when the wheel check passes; got exit_code={exit_code}."
     )
 
 

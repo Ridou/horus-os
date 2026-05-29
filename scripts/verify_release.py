@@ -62,8 +62,12 @@ assert "refs/tags/{version}" in EXPECTED_IDENTITY_TEMPLATE, (
     "EXPECTED_IDENTITY_TEMPLATE corrupted: must contain 'refs/tags/{version}'"
 )
 
-# Validates the --version CLI argument shape (X.Y.Z or X.Y.Z-rcN).
-_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(-rc\d+)?$")
+# Validates the --version CLI argument shape. Accepts PEP 440 release
+# segments the project uses (or may use): X.Y.Z, X.Y.Z-rcN (hyphenated),
+# X.Y.ZrcN / X.Y.ZaN / X.Y.ZbN (no hyphen), and X.Y.Z.postN / X.Y.Z.devN.
+# Wider than today's strict X.Y.Z/X.Y.Z-rcN cadence to avoid a confusing
+# argparse error if a future release ships under any other PEP 440 shape.
+_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:[\-.]?(?:rc|a|b|alpha|beta|post|dev)\d+)?$")
 
 
 @dataclass(frozen=True)
@@ -126,16 +130,23 @@ def _assert_sigstore_cli_available() -> CheckResult | None:
 
 
 def _resolved_bundle_path(cli_arg: Path | None) -> Path | None:
-    """Pick the bundle path from env override, then CLI, then None."""
-    override = os.environ.get("HORUS_OS_VERIFY_RELEASE_BUNDLE_OVERRIDE")
+    """Pick the bundle path from env override, then CLI, then None.
+
+    Whitespace-only overrides are treated as unset so `Path(" ")` does not
+    leak into the sigstore subprocess as a confusing FileNotFoundError.
+    """
+    override = os.environ.get("HORUS_OS_VERIFY_RELEASE_BUNDLE_OVERRIDE", "").strip()
     if override:
         return Path(override)
     return cli_arg
 
 
 def _resolved_artifact_path(cli_arg: Path | None) -> Path | None:
-    """Pick the artifact path from env override, then CLI, then None."""
-    override = os.environ.get("HORUS_OS_VERIFY_RELEASE_ARTIFACT_OVERRIDE")
+    """Pick the artifact path from env override, then CLI, then None.
+
+    Whitespace-only overrides are treated as unset (see _resolved_bundle_path).
+    """
+    override = os.environ.get("HORUS_OS_VERIFY_RELEASE_ARTIFACT_OVERRIDE", "").strip()
     if override:
         return Path(override)
     return cli_arg
@@ -157,7 +168,14 @@ def _sigstore_verify(
     cli_check = _assert_sigstore_cli_available()
     if cli_check is not None:
         return CheckResult(name=check_name, ok=False, diagnostic=cli_check.diagnostic)
-    expected_identity = EXPECTED_IDENTITY_TEMPLATE.format(version=version)
+    # Substitute `v{version}` because git tags carry the `v` prefix (see
+    # docs/RELEASE.md step 7: `git tag -s vN.M.P`). The OIDC ref embedded by
+    # GitHub Actions on `release: published` is `refs/tags/v0.6.0`, never
+    # `refs/tags/0.6.0`. EXPECTED_IDENTITY_TEMPLATE keeps the bare
+    # `{version}` placeholder so the byte-exact constant matches D-04's
+    # documented shape; the `v` prefix is added at substitution time here
+    # and at lines 230, 299 (mirrors `tag = f"v{version}"` pattern).
+    expected_identity = EXPECTED_IDENTITY_TEMPLATE.format(version=f"v{version}")
     proc = subprocess.run(
         [
             sys.executable,
