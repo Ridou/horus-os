@@ -565,10 +565,14 @@ Plans:
   4. Every third-party `uses:` line in every workflow is pinned to a 40-character commit SHA (`@<sha>` exact match); release-gate `actions-pinned-by-sha` check rejects any `@v<N>`, `@main`, `@master`, or short-SHA pin; `pinact` documented in `docs/MAINTAINER-RUNBOOK.md` as the local maintainer refresh tool (CIHARD-04)
   5. `actionlint` runs as a new workflow lint job on every PR; failures block merge; covers untrusted-input interpolation, expired action references, missing `permissions:` (CIHARD-05). `ci.yml` job names `install-smoke-no-otel`, `install-smoke-with-otel`, `install-smoke-plugin` remain byte-identical (grep'd by `scripts/release_gate.py`); no job renamed or removed
   6. TEST-23 regression test in `tests/test_workflow_lint/` scans every `.github/workflows/*.yml` for forbidden patterns (`pull_request_target` unguarded, missing top-level `permissions:`, non-SHA action pin, `${{ github.event.* }}` in shell, missing `persist-credentials: false`); test names map 1:1 to CIHARD-01..05; CI fails on any violation
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 51-01: TBD
+**Wave 1**
+- [ ] 51-01-PLAN.md: Wave 0 test scaffolding, tests/test_contribution_gate_pitfalls/ package marker + three TEST-23 regression files (test_pitfall_01_pull_request_target, test_pitfall_02_action_sha_pinning, test_ci_hardening_workflow_structure) with stdlib re parsing + non-vacuity synthetic-fixture tests; production assertions go RED against the pre-edit tree (CIHARD-01 vacuous, CIHARD-04 + CIHARD-02 + CIHARD-03 first clause expected red; CIHARD-03 interpolation already clean)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 51-02-PLAN.md: Workflow YAML hardening, ci.yml gains top-level permissions: read-all + actionlint step (raven-actions/actionlint@205b530c... v2.1.2 with version: v1.7.12, step name Run actionlint (CIHARD-05)); every actions/checkout (5 sites) SHA-pinned to 11bd71901bbe... v4.2.2 with persist-credentials: false; every actions/setup-python (5 sites) SHA-pinned to a26af69be... v5.6.0; issue-claim-watcher.yml refactored to top-level permissions: read-all + per-job issues: write on detect-claim (preserves canned-reply behavior per Pitfall 51-E); both actions/github-script@v7 sites SHA-pinned to f28e40c7f3... v7.1.0. Job NAMES byte-identical; release_gate.py and pyproject.toml UNTOUCHED. All Plan 01 tests flip RED to GREEN.
 
 ### Phase 52: Signing substrate (`release.yml` NEW)
 **Goal**: Wire keyless artifact and tag signing on a NEW `.github/workflows/release.yml` triggered by `on: release: types: [published]`. Sign wheel + sdist + SBOM JSON via sigstore-python keyless OIDC; emit SLSA Build L2 provenance via `actions/attest-build-provenance`; sign git tags via `gitsign` (no long-lived GPG keypair). Ship `scripts/verify_release.py` as the user-facing 5-check trust-chain verifier with workflow-scoped EXACT-match identity. PyPI Trusted Publishing is OUT OF SCOPE for v0.6; deferral rationale documented.

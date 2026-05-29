@@ -667,15 +667,19 @@ _CHECKOUT_USES = re.compile(
     re.MULTILINE,
 )
 
-# Matches github.event.* inside a ${{ ... }} expression.
-_EVENT_INTERPOLATION = re.compile(r"\$\{\{\s*[^}]*\bgithub\.event\.[a-zA-Z0-9_.\[\]'\"]+")
+# Matches github.event.*, github.head_ref, or github.base_ref inside a ${{ ... }} expression.
+# Per Open Question 3 RESOLVED: head_ref/base_ref aliases are in scope (PITFALLS.md Pitfall 1).
+_EVENT_INTERPOLATION = re.compile(
+    r"\$\{\{\s*[^}]*\b(?:github\.event\.[a-zA-Z0-9_.\[\]'\"]+"
+    r"|github\.head_ref|github\.base_ref)\b"
+)
 
 
 def _workflow_yaml_files() -> list[Path]:
     return sorted(WORKFLOWS_DIR.glob("*.yml"))
 
 
-def test_every_workflow_has_top_level_permissions() -> None:
+def test_permissions_read_all_on_every_workflow() -> None:
     """CIHARD-02: every workflow has a top-level `permissions:` key."""
     offenders: list[Path] = []
     for workflow in _workflow_yaml_files():
@@ -688,7 +692,7 @@ def test_every_workflow_has_top_level_permissions() -> None:
     )
 
 
-def test_every_checkout_sets_persist_credentials_false() -> None:
+def test_persist_credentials_false_on_every_checkout() -> None:
     """CIHARD-03: every actions/checkout step has persist-credentials: false."""
     offenders: list[tuple[Path, int]] = []
     for workflow in _workflow_yaml_files():
@@ -710,8 +714,10 @@ def test_every_checkout_sets_persist_credentials_false() -> None:
     )
 
 
-def test_no_github_event_interpolation_in_run_shells() -> None:
-    """CIHARD-03: no ${{ github.event.* }} interpolation in run: shell lines."""
+def test_no_event_interpolation_in_shells() -> None:
+    """CIHARD-03: no ${{ github.event.* }}, ${{ github.head_ref }}, or ${{ github.base_ref }}
+    interpolation in run: shell lines. PITFALLS.md Pitfall 1 documents the head_ref/base_ref
+    aliases as in-scope threat surface."""
     offenders: list[tuple[Path, int, str]] = []
     for workflow in _workflow_yaml_files():
         text = workflow.read_text(encoding="utf-8")
@@ -798,22 +804,25 @@ def test_no_github_event_interpolation_in_run_shells() -> None:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 51 ship a tiny custom `scripts/lint_actions_pinned_by_sha.py` (mirror of `scripts/lint_no_wallclock.py`) as a third enforcement layer, in addition to actionlint + the regression test?**
    - What we know: D-02 already specifies two layers (PR-time pytest + release-time release_gate.py Phase 57). The pytest layer is what `test_pitfall_02_action_sha_pinning.py` provides; it runs on every PR via the standard `pytest -v` invocation in `lint-and-test`.
    - What's unclear: A separate `scripts/lint_actions_pinned_by_sha.py` would add a CI step (`python scripts/lint_actions_pinned_by_sha.py`) that is functionally identical to the pytest assertion. The pytest layer is already cheap (sub-second), and adding a third layer that duplicates the second is theater.
    - Recommendation: **DO NOT ship a custom script.** The three-file TEST-23 surface + actionlint is sufficient for PR-time; Phase 57 will add release-time enforcement in `release_gate.py`. The lint_no_wallclock.py precedent applies when there is no pytest equivalent; here the pytest test IS the equivalent and is more idiomatic for the project's test-as-lint pattern (see `tests/test_lint_no_wallclock.py` which is the pytest backstop for the script-based lint).
+   - **RESOLVED (2026-05-29):** DO NOT ship `scripts/lint_actions_pinned_by_sha.py` in Phase 51. The three-file TEST-23 surface (test_pitfall_01, test_pitfall_02, test_ci_hardening_workflow_structure) plus the actionlint step in `lint-and-test` is the PR-time enforcement. Phase 57 lands the release-time `actions-pinned-by-sha` check in `scripts/release_gate.py` as layer 2. Phase 51 does NOT touch `scripts/release_gate.py` (D-02 + CONTEXT.md §`Canonical refs`; release_gate.py is a byte-identity invariant for Phase 51).
 
 2. **Does Phase 51 need to add a fixture workflow that DELIBERATELY contains every banned pattern, so the tests have positive-case coverage (asserts the test catches the violation)?**
-   - What we know: The TEST-23 tests assert NEGATIVE — "no workflow has X." Without a positive fixture, a bug in the regex (e.g., `re.compile(r"pull-request-target")` instead of `pull_request_target`) would silently pass every CI run.
+   - What we know: The TEST-23 tests assert NEGATIVE, meaning "no workflow has X." Without a positive fixture, a bug in the regex (e.g., `re.compile(r"pull-request-target")` instead of `pull_request_target`) would silently pass every CI run.
    - What's unclear: A fixture file under `tests/test_contribution_gate_pitfalls/fixtures/bad_workflow.yml` could be loaded by a parametrized test asserting the regex flags it. But this is meta-testing the test.
-   - Recommendation: **Defer to Phase 58.** TEST-22 (Phase 58) ships the broader pitfall-to-test 1:1 mapping; positive-case fixture coverage is the kind of test-the-test surface that belongs there, not in the initial Phase 51 ship. If the planner wants positive fixtures in Phase 51, a single `tests/test_contribution_gate_pitfalls/fixtures/known_bad_workflow.txt` (not `.yml` — keep it out of `.github/workflows/` so the file itself does NOT trigger the regression) is acceptable scope. NOT required.
+   - Recommendation: **Defer to Phase 58.** TEST-22 (Phase 58) ships the broader pitfall-to-test 1:1 mapping; positive-case fixture coverage is the kind of test-the-test surface that belongs there, not in the initial Phase 51 ship. If the planner wants positive fixtures in Phase 51, a single `tests/test_contribution_gate_pitfalls/fixtures/known_bad_workflow.txt` (not `.yml`, keeping it out of `.github/workflows/` so the file itself does NOT trigger the regression) is acceptable scope. NOT required.
+   - **RESOLVED (2026-05-29):** DEFER positive-case fixture workflows with banned patterns to Phase 58 (TEST-22 broader pitfall-to-test mapping). Phase 51 instead ships per-scanner non-vacuity synthetic-fixture tests using `tmp_path`: each scanner has at least one test that writes a synthetic `.yml` with a known violation into `tmp_path/.github/workflows/` and asserts the scanner returns exactly one offender. This is the v0.5 TEST-21 layer-2 idiom (in-test fixtures, not on-disk fixture files); it gives non-vacuity coverage without adding any `.yml` to the repo tree that could itself trigger the regression on the next CI run.
 
 3. **Should the regex in `test_no_github_event_interpolation_in_run_shells` also flag `${{ github.head_ref }}` (the legacy SHA-injection vector documented in PITFALLS.md §Pitfall 1)?**
    - What we know: `github.head_ref` is set from the same untrusted source as `github.event.pull_request.head.ref` for PR triggers. The Ultralytics CVE used `github.event.pull_request.head.ref`, but `github.head_ref` is the shorter / more commonly used alias.
    - What's unclear: CIHARD-03 specifically calls out `${{ github.event.* }}` interpolation. `github.head_ref` is in the `github` context but not under `github.event`. A strict reading would not include it.
    - Recommendation: **EXTEND** the regex to cover both forms. The threat model is identical; the strict-CIHARD-03-reading misses half the surface. The regex change: `_EVENT_INTERPOLATION = re.compile(r"\$\{\{\s*[^}]*\b(?:github\.event\.[a-zA-Z0-9_.\[\]'\"]+|github\.head_ref|github\.base_ref)\b")`. Document in the test docstring that the rule covers the documented Pitfall 1 surface AND the `head_ref`/`base_ref` aliases.
+   - **RESOLVED (2026-05-29):** EXTEND `_EVENT_INTERPOLATION` regex to cover `github.head_ref` and `github.base_ref` in addition to `github.event.*`. Rationale: PITFALLS.md §`Pitfall 1` documents the `head_ref` alias as a known threat surface (same upstream-controlled value, shorter syntax, more commonly used). A strict `github.event.*`-only reading of CIHARD-03 misses the alias and would let a future regression slip past PR-time enforcement. Plan 01 Task 2 ships the extended regex verbatim: `_EVENT_INTERPOLATION = re.compile(r"\$\{\{\s*[^}]*\b(?:github\.event\.[a-zA-Z0-9_.\[\]'\"]+|github\.head_ref|github\.base_ref)\b")`. Plan 01 also ships a synthetic-fixture non-vacuity test that asserts the scanner CATCHES a `${{ github.head_ref }}` interpolation, proving the new branch of the regex is exercised.
 
 ---
 

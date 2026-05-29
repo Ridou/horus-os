@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Contribution Gate
-status: completed
-last_updated: "2026-05-29T02:01:52.619Z"
-last_activity: 2026-05-29 — v0.6 roadmap landed (Phases 51-59, 100% requirement coverage)
+status: executing
+last_updated: "2026-05-29T02:42:21.410Z"
+last_activity: 2026-05-29 -- Phase 51 planning complete
 progress:
   total_phases: 38
   completed_phases: 29
-  total_plans: 29
+  total_plans: 31
   completed_plans: 29
-  percent: 100
+  percent: 94
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md and .planning/README.md.
 
 Phase: 51 (CI hardening substrate) — not yet started
 Plan: —
-Status: Roadmap complete; awaiting plan-phase for Phase 51
-Last activity: 2026-05-29 — v0.6 roadmap landed (Phases 51-59, 100% requirement coverage)
+Status: Ready to execute
+Last activity: 2026-05-29 -- Phase 51 planning complete
 
 ## Prior Milestones
 
