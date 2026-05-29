@@ -1,176 +1,259 @@
 # Project Research Summary
 
-**Project:** horus-os v0.5 Plugin System
-**Domain:** Third-party Python plugin runtime on a local-first single-process AI command center
-**Researched:** 2026-05-26
-**Confidence:** HIGH
+**Project:** horus-os v0.6 Contribution Gate
+**Domain:** Supply-chain / contribution-readiness infrastructure (additive milestone on the v0.5 substrate: Python 3.11+ runtime, 5-job CI matrix, 8-check release gate, complete contributor-template scaffold)
+**Researched:** 2026-05-29
+**Confidence:** HIGH on stack picks and failure modes; MEDIUM on which specific differentiators are worth horus-os's CI minutes; HIGH on the anti-feature list.
 
 ## Executive Summary
 
-v0.5 turns horus-os from "built-in adapters and tools only" into "anyone can ship a horus-os plugin," and the four research files converge on the same shape: a TOML manifest, entry-point + filesystem discovery, a default-deny capability grant model, a `pip`-wrapped installer, an in-process loader that registers plugin-contributed tools and adapters into the existing `ToolRegistry` / `AdapterRegistry` (no new hook framework), and a `/plugins` dashboard tab that reuses v0.4's `ObservationBus` for per-plugin error-rate attribution. The closest analog is Datasette's plugin system; horus-os v0.5 = Datasette's installer + Home Assistant's manifest + VS Code's first-run consent prompt + v0.4's observability stack, wired together rather than re-engineered.
+v0.6 is NOT a feature milestone. It is a **trust-substrate** milestone: one external bit flips at v0.6.0 ship ("outside PRs welcome") and the infrastructure that makes that flip safe lands underneath it. The four research files agree on every load-bearing decision: keyless Sigstore signing via GitHub OIDC for wheels + sdists + tags, CycloneDX 1.6 JSON SBOMs generated against the installed-from-wheel venv, pip-audit on every PR with explicit ignore-list discipline, Dependabot for both `pip` and `github-actions` ecosystems with security-updates explicitly un-grouped, every action `uses:` line pinned to a 40-char SHA, a hard separation between `pull_request` (unprivileged, fork-safe) and `pull_request_target` / `workflow_run` (label-gated, secrets-bearing), and a coordinated atomic prose flip across STATUS.md + README.md + CONTRIBUTING.md + SECURITY.md + PR template + issue-claim-watcher deletion at the moment v0.6.0 ships.
 
-The recommended approach is to add exactly two new runtime dependencies (`pydantic>=2.7,<3` and `packaging>=24.0`) and rely on stdlib for everything else (`tomllib`, `importlib.metadata`, `importlib.util`, `subprocess`, `hashlib`). The architecture is a six-phase per-plugin pipeline (Discover -> Validate -> Permission gate -> Load -> Start -> Health) where each phase has a single failure mode and a single registry mutation, mirroring the v0.3 `discover_adapters` shape but with explicit status surfacing. Capability enforcement is wrapped at the **registration boundary** (inside `PluginLoader.load()`), not at the call site, so built-in tools stay byte-identical to v0.4 and `ToolRegistry.invoke` does not learn about plugins.
+The recommended path is a 10-phase build (51-60) that (1) hardens CI on `pull_request_target` and SHA-pins all third-party actions BEFORE anything else lands, (2) wires the signing + SBOM substrate in a NEW `.github/workflows/release.yml` file (not additions to `ci.yml`), (3) lights up supply-chain scanning, (4) extends `scripts/release_gate.py` from 8 to ~11-13 checks following the v0.5 Phase 49 extension idiom, (5) refreshes contributor + SECURITY docs with honest solo-maintainer SLO language, and (6) performs a soft launch with 3-5 invited contributors before the atomic gate flip. Every existing v0.5 byte-identity contract (15 invariants identified by ARCHITECTURE) must hold.
 
-Key risks are concentrated in two areas. **Security:** in-process plugin code is arbitrary code execution, and PROJECT.md explicitly defers OS sandboxing to v0.6+, so the trust contract is "default-deny capability grants + plain-English first-run prompt + per-version grant keying with re-prompt on manifest-hash change." Pitfall 1 (default-allow normalizes compromise) and Pitfall 5 (silent capability expansion on upgrade) are non-negotiable to prevent at the schema layer, not bolt-on later. **Compatibility:** the v5→v6 SQLite migration must be additive-only (per v0.4 Phase 32 precedent), the `importlib.metadata.entry_points()` API drifted 3.10→3.12 so `pkg_resources` is lint-banned, and `pip install` must be two-phase (download + validate before install) to defeat the `setup.py` arbitrary-code-execution escape hatch.
+The dominant risks are well-known and well-mitigated by the recommended stack. Three are high-blast-radius and require requirements-time locks: **`pull_request_target` misuse** (Ultralytics 8.3.41-46 Dec 2024, "testedbefore" March 2026, Spotipy GHSA) leaks every secret on the first malicious fork PR; **mutable action tag pins** (tj-actions/changed-files CVE-2025-30066, ~23k repos compromised) defeat all other controls; **sigstore identity verification with wildcards or wrong issuer** silently accepts attacker-workflow signatures. All three are prevented by (a) NEVER using `pull_request_target` for fork code execution, (b) enforcing 40-char SHA pins via release-gate lint, (c) workflow-scoped exact-match identity in `scripts/verify_release.py` with negative tests.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Two new direct dependencies, both in the base `[project.dependencies]` list (NOT an optional extra), plus stdlib. See STACK.md for full rationale and rejected alternatives.
+Additive only: no changes to the validated v0.5 application stack. v0.6 adds CI-time and release-time tooling, none of which lands in the runtime `pyproject.toml` `dependencies` list. See STACK.md for full version + step-shape detail.
 
-**Core technologies:**
+**Core technologies (v0.6 additions):**
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `tomllib` | stdlib (3.11+) | Read `horus-plugin.toml` manifest | Already in stdlib at horus-os's 3.11+ floor; zero new dep |
-| `importlib.metadata` | stdlib (3.11+) | Discover plugins via `entry_points(group="horus_os.plugins")` | Canonical replacement for deprecated `pkg_resources`; same shape `discover_adapters()` already uses |
-| `importlib.util` + `importlib.machinery` | stdlib | Load plugin modules from `~/.horus-os/plugins/` (dev path) | `spec_from_file_location` + `module_from_spec` + `exec_module`; no `sys.path` mutation needed |
-| `subprocess` | stdlib | Wrap `pip install` / `uninstall` / `show` for installer | pip explicitly forbids `import pip`; canonical pattern uses `sys.executable` (encodes active venv) |
-| `pathlib.Path` | stdlib | All filesystem paths | Already the horus-os convention; cross-OS clean |
-| `hashlib` | stdlib | SHA-256 of manifest capabilities for re-prompt detection | O(1) change check against persisted `grant_hash` |
-| `pydantic` | `>=2.7,<3` | Manifest schema validation | Structured `ValidationError.errors()` for clean installer error messages; Rust core fast. **New direct dep in v0.5** (v0.4 `dependencies = []`) |
-| `packaging` | `>=24.0` | `SpecifierSet` for `horus_os_compat`; `Requirement` to parse install spec | Only correct PEP 440 implementation (`~=` compatible-release operator) |
-
-**Explicitly rejected:** `pkg_resources` (deprecated, slow), `pluggy` (hook fan-out doesn't fit), `stevedore` (10x bigger surface than needed), `import pip` (forbidden by pip itself), `tomli` (stdlib has it now), `tomlkit` (we never write manifests), `marshmallow`/`attrs`/`voluptuous` (lose to pydantic v2), `RestrictedPython` / in-process sandbox (illusion of safety), `pip --user` and `pip --target` (defeat venv entry-point discovery), hand-rolled PEP 440 parsing.
+- **`sigstore-python` (>=4.2.0,<5) via `sigstore/gh-action-sigstore-python@v3.x`** — keyless OIDC signing of wheels + sdists + SBOM JSON. Produces `.sigstore` bundles (NOT detached `.sig`). Workflow-scoped identity, ephemeral signing certificate, transparency-log inclusion proof inline.
+- **`actions/attest-build-provenance@v4.1.0`** — generates SLSA Build L2 provenance attestations bound to the GitHub workflow identity. Verifiable via `gh attestation verify`. Free.
+- **`cyclonedx-bom` (>=7.3.0,<8, command `cyclonedx-py`)** — generates CycloneDX 1.6 JSON SBOMs. Run via `cyclonedx-py environment` against a fresh `pip install <wheel>` venv (NOT `pip freeze` of a dev venv). Installed on-the-fly in `release.yml`; NOT added to `[dev]` extras.
+- **`pip-audit` (>=2.10.0,<3) via `pypa/gh-action-pip-audit@v1.1.0`** — PyPA-blessed vulnerability scanner. Run dual-mode (`-s osv` AND `-s pypi`). Added to `[dev]` extras for local use.
+- **`actions/dependency-review-action@v5.0.0`** — PR-time check on new dep introductions + license allowlist.
+- **Dependabot v2** — `package-ecosystem: pip` (grouped routine bumps with cooldown, AI-SDK group to silence anthropic + google-genai churn) AND `package-ecosystem: github-actions` (SHA-pin refresh). Security-updates explicitly NOT grouped, one PR per CVE with a distinct `security-update` label.
+- **`pinact` (>=4.0.0,<5)** — local maintainer tool that rewrites every `uses:` to a 40-char SHA pin.
 
 ### Expected Features
 
-FEATURES.md confirms eight REQUIREMENTS.md categories. Each category below maps 1:1 to a section the requirement writer should produce.
+See FEATURES.md for full T1-T20 / D1-D15 / A1-A12 enumeration.
 
-**Must have (table stakes, P1, all ship in v0.5.0):**
+**Must have (table stakes, T1-T20):**
 
-| Category | What ships | Anchored by |
-|----------|-----------|-------------|
-| **MANIFEST** (01-05) | `horus-plugin.toml` with name, version, description, author, license, homepage, `horus_os_compat`, declared tools/adapters, requested capabilities. Strict pydantic-backed schema validation at install with line-numbered errors. `manifest_version: int` required from day one. | Home Assistant `manifest.json`, VS Code `package.json contributes`, `pyproject.toml` shape |
-| **DISCOVERY** (01-02) | Entry-points group `horus_os.plugins` (primary, pip-installed) + `~/.horus-os/plugins/` directory drop-in (dev path). Same `PluginSpec` output. | Datasette `--plugins-dir`, pytest `pytest11`, Home Assistant `custom_components/` |
-| **INSTALL** (01-06) | `horus-os plugins install \| uninstall \| list \| info \| enable \| disable \| update` subcommands wrapping `pip` in the active venv. Two-phase install: download → validate manifest + show capabilities → confirm → install. | Datasette `datasette install` |
-| **PERMISSION** (01-04) | Default-deny posture; grants persisted in SQLite keyed on `(plugin_name, plugin_version, capability)`; revocable from dashboard; **re-prompt when manifest hash changes**; closed enum of capability strings via `capability_catalog.py` with plain-English descriptions. | VS Code 1.97+ Workspace Trust, Home Assistant policy, mobile OS permission re-prompt on scope expansion |
-| **ISOLATE** (01-04) | Failure containment: bad import / bad manifest / `start()` exception / runtime exception caught and reported, never crashes host. Per-plugin error-status surface. Enable/disable toggle. **Slow-start timeout via `asyncio.wait_for(start, timeout=2.0)`**. | Home Assistant `ConfigEntryNotReady` + Recovery Mode; v0.4 Phase 38 `OtelAdapter` 2000ms precedent |
-| **DASH** (01-03) | `/plugins` dashboard tab listing installed plugins with version, declared contributions, granted capabilities, lifecycle status, last error, error rate. Per-plugin enable/disable toggle. Author/homepage/issue-tracker hyperlinks. | Existing v0.3 `/adapters` tab |
-| **OBSERVE** (01) | **The v0.5 differentiator.** Add `plugin_name TEXT NULL` column to `llm_calls` and `tool_invocations`; render per-plugin error rate + p95 latency on `/observability`. NULL = "horus-os core". | None of the seven competitor systems surface this; it's our edge |
-| **REFERENCE** (01-02) | Published `horus-os-example-plugin` (separate package, same monorepo at `examples/horus-os-example-plugin/`) demonstrating four scenarios. Plugin-author docs at `docs/PLUGINS.md`. **Public API surface is `horus_os.plugins.api` ONLY** — reference plugin lint-rejects any other `from horus_os` import. | Datasette cookiecutter, Home Assistant `example_integration`, VS Code `vscode-extension-samples` |
+- T1-T2 Keyless artifact signing + SLSA Build L2 attestations
+- T3 Signed git tags via gitsign with OIDC
+- T4 SBOM at release: CycloneDX 1.6 JSON, signed + attached
+- T5 pip-audit on every PR with explicit ignore-list at `.github/pip-audit-ignore.txt`
+- T6 Dependabot config for both ecosystems, grouped routine, ungrouped security
+- T7 SHA-pinned actions enforced via release-gate lint
+- T8 Fork-PR hardening: `pull_request_target` ABSENT or metadata-only
+- T9-T10 First-time-contributor approval gate + branch protection
+- T11-T16 Doc refreshes: SECURITY.md SLO with severity tiers, CONTRIBUTING.md banner flip + claim flow, PR template NOTICE deletion, CODEOWNERS path-scoped, CODE_OF_CONDUCT reporting channel
+- T17-T20 Atomic gate flip in ONE commit at v0.6.0
 
-**Should have (P2):** OBSERVE-02 (per-plugin LLM cost attribution — include in v0.5 only if literal column addition), REFERENCE-03 (cookiecutter template).
+**Should have (differentiators worth shipping in v0.6):**
 
-**Defer (P3, v0.6+):** OS-level subprocess/container sandbox, hosted plugin catalog, plugin signing / Sigstore, schema-driven plugin settings UI, hot-reload, auto-update on start.
+- D6 `docs/TRIAGE.md` with label taxonomy ≤15 hard cap
+- D7 Dependency Review action (cheap; bundle with T5)
+- D8 `zizmor` audit for workflow security static analysis
+- D11-D12 Discussions enabled with pinned "Project Status" post
+- D15 `docs/MAINTAINER-RUNBOOK.md` / `docs/POSTFLIP-PLAYBOOK.md`
 
-**Anti-features (reject explicitly):** Default-allow on first install, grants keyed on `plugin_name` only without version, in-process Python sandbox via `RestrictedPython`, pluggy-style hook framework.
+**Defer to v0.6.x / v0.7+:** SLSA L3 provenance, OpenSSF Scorecard (wait 2 weeks post-flip), CodeQL as required PR check, `safe-to-test` label gate (only if v0.7+ needs live secrets), auto-merge Dependabot grouped PRs.
+
+**Anti-features (explicitly NOT shipped, named to prevent re-litigation):**
+
+- No CLA (Apache 2.0 patent grant + inbound=outbound suffices; CLA blocks drive-bys)
+- No mandatory DCO (GitHub web UI cannot append `-s`; optional fallback only)
+- No `pull_request_target` + checkout-PR-head (Ultralytics / Spotipy attack class)
+- No mandatory Discord/Slack join
+- No `actions/stale` auto-close (Drew DeVault + Jacob Tomlinson critique)
+- No coverage gate
+- No GPG long-lived signing key as primary
+- No hosted SBOM SaaS (paid; violates anti-goal)
+- No `safety` (Pyup paid tier; pip-audit is the only valid choice)
+- PyPI Trusted Publishing OUT OF SCOPE for v0.6 (project does not publish to PyPI); **requirements-time decision** whether v0.6 expands scope
 
 ### Architecture Approach
 
-A new `src/horus_os/plugins/` package containing eight modules, sitting **on top of** the existing v0.1-v0.4 registries (which stay byte-identical). One-way dependency: plugins → registries, never the reverse. Capability enforcement is wrapped at registration time so built-ins never go through the guard codepath.
+Subsequent-milestone integration, not greenfield. Every change extends an existing v0.5 file or follows an established v0.5 idiom. See ARCHITECTURE.md for the 9-question integration map and 15 byte-identity invariants.
 
-**The six-phase pipeline (one pass per plugin, inside FastAPI lifespan):**
+**Major components:**
 
-1. **Discover** — `entry_points(group="horus_os.plugins")` + filesystem walk of `~/.horus-os/plugins/`. Returns `list[PluginSpec]`. No registry side effects.
-2. **Validate** — parse `horus-plugin.toml` via `tomllib`, validate via pydantic, check `horus_os_compat` against `__version__` via `packaging.SpecifierSet`. On failure: `status="error", error_phase="validate"`.
-3. **Permission gate** — compare manifest capabilities against persisted `plugin_capabilities` rows. Manifest-hash mismatch flips previously-granted capabilities to `pending`.
-4. **Load** — import entry-point module via `EntryPoint.load()` (or `importlib.util.spec_from_file_location` for filesystem plugins). Register tools via `ToolRegistry.register(tool)`; each plugin-contributed tool handler is wrapped with `CapabilityGuard` before being registered.
-5. **Start** — for adapter-providing plugins, call `start(AdapterContext)` wrapped in `asyncio.wait_for(start(ctx), timeout=2.0)`.
-6. **Health** — `PluginHealthSubscriber` subscribes to `ObservationBus`. Filters per-plugin, rolls up error rate + p95 latency in-memory ring buffers.
+1. **`release.yml` (NEW)** — triggered by `on: release: types: [published]`. Sign + SBOM + attest. Sequential steps: build then mint OIDC then sign within 5 minutes (TTL ~10 min) then verify against EXPECTED identity then generate SBOM then attest-sbom then upload atomically.
+2. **`audit.yml` (NEW)** — PR-time supply-chain gate. `permissions: contents: read`, `persist-credentials: false`. pip-audit dual-run + dependency-review-action with license allowlist (Apache-2.0, MIT, BSD-2/3, ISC, PSF-2.0).
+3. **`ci.yml` (existing)** — UNCHANGED job names (`install-smoke-no-otel`, `install-smoke-with-otel`, `install-smoke-plugin` are byte-identity contracts). v0.6 adds `permissions: read-all` + SHA-pins every existing `uses:`, but does NOT rename/remove jobs.
+4. **`release_gate.py` extension (8 to ~11-13 checks)** — Phase 49 idiom. New checks: `release-workflow-signing-present`, `release-workflow-sbom-present`, `audit-workflow-present`, `local-pip-audit-clean`, `dependabot-config-present`, `actions-pinned-by-sha`. `--check` enum APPENDED (existing 8 values NEVER renamed). Two-tier: pre-merge local <10s, pre-release network ~60s.
+5. **`verify_release.py` (NEW)** — five-check user-facing trust-chain verifier with workflow-scoped EXACT-match identity (no wildcards/regex).
+6. **Contributor doc + template surface** — coordinated single-commit edits at v0.6.0 ship.
 
-**Major components:** `plugins/spec.py`, `plugins/manifest.py`, `plugins/discovery.py`, `plugins/registry.py`, `plugins/permissions.py` (+ `capability_catalog.py`), `plugins/loader.py`, `plugins/health.py`, `plugins/api.py` (the only public re-export surface).
+**Critical backward-compat invariants (15 byte-identity contracts; load-bearing ones):**
 
-**Persistence (v5 → v6, additive only):**
-
-```sql
-CREATE TABLE IF NOT EXISTS plugins (...);                  -- installed list + manifest_hash
-CREATE TABLE IF NOT EXISTS plugin_capabilities (...);      -- per-capability grant + manifest_hash
-CREATE TABLE IF NOT EXISTS plugin_status (...);            -- last_seen, error_count, last_error
-ALTER TABLE llm_calls ADD COLUMN plugin_name TEXT;         -- NULLABLE
-ALTER TABLE tool_invocations ADD COLUMN plugin_name TEXT;  -- NULLABLE
-CREATE INDEX idx_tool_invocations_plugin ON tool_invocations(plugin_name, created_at);
-```
-
-No DROP. No RENAME. No NOT NULL on existing columns. v0.4 fixture must round-trip.
-
-**Hard architectural rules:**
-
-- Capability enforcement at the **registration boundary**, never at the call site.
-- **Manifest hash drives re-prompt** (`grant_hash = sha256(capabilities_set)`).
-- **v5 → v6 is additive only.** Three new tables + two NULLABLE columns + one index.
-- **Bounded `asyncio.wait_for(start, timeout=2.0)`** on every plugin lifecycle hook.
-- **`plugin_name` column added to both `llm_calls` and `tool_invocations`.**
+- `ci.yml` job names grep'd by release_gate.py: UNCHANGED
+- `release_gate.py` 8 existing `--check` enum values: APPENDED, never renamed
+- `release_gate.py` exit codes (0/1) and env-var contract
+- `docs/RELEASE.md` STOP-BEFORE-TAG 9-step sequence: insertions allowed, mutations not
+- `pyproject.toml` base `dependencies`: v0.6 adds NOTHING (signing/SBOM/audit is CI-time)
+- `[dev]` extras gets ONE addition: `pip-audit>=2.10,<3`
+- 3-OS × 2-Python matrix shape: per CLAUDE.md hard rule 5
+- `tests/fixtures/v0_4_database.sqlite3` and perf baselines: untouched
 
 ### Critical Pitfalls
 
-The four highest-stakes pitfalls condensed. See PITFALLS.md for the full twelve.
+See PITFALLS.md for full 12-pitfall enumeration with incident citations. Top 3 highest-blast-radius:
 
-1. **Default-allow capability grants normalize compromise (Pitfall 1).** In-process plugin code is arbitrary code execution; v0.5 defers OS sandboxing. **Avoid:** `DEFAULT_GRANT_POLICY = "deny"`; helper shims raise `PermissionDenied` if grant row missing; closed enum in `capability_catalog.py`; mandatory `docs/PLUGIN-SECURITY.md`.
-2. **Silent capability expansion on plugin upgrade (Pitfall 5).** v1.0 grants don't carry to v1.1 if v1.1 widens the requested set. **Avoid:** grants keyed on `(plugin_name, plugin_version, capability)` AND tied to `manifest_hash`; three diff outcomes (unchanged auto / reduced auto / expanded re-prompt).
-3. **`pip install` corrupts the host venv (Pitfall 4).** Six concrete failure shapes including `setup.py` arbitrary code execution, `.pth`-file persistent execution, dependency downgrade breaking horus-os itself. **Avoid:** refuse install outside a venv (`sys.prefix == sys.base_prefix` check); **two-phase install** (`pip download --no-deps` → validate → install `--no-build-isolation`); refuse sdist by default; refuse `.pth` files in wheel RECORD; refuse runtime-dep downgrade.
-4. **Plugin failures crash horus-os instead of degrading (Pitfall 6).** v0.3 `server/api.py:99-116` wraps `start/stop` in try/except but **without a timeout**. **Avoid:** wrap every lifecycle boundary; **bounded `asyncio.wait_for(start, timeout=2.0)`**; `--disable-all-plugins` CLI escape hatch.
+1. **`pull_request_target` + checkout-PR-head leaks every secret on the first malicious fork PR** (PITFALL 1). Ultralytics 8.3.41/42 Dec 2024, Spotipy GHSA, "testedbefore" March 2026. Prevention: `pull_request_target` FORBIDDEN by default; lint rejects any usage without SECURITY-comment + `safe-to-test` label gate + label auto-strip on push; `permissions: read-all` workflow-default; NO `${{ github.event.* }}` interpolation in `run:` shell. Owner: CIHARD-01..03. Phase 51-52 BEFORE the flip.
+2. **Mutable action tag pin (`@v4`) is the same as not pinning** (PITFALL 2). tj-actions/changed-files CVE-2025-30066 retargeted 350+ tags, ~23k repos. Prevention: 40-char SHA pin on every third-party `uses:`; release-gate lint enforces; `@main`/`@master` forbidden for third-party; Dependabot github-actions maintains SHA freshness. Owner: CIHARD-04..05. Phase 51 + 55.
+3. **Sigstore verification with wildcard identity or missing issuer silently accepts attacker signatures** (PITFALL 3). sigstore-python uses EXACT match. Prevention: `EXPECTED_IDENTITY = "https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/{version}"`, no wildcards/regex, mandatory `--cert-oidc-issuer`, negative test REJECTS wrong-identity fixture, sign within 5 minutes of OIDC mint, `.sigstore` bundle format only. Owner: SIGN-01..03. Phase 53.
 
-Two more that earn their own phase ownership:
+**Next tier:**
 
-5. **Manifest schema drift (Pitfall 2).** `manifest_version: int` required from day one; unknown fields warn but never refuse; additive-only future-compat rule encoded as a `tests/fixtures/manifest_v1_minimum.toml` round-trip test.
-6. **Entry-point discovery API drift + `pkg_resources` cost (Pitfall 3).** `importlib.metadata.entry_points(group=...)` keyword-arg API only; lint-ban `pkg_resources`; cold-start <100ms benchmark.
+4. **SBOM lists install-time resolved deps, not what the wheel contains** (PITFALL 4). Prevention: generate against `pip install <wheel>` in fresh venv; CycloneDX 1.6 JSON locked; release-gate diffs SBOM against published wheel.
+5. **pip-audit false positives + Dependabot grouping hides CVE PRs** (PITFALL 5). Prevention: dated-comment ignore-list discipline; tracking files for unfixable transitives; security-updates UN-grouped with distinct label.
+6. **CONTRIBUTING.md promises 24h, mandates CLA, mandates Slack** (PITFALL 6). Prevention: "aim to acknowledge within 7 days"; no CLA; Discord optional; CODEOWNERS path-scoped.
+7. **PyPI Trusted Publishing not wired before flip** (PITFALL 9, IF PyPI in v0.6 scope). **Requirements-time decision.**
+8. **Gate flip has no rollback plan** (PITFALL 10). Prevention: `.planning/rollback/flip-gate-revert.md` one-commit-revert template; `docs/POSTFLIP-PLAYBOOK.md` decision matrix; soft launch with 3-5 invited contributors; `accepted-for-review` throttle for first 30 days.
 
 ## Implications for Roadmap
 
-### Single recommended phase decomposition
+**Lock-at-requirements-time decisions (all four files flag these):**
 
-**Adopt the 11-phase decomposition (Phases 40-50).** ARCH.md proposes 8 work-items; PITFALLS.md proposes 11 phases. They converge: ARCH's 8 work-items collapse cleanly into Phases 41-49 with Phase 40 (baseline) and Phase 50 (release) as the GSD bookends v0.4 also used. Splitting docs/tests/reference/gate into their own phases (vs. folding into feature phases) prevents the Pitfall 12 docs-drift trap.
+| Decision | Recommended Lock | Why |
+|----------|------------------|-----|
+| Signing identity | sigstore-python (NOT cosign); gitsign or `git tag -s` (pick one) | sigstore-python is PEP 740 / `pip install` aligned; cosign is for containers (PITFALL 3) |
+| SBOM format | CycloneDX 1.6 JSON | PyPA-adjacent; PyPI PEP 740 consumes CycloneDX; SPDX has thinner Python tooling |
+| Scanner | pip-audit only (NO `safety`) | `safety` paid-tier violates anti-goal; dual-run `-s osv` + `-s pypi` |
+| Fork-PR gating | NO secrets in fork CI; `pull_request_target` ABSENT | v0.5 tests use recorded responses; `safe-to-test` deferred |
+| PyPI Trusted Publishing | DEFER to v0.7+ unless milestone scope expands | OUT OF SCOPE per STACK + ARCHITECTURE |
+| CLA / DCO | NO CLA; DCO optional only | Apache 2.0 sufficient |
+| Stale-bot | NO `actions/stale` | Drew DeVault critique |
+| Conduct reporting | GHSA `[conduct]` title route (reuses existing infra) OR dedicated email | Lock now |
+| `claim:` label automation | Defer; maintainer-assigns-by-comment | Wait for data |
 
-**Phase 40** — v0.5 baseline artifact (mirror of v0.4 Phase 32). Pure infrastructure: snapshot v0.4 cold-start perf so a future plugin-discovery-overhead benchmark has a pinned reference.
+### Phase 51: CI hardening substrate
 
-**Phase 41** — Manifest schema + persistence + public API surface. `plugins/spec.py`, `plugins/manifest.py`, `MANIFEST_V1_SCHEMA`, `plugins/api.py`, `capability_catalog.py`, v5→v6 additive migration. Addresses MANIFEST-01..05, OBSERVE-01 (schema half), MIG-05. Avoids Pitfalls 2, 7, 8, 9, 12.
+**Rationale:** PITFALL 1 + 2 are highest-blast-radius; their fixes are pure-infrastructure and must land BEFORE STATUS.md ever says "open."
+**Delivers:** Workflow YAML lint (`pull_request_target` audit, `actions/checkout` ref audit, no-shell-interpolation via actionlint); `permissions: read-all` top-level on `ci.yml`; every existing `uses:` SHA-pinned via `pinact run`; SHA-pin lint added to `release_gate.py`; pin-freshness warning.
+**Addresses:** T7, T8.
+**Avoids:** PITFALLS 1, 2.
 
-**Phase 42** — Discovery + loading + failure isolation. `plugins/discovery.py`, `plugins/loader.py` (guard stubbed pass-through), `plugins/registry.py`, ruff ban on `pkg_resources`, cold-start benchmark, 3.11+3.12 parametrized discovery test. Avoids Pitfalls 3, 6 (discover+load half).
+### Phase 52: Fork-PR CI split (optional, label-gate scaffolding)
 
-**Phase 43** — Permission model + bounded lifecycle. `plugins/permissions.py`, helper shims (`ctx.filesystem`, `ctx.secrets`, `ctx.net`, `ctx.process`, `ctx.env`), per-version grants + `manifest_hash` tie, `asyncio.wait_for(start, timeout=2.0)`, `plugin_capability_grants_log` audit table. Avoids Pitfalls 1, 5, 6 (bounded-lifecycle half), 10.
+**Rationale:** ONLY if a v0.7+ test will need secrets. **Recommended: SKIP and consolidate with Phase 51** since v0.5 tests use recorded responses.
 
-**Phase 44** — Installer flow (two-phase install + upgrade diff). `cli/plugins_cmd.py` with `install/uninstall/list/info/enable/disable/update/grant/revoke`. `subprocess.check_call([sys.executable, "-m", "pip", "install", "--require-virtualenv", spec])`. Two-phase: download → validate → install `--no-build-isolation`. Upgrade-with-diff: unchanged auto / reduced auto / expanded re-prompt. Avoids Pitfalls 4, 5, 10.
+### Phase 53: Signing substrate (release.yml NEW)
 
-**Phase 45** — REST API + dashboard plugins tab. Six `/api/plugins` routes; `/plugins` dashboard tab; `/api/observability/plugins` route; dashboard rollup tile on `/observability`. Addresses DASH-01..03, OBSERVE-01 (read path). Avoids Pitfalls 5, 7, 10.
+**Rationale:** Foundational artifact-trust deliverable. Must precede Phase 58 (release-gate). Sign step at position 2 (OIDC TTL ~10 min).
+**Delivers:** `.github/workflows/release.yml`; sigstore-python wheel + sdist + SBOM signing; `actions/attest-build-provenance@v4.1.0` SLSA L2; workflow-scoped `EXPECTED_IDENTITY` in `scripts/verify_release.py`; negative-identity test; expired-token test; gitsign for tag signing OR `git tag -s` documented (one-character change in `docs/RELEASE.md`).
+**Avoids:** PITFALLS 3, 9, 11.
 
-**Phase 46** — Test surface (three-tier fixtures + pitfall regression tests). `fake_plugin_entry_points` monkeypatch fixture; `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`); `tests/test_plugin_pitfalls/` with one test per pitfall; broken-plugin fixtures. Avoids Pitfall 11.
+### Phase 54: SBOM + supply-chain scan substrate
 
-**Phase 47** — Documentation refresh (docs trio). `docs/PLUGINS.md`, `docs/PLUGIN-SECURITY.md` (Threat Model section), `docs/MIGRATION-v0.4-to-v0.5.md`. Docs-build step diffs `MANIFEST_V1_SCHEMA` runtime vs. `docs/manifest-v1.schema.json`. Avoids Pitfalls 1, 12.
+**Rationale:** Independent of Phase 53 in execution; both consume `release.yml` substrate. **Can run parallel with Phase 53** (mirrors v0.5 Phase 44 || 45).
+**Delivers:** `cyclonedx-py environment` in `release.yml` against installed-from-wheel venv; CycloneDX 1.6 JSON locked; two-SBOM convention (clean + `[dev,otel]`); `audit.yml` NEW with `pypa/gh-action-pip-audit@v1.1.0` dual-run + `dependency-review-action@v5` with license allowlist; `.github/pip-audit-ignore.txt` mandatory dated comments; `.github/pip-audit-tracking/` directory.
+**Avoids:** PITFALLS 4, 5.
 
-**Phase 48** — Reference plugin (`horus-os-example-plugin`). Separate package at `examples/horus-os-example-plugin/`; four scenarios (simple tool + capability, config-reading tool, lifecycle adapter, two-tools-one-adapter). CI lint rejects any `from horus_os` import not from `horus_os.plugins.api`. CI runs `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins`. Avoids Pitfall 8.
+### Phase 55: Dependabot tuning + zizmor
 
-**Phase 49** — Three-OS install gate + release-gate extension. `scripts/release_gate.py` gains docs-drift check, plugin install-smoke on each OS, manifest schema-in-docs equality with runtime constant, reference plugin manifest validates, v0.4 fixture round-trip survives v5→v6.
+**Rationale:** Dependabot github-actions only meaningfully bumps SHA-pinned references (Phase 51 prereq). Security-update exclusion must land BEFORE Dependabot opens its first grouped-security PR.
+**Delivers:** `.github/dependabot.yml` with both ecosystems; `applies-to: version-updates` on groups; `security-update` label + template; `zizmor` workflow.
+**Avoids:** PITFALLS 2, 5.
 
-**Phase 50** — v0.5.0 release. Tag, CHANGELOG, GitHub Release with migration notes.
+### Phase 56: Contributor docs + templates (staged)
 
-**Phase ordering rationale:**
+**Rationale:** Can run parallel with Phase 57. All prose lands BUT gate-flip toggle prose is STAGED, ACTIVATED in Phase 60.
+**Delivers:** CONTRIBUTING.md rewrite (claim flow, 7-day acknowledgement SLA, anti-goals, NO 24h, NO CLA, Discord optional); PR template NOTICE staged for deletion + CONTRIBUTING/CoC checkbox; issue templates banners staged; `.github/CODEOWNERS` NEW (path-scoped: workflows, secrets handling, release gate, security policy, NOT `* @Ridou`); CODE_OF_CONDUCT reporting channel; `docs/TRIAGE.md` NEW (label taxonomy ≤15 hard cap, `good-first-issue` rubric, weekly Sunday cadence, "may go silent up to 2 weeks" disclaimer); `docs/LABEL-TAXONOMY.md`; decision files `.planning/decisions/no-cla.md`, `no-stale-bot.md`, `sigstore-keyless.md`, `sbom-cyclonedx.md`.
+**Avoids:** PITFALLS 6, 7, 12.
 
-- **Schema before behavior.** Phase 41's `PluginSpec`, `MANIFEST_V1_SCHEMA`, `plugins/api.py`, and v5→v6 migration are consumed by every later phase.
-- **Discovery + load before permissions.** Permission model needs the database from Phase 41 and the registry from Phase 42; the loader can run without permission enforcement during Phase 42 (guard stubbed).
-- **Installer before dashboard.** The CLI is the test substrate for the API. The dashboard is the second consumer.
-- **Tests + docs + reference + gate in their own phases**, not folded into prior phases (v0.4 lesson: docs slip when folded).
-- **Phase 44 ∥ Phase 45 is the only legitimate parallelism** once Phase 43 ships (mirrors v0.4's Phase 36 ∥ 37). Everything else has hard dependencies.
+### Phase 57: SECURITY.md disclosure flow refresh
 
-### Research flags for plan time
+**Rationale:** Parallel with Phase 56. SECURITY.md "(not active yet)" section deletion staged here, activated in Phase 60.
+**Delivers:** "(not active yet)" section staged for deletion; "aim to" SLO with severity tiers (critical 14d, high 30d, medium 90d, low no commitment); coordinated disclosure 90-day default; over-capacity acknowledgement pattern; supported-versions table refreshed; `docs/MAINTAINER-RUNBOOK.md` or `docs/POSTFLIP-PLAYBOOK.md` (release procedure, freeze triggers, burnout triggers, repo-settings appended to `docs/RELEASE.md`); test-advisory ritual documented.
+**Avoids:** PITFALLS 11, 12.
 
-- **Phase 41:** pydantic v2 error-formatting UX for plugin authors, JSON-Schema export, exact SQLite `ADD COLUMN` idempotency pattern.
-- **Phase 44:** `pip download --no-deps --report -` JSON shape across pip versions, `.pth`-file detection inside wheel RECORD, cross-OS path normalization, Windows line-ending sensitivity on `pip freeze` round-trip.
-- **Phase 49:** Windows + Python Microsoft Store path quirks; synthetic broken-plugin install test on macOS arm64, Ubuntu, Windows.
+### Phase 58: Release-gate extension (8 to 11-13 checks)
 
-**Phases with standard patterns (skip research-phase):** 40, 42, 43, 45, 46, 47, 48, 50.
+**Rationale:** Phase 49 idiom. MUST come after 53-55. Two-tier execution prevents flaky pre-merge.
+**Delivers:** 3-5 new release-gate checks (recommended cut: `release-workflow-signing-present`, `release-workflow-sbom-present`, `local-pip-audit-clean`; optional: `audit-workflow-present`, `dependabot-config-present`, `actions-pinned-by-sha`); `--check` enum APPENDED; env-var override; new test file; two-tier split with offline-mode + retry-with-cap; structured JSON report; `scripts/verify_release.py` 5-check trust-chain.
+**Avoids:** PITFALLS 8, 11, all earlier (gate is enforcement layer).
+
+### Phase 59: Soft launch + release rehearsal
+
+**Rationale:** Last opportunity to identify friction BEFORE the public flip.
+**Delivers:** 3-5 invited-contributor sample PRs end-to-end; friction patched; CHANGELOG credits; `v0.6.0-rc1` release rehearsal on fork; `.planning/rollback/flip-gate-revert.md` ready.
+**Avoids:** PITFALL 10.
+
+### Phase 60: Gate flip + v0.6.0 release
+
+**Rationale:** Single atomic commit lands all external-bit-flip prose changes.
+**Delivers:** Atomic commit: STATUS.md TL;DR + milestone row to SHIPPED; README "Project status" rewrite + badge to v0.6.0; CONTRIBUTING.md NOTICE deletion activated; PR template NOTICE deletion activated; SECURITY.md "(not active yet)" deletion activated; `issue-claim-watcher.yml` deleted; saved replies updated; `docs/POSTFLIP-PLAYBOOK.md`; `accepted-for-review` throttle active for 30 days; pinned Discussion announcement; version bumps; CHANGELOG promotion; release_gate.py 11-13/N green; tag pushed (gitsign-signed); release.yml runs; GitHub Release with all artifacts atomically attached.
+**Avoids:** PITFALLS 10, 11.
+
+### Phase Ordering Rationale
+
+- **Phase 51 MUST land first** — PITFALL 1 + 2 hardening is precondition for everything else.
+- **Phases 53 || 54** parallel — both consume Phase 51 substrate but not each other.
+- **Phase 55 after 51** — Dependabot github-actions only works against SHA pins; security-update ungrouping must land BEFORE first grouped PR.
+- **Phases 56 || 57** parallel — different files. Decision files land in Phase 56 BEFORE docs they inform.
+- **Phase 58 after 53-55** — new checks grep files those phases create.
+- **Phase 59 before 60** — rehearsal is dress rehearsal for flip.
+- **Phase 60 lands AS A SINGLE ATOMIC COMMIT** — contributors never see contradictory signals.
+
+### Research Flags
+
+Phases likely needing deeper research during planning:
+
+- **Phase 53 (signing):** sigstore-python identity-verification semantics, gitsign vs `git tag -s` decision, PyPI Trusted Publishing IF in scope.
+- **Phase 55 (Dependabot):** grouped-security-updates beta semantics evolve; pip-audit dual-run timing budget.
+- **Phase 58 (release-gate extension):** two-tier split + offline-mode design (patterns not well-documented in any single source).
+
+Phases with standard patterns (skip research-phase):
+
+- **Phase 51 (CI hardening):** SHA-pinning + actionlint well-trodden.
+- **Phase 56 (contributor docs):** prose against existing v0.5 scaffold; exemplar list comprehensive.
+- **Phase 57 (SECURITY refresh):** targeted edits to existing file.
+- **Phase 59 (soft launch + rehearsal):** maintainer-driven.
+- **Phase 60 (atomic flip):** Phase 50 precedent.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All verified against stdlib docs, PyPI, pip user guide; two new deps current as of 2026-04/05. |
-| Features | HIGH | Cross-verified across Datasette, pytest, Home Assistant, Sphinx, JupyterLab, VS Code. |
-| Architecture | HIGH | Direct line-of-sight to existing v0.1-v0.4 source; six-phase pipeline internally consistent. |
-| Pitfalls | HIGH | Twelve pitfalls verified against named source incidents (Wiz LiteLLM TeamPCP 2025, Checkmarx Command-Jacking, CPython 3.10/3.11/3.12 docs). |
+| Stack | HIGH | Every version verified against PyPI or upstream release page; step shapes verified against Context7 / official GitHub docs |
+| Features | HIGH on table-stakes + anti-features; MEDIUM on borderline differentiators | Exemplar repos cover the bar; borderline calls (CodeQL required, SLSA L3, safe-to-test) explicitly flagged |
+| Architecture | HIGH on integration points; MEDIUM on tool choices PROJECT.md flags for requirements-time locking | Every change maps to precedent phase (38, 39, 47, 48, 49, 50); 15 byte-identity invariants enumerated |
+| Pitfalls | HIGH on failure modes (verified against published 2024-2026 incidents); MEDIUM on first-week probability; LOW on solo-maintainer SLO numbers | Pitfall-to-Phase mapping complete |
 
-**Overall confidence:** HIGH. Ready for requirements + roadmap.
+**Overall confidence:** HIGH.
 
-### Gaps to address at plan time
+### Gaps to Address
 
-- Pydantic error formatting UX (Phase 41 fixture).
-- `.pth`-file detection inside wheel before install (Phase 44 spike).
-- `pip download --report -` JSON output stability across pip versions (Phase 44 floor pin).
-- Capability catalog plain-English copy (Phase 41 draft, Phase 47 refine).
-- Per-plugin LLM cost attribution OBSERVE-02 (Phase 41 30-min spike).
-- Resolve `horus_os_compat` (PEP 440 SpecifierSet) vs `min_horus_os_version` (raw string) — recommendation: `horus_os_compat`.
+- **PyPI publishing in v0.6 yes/no.** STACK + ARCHITECTURE recommend defer; FEATURES treats T1-T2 as table-stakes IF publishing happens; PITFALL 9 sequencing applies IF in scope. **Requirements-definer must lock before Phase 53 plans.**
+- **Tag signing mechanism: gitsign vs `git tag -s`.** ARCHITECTURE recommends one-character change in `docs/RELEASE.md`; PITFALL 11 + decision file recommend gitsign with OIDC. Affects whether maintainer needs local GPG keypair in scope.
+- **`safe-to-test` label gate actually needed in v0.6?** v0.5 tests use recorded responses. **Recommendation: NO; defer scaffolding to v0.7 if ever.**
+- **Conduct reporting channel:** GHSA-private-advisory `[conduct]` title route vs dedicated email. ARCHITECTURE leans GHSA route. Lock at requirements time.
+- **Number of new release-gate checks.** STACK proposes 5; ARCHITECTURE recommends 3 for cleanest cut. **Recommendation: ship 3-5 depending on greppable redundancy tolerance.**
+- **`docs/MAINTAINER-RUNBOOK.md` vs `docs/POSTFLIP-PLAYBOOK.md` naming/scope.** **Recommendation: ONE doc covering both release procedure AND freeze/burnout triggers.**
+
+## Sources
+
+### Primary (HIGH confidence)
+
+- **Context7:** `/sigstore/docs`, `/pypa/pip-audit`, `/cyclonedx/cyclonedx-python-lib`
+- **PyPI release pages:** sigstore 4.2.0, pip-audit 2.10.0, cyclonedx-bom 7.3.0, safety (paid-tier confirmed)
+- **GitHub release pages:** attest-build-provenance v4.1.0, gh-action-sigstore-python v3.3.0, gh-action-pip-audit v1.1.0, dependency-review-action v5.0.0, pinact v4.0.0
+- **Official docs:** GitHub Actions security-hardening, PyPI digital attestations (PEP 740), PEP 807 Trusted Publishing, slsa.dev v1.0
+- **Existing horus-os files:** PROJECT.md, ci.yml, release_gate.py, RELEASE.md, pyproject.toml, SECURITY.md, STATUS.md, CONTRIBUTING.md, PR template
+
+### Secondary (MEDIUM confidence)
+
+- 2024-2026 supply-chain incidents: Ultralytics 8.3.41-46 (PyPI Blog, Wiz, Snyk); tj-actions CVE-2025-30066 (Unit 42, Cycode, Harness); "testedbefore" March 2026 (#179107); Spotipy GHSA-h25v-8c87-rvm8; sigstore-java GHSA-jp26-88mw-89qr; Wiz LiteLLM TeamPCP
+- Best practices: GitHub Security Lab (pwn-requests, untrusted-input), StepSecurity, Trail of Bits, Sbomify 2026 PyPI scan (1.58% adoption, ALL CycloneDX)
+- CLA/DCO: Ben Balter, Open Source Guides "Maintaining Balance," OSI/Socket survey
+- Stale-bot critiques: Drew DeVault, Jacob Tomlinson, Curtis Newton IEEE study
+- Exemplar repos: pypa/sampleproject, pypa/pip-audit, sigstore/sigstore-python, pydantic, httpx, black, uv, cpython, devguide, numpy, dependabot-core
+
+### Tertiary (LOW confidence, needs validation at planning time)
+
+- Specific solo-maintainer SLO numbers
+- First-week PR-volume estimates (throttle triggers: 25 PRs, 75 issues)
+- OpenSSF Scorecard initial target (7.5+)
 
 ---
-*Research completed: 2026-05-26*
+*Research completed: 2026-05-29*
 *Ready for roadmap: yes*

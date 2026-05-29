@@ -1,269 +1,389 @@
 # Feature Research
 
-**Domain:** Plugin system for a self-hosted Python AI command center (horus-os v0.5)
-**Researched:** 2026-05-26
-**Confidence:** HIGH (cross-verified across 6 named plugin systems; v0.5 already locked PROJECT.md decisions on entry-points + local dir + TOML manifest + default-deny capabilities + in-process loading)
+**Domain:** Contribution-gate readiness for a self-hosted OSS Python project (horus-os v0.6, flipping from solo-dev to outside-PRs-welcome)
+**Researched:** 2026-05-29
+**Confidence:** HIGH for table-stakes mechanics (sigstore, dependabot, fork-PR hardening), MEDIUM for which differentiators are worth horus-os's CI minutes, HIGH for the anti-feature list (CLA, mandatory DCO, mandatory Slack are well-documented anti-patterns).
 
 ## Scope
 
-horus-os v0.1-v0.4 already shipped: Tool registry, Adapter Protocol with lifecycle hooks (start/stop/error states), AdapterRegistry, ObservationBus + per-event SQLite persistence, `/observability` dashboard tab with cost/latency/reliability panels, `horus-os usage` CLI, opt-in OTel exporter behind `[otel]` extra. v0.5 adds **third-party packaging on top of those primitives** — manifest, installer, discovery, capability declarations, and dashboard surface for plugins. It does NOT introduce a new hook framework, a new persistence layer, or OS-level sandboxing.
+The v0.6 milestone flips ONE bit externally ("outside PRs welcomed and safe to merge") and lands the infrastructure that makes the flip safe internally. This document inventories the features that any mature 2026 OSS Python project must, should, or must-not ship to support that flip, grouped into seven categories:
 
-PROJECT.md has already locked:
-- TOML manifest format (`horus-plugin.toml`)
-- Discovery via Python entry-points (group `horus_os.plugins`) + `~/.horus-os/plugins/` directory drop-in
-- Default-deny capability grants persisted in SQLite, revocable from dashboard
-- `horus-os plugins install|uninstall|list|info` CLI wrapping `pip`
-- One reference plugin (`horus-os-example-plugin`)
-- No HTTP catalog, no OS-level isolation in v0.5
+1. CI signing + signed releases
+2. Supply-chain hygiene (SBOM, vulnerability scanning, Dependabot)
+3. Fork-PR hardening
+4. Contributor experience (CONTRIBUTING.md, PR template, issue templates)
+5. SECURITY.md + disclosure
+6. CODEOWNERS + triage
+7. Gate-flip mechanics (external surface changes when v0.6.0 ships)
 
-This research feeds the **REQUIREMENTS.md categories** (MANIFEST, DISCOVERY, INSTALL, PERMISSION, ISOLATE, DASH, REFERENCE, plus continuation TEST/REL/MIG). Each finding is tagged **table-stakes**, **differentiator**, or **anti-feature**.
+Existing v0.5.0 baseline is already partial: bug/feature issue templates exist, PR template exists, saved replies exist, claim-watcher workflow exists, basic SECURITY.md and CONTRIBUTING.md exist. The gaps below are the v0.6 delta.
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-Features users assume exist in any modern Python plugin system. Missing these = product feels half-finished. Each row is backed by 2+ named examples.
+Mature OSS Python projects in 2026 are expected to have all of the following. A first-time outside contributor checks for them before opening a PR, and a security-conscious downstream consumer checks for them before adding the package to their stack. Missing any of these in v0.6 means the gate-flip is incomplete.
 
-| Feature | Why Expected | Complexity | Examples / Sources |
-|---------|--------------|------------|--------------------|
-| **MANIFEST-01: Declared name + version + horus-os-compatibility range** | Every plugin system declares these. They are the minimum a user needs to answer "what is this and will it work?" before granting trust. | LOW | Home Assistant `manifest.json` (domain, name, version, requirements); VS Code `package.json` (name, version, engines.vscode); pyproject.toml (name, version, requires-python) |
-| **MANIFEST-02: Declared entry points (which tools and adapters this plugin contributes)** | Users and the dashboard must know what the plugin contributes before loading it, not after. "Contribution points" are the canonical pattern. | LOW | VS Code `contributes` section (commands, views, languages, etc.); Home Assistant `integration_type` + dependencies; Datasette plugin hooks listed in `/-/plugins` |
-| **MANIFEST-03: Declared capabilities/permissions requested** | Users grant trust on declared scope. A plugin that silently grabs file/network access is the canonical anti-pattern. | MEDIUM | Home Assistant manifest permission policy (entity/domain grants, "True or None=deny" default); VS Code `capabilities.untrustedWorkspaces.supported` + restrictedConfigurations; Datasette's `actor_from_request` + permission hooks |
-| **MANIFEST-04: Declared author / homepage / issue tracker** | Required to triage bugs and verify provenance. Users won't install plugins without an "I know where to report this" path. | LOW | Home Assistant `codeowners` + `issue_tracker` + `documentation` (required for core); VS Code `publisher` + `repository` + `bugs.url` |
-| **DISCOVERY-01: Python entry-points group as primary discovery** | The canonical Python plugin discovery mechanism. Works for `pip install`-ed plugins out of the box. Two named ecosystems use it identically. | LOW | pytest `pytest11` group; Datasette `datasette` group; Sphinx setup() via `extensions = []` in conf.py (different mechanism but same intent); JupyterLab via labextension entry points |
-| **DISCOVERY-02: Local directory drop-in for unpublished/dev plugins** | Without this, plugin development requires `pip install -e` round-trips. Every mature ecosystem has both paths. | LOW | Datasette `--plugins-dir=plugins/`; pytest `conftest.py` auto-discovery; Sphinx local extensions via `sys.path.append`; Home Assistant `custom_components/` |
-| **INSTALL-01: `install <pip-spec>` wraps pip into active venv** | "Open a shell and run pip" is unacceptable UX for a self-hosted product. Every successful plugin system ships its own wrapper. | LOW | Datasette `datasette install <name>` (explicitly documented as "thin wrapper around pip install"); JupyterLab `pip install` + `jupyter labextension enable`; HACS download-to-custom_components |
-| **INSTALL-02: `uninstall <name>`** | Symmetrical with install. Users expect to remove what they install via the same surface. | LOW | Datasette `datasette uninstall`; pip uninstall; HACS Remove action |
-| **INSTALL-03: `list` shows installed plugins with version + status** | "What's installed?" is the first question a user has after install. | LOW | Datasette `datasette plugins`; `pip list`; JupyterLab `jupyter labextension list`; Home Assistant Integrations page |
-| **INSTALL-04: `info <name>` shows manifest contents + granted capabilities** | "What does this plugin do and what can it touch?" before users grant trust. | LOW | `pip show`; VS Code Extensions detail pane; Home Assistant integration detail page |
-| **INSTALL-05: First-run capability prompt — display requested capabilities, require explicit user confirmation** | Default-deny posture requires an explicit grant. Plugins that activate without consent are the canonical security anti-pattern. | MEDIUM | VS Code 1.97+ "trust the publisher" dialog on first install; Home Assistant config_flow consent step; mobile app permission prompts (the obvious analog) |
-| **PERMISSION-01: Default-deny posture — declared capability is not the same as granted capability** | Industry consensus across security and plugin systems. "Default-allow" plugin systems get owned. | LOW | Home Assistant policy: `True=grant, None=use default=deny`; sandbox firewall guidance ("treat it like a firewall: default-deny, then explicitly allow"); VS Code Restricted Mode default-disables extensions in untrusted workspaces |
-| **PERMISSION-02: Grants persisted with the plugin name + version on which they were granted; re-prompt when a plugin upgrade widens the requested set** | Users will accept a narrow set then never see the upgrade that widens it, otherwise. Already locked in PROJECT.md as a design constraint. | MEDIUM | Mobile OS permission models (iOS/Android re-prompt on scope expansion); VS Code workspace trust re-prompts when extension publisher changes |
-| **PERMISSION-03: Grants are revocable from the dashboard at any time** | Symmetrical with grant. If a user can grant from the UI, they must be able to revoke from the UI. | LOW | VS Code Manage Trusted Domains; Home Assistant per-entity permissions; iOS/Android settings |
-| **ISOLATE-01: A broken plugin (import error, manifest validation failure, exception in start hook) MUST NOT crash horus-os** | The single most common reason users abandon a plugin host. Home Assistant recovery mode and pytest's plugin error handling both exist because this happens. | MEDIUM | Home Assistant: `ConfigEntryNotReady` triggers retry, never crashes core; Recovery Mode boots minimal set if a user-configured integration takes down startup; pytest plugin load errors are caught and reported; pluggy `_multicall` wraps hook impls in try/except |
-| **ISOLATE-02: Plugin load failures degrade to a visible "plugin error" status, not silent removal** | "Why isn't my plugin working?" with no surface in the dashboard is the worst possible UX. | LOW | Home Assistant integration page "Failed setup, will retry" + error log link; VS Code Extensions view error indicator; JupyterLab disable-on-error pattern |
-| **ISOLATE-03: Plugin enable/disable toggle without uninstall** | Users need to A/B isolate which plugin is causing trouble. Uninstall is too coarse. | LOW | JupyterLab `jupyter labextension disable/enable`; Home Assistant Integrations disable toggle; VS Code Enable/Disable per-extension; Datasette `--plugins-dir` filtering |
-| **DASH-01: Plugins tab listing installed plugins with name, version, declared tools/adapters, granted capabilities, lifecycle status, last error** | Already locked in PROJECT.md. Minimum dashboard surface to make a user trust the plugin set. | MEDIUM | Home Assistant Integrations page (status, last activity, error count); VS Code Extensions view; Datasette `/-/plugins` JSON endpoint |
-| **DASH-02: Per-plugin enable/disable toggle on the plugins tab** | Symmetrical with the CLI toggle. v0.3 already shipped this pattern for adapters at `/adapters`. | LOW | Existing horus-os v0.3 `/adapters` page (precedent); Home Assistant; JupyterLab Plugin Manager |
-| **REFERENCE-01: One published reference plugin in the same repo, demonstrating the full happy path** | Without a working example, third-party authors abandon plugin development. Already locked in PROJECT.md as `horus-os-example-plugin`. | LOW | Datasette `datasette-plugin` cookiecutter template (creates skeleton + test + CI workflow); pytest plugin examples in docs; Home Assistant `example_integration` in core; VS Code `vscode-extension-samples` repo |
-| **REFERENCE-02: Plugin author docs — manifest schema, capability list, lifecycle contract, test harness** | "I want to write one of these" is a documented user need. Without docs, only the maintainer ships plugins. | MEDIUM | Datasette `Writing plugins`; Home Assistant Developer Docs `creating_integration_manifest`; VS Code Extension API docs; pytest "Writing plugins" |
+| # | Feature | Why Expected | Complexity | Shipped definition |
+|---|---------|--------------|------------|--------------------|
+| T1 | **PyPI Trusted Publishing via OIDC** (`pypa/gh-action-pypi-publish`) | Long-lived PyPI API tokens are the #1 supply-chain compromise vector in 2025-2026. Trusted Publishing eliminates the stored credential. About 22% of PyPI repos have already migrated. | LOW | `release.yml` workflow publishes to PyPI with `id-token: write`; no `PYPI_API_TOKEN` secret exists in the repo. Configured in PyPI project settings as "Trusted Publisher: GitHub > Ridou/horus-os > release.yml > pypi". Exemplar: every modern PyPA project, e.g. `psf/black`. |
+| T2 | **PEP 740 attestations on every release artifact** | `pypa/gh-action-pypi-publish` generates and uploads Sigstore-backed PEP 740 attestations automatically with no extra config when `id-token: write` is set. PyPI rejects manual non-Trusted-Publisher attestations. GA since Nov 2024. | LOW (free with T1) | Every wheel + sdist on PyPI has a green "verified" attestation badge on `https://pypi.org/project/horus-os/<version>/`. Verifiable via `python -m pypi_attestations verify pypi --repository https://github.com/Ridou/horus-os horus_os-0.6.0-py3-none-any.whl`. Exemplar: `pip install pypi-attestations && pypi-attestations verify pypi --repository https://github.com/pypa/sampleproject sampleproject-*.whl`. |
+| T3 | **Signed git tags** (sigstore-keyless or GPG) | A signed release tag binds the released code to a verifiable maintainer identity. Required by SLSA L2+ and by most downstream rebuild auditors. | LOW | Release workflow runs `git tag -s v0.6.0` (GPG) OR a sigstore-keyless tag attestation is uploaded as a release asset. Verifiable via `git verify-tag v0.6.0`. Exemplar: `cryptography` project signs tags. |
+| T4 | **SBOM generated and attached to the GitHub Release** | Required by US Executive Order 14028 ecosystem and increasingly mandated for any package included in a regulated stack. CycloneDX is the de facto standard in the Python ecosystem (per Sbomify's 2026-03 PyPI scan: of the 1.58% of packages shipping SBOMs, ALL are CycloneDX, ZERO are SPDX). | LOW | `release.yml` runs `cyclonedx-py environment` (or `cyclonedx-py requirements`), uploads `horus-os-0.6.0.cdx.json` as a release asset via `softprops/action-gh-release`, and the release-gate refuses to ship a tag without it. CycloneDX 1.6+ JSON. Exemplar: projects shipping via `cyclonedx-bom` integrated through `softprops/action-gh-release`. |
+| T5 | **pip-audit gating on every PR** (PyPA-blessed scanner, OSV-backed) | Dependabot alerts catch known-bad versions in the dep tree but only AFTER merge. pip-audit blocks the PR if a vuln is present. PyPA-blessed, no third-party paid account required. | LOW | `.github/workflows/security.yml` runs `pypa/gh-action-pip-audit@v1` on every PR. Default fail-on-vuln (NOT `internal-be-careful-allow-failure`). Required status check on `main` branch protection. Exemplar: `pypa/pip-audit` itself dogfoods this. |
+| T6 | **Dependabot config for `pip` and `github-actions`** | The 2026 standard is `version: 2` with `package-ecosystem: pip` AND `package-ecosystem: github-actions`, both on `weekly` cadence, with grouped updates. GitHub Actions ecosystem is critical — unpinned action references are how supply-chain attacks land. | LOW | `.github/dependabot.yml` with two ecosystems, weekly schedule, grouped patterns (one PR per ecosystem per week, not N PRs). Cooldown of 5 days on Actions to dodge zero-day-malicious releases. Exemplar: `dependabot/dependabot-core/.github/dependabot.yml`. |
+| T7 | **All GitHub Actions pinned to full commit SHA** | Tag references (`@v4`) are mutable. SHA pinning is the only immutable reference and is required by SLSA, OpenSSF Scorecard, and StepSecurity. Dependabot can still update the SHAs via PR. | MEDIUM (initial conversion is one-time grunt work; `pinact` or `zizmor` automates it) | Every `uses:` line in `.github/workflows/*.yml` references a 40-char SHA with a `# v4.1.7` comment. `zizmor .github/workflows/` passes clean in CI. Exemplar: `pip-audit`'s own workflows. |
+| T8 | **`pull_request_target` is metadata-only OR absent entirely** (no fork-code checkout in trusted context) | This is the #1 fork-PR security mistake of the last three years (the "Pwn Request" class). Still hitting major projects in 2026. | LOW | The fork-CI pipeline uses `pull_request` (untrusted token, no secrets) for code execution. If `pull_request_target` is used at all, it ONLY runs metadata steps (labeling, commenting) and never `actions/checkout` of `pull_request.head.sha`. Exemplar: `numpy/numpy` audit-passed pattern. |
+| T9 | **First-time-contributor approval gate enabled** | GitHub-native feature, no code needed. Default since 2021. Set "Require approval for first-time contributors" in repo Settings → Actions → General. Approval is per-workflow-run, so every push re-triggers it. | LOW | Repo setting verified at gate-flip time and documented in `docs/MAINTAINER-RUNBOOK.md`. Exemplar: any well-run public project. |
+| T10 | **Branch protection on `main`** with required status checks | Without this, the maintainer can accidentally merge a red PR. Status check names must match exactly (matrix jobs need their full name including the OS+Python suffix). | LOW | `main` is protected: required reviews ≥1, required status checks include `lint+test / ubuntu-latest / Python 3.12`, `install-smoke / *`, `install-smoke-plugin / *`, `pip-audit`, dismiss stale reviews, no force-push. Documented in `docs/MAINTAINER-RUNBOOK.md`. Exemplar: standard GitHub setup. |
+| T11 | **`SECURITY.md` with private channel + acknowledgement SLO** | Industry convention: 48h acknowledgement, 7d initial response, 90d coordinated disclosure. GHSA is the table-stakes channel (no separate PGP key needed). | LOW | Existing `SECURITY.md` upgraded: 7d ack → **48h ack** (industry norm in 2026), explicit 90d disclosure window, scope expanded to cover plugins (v0.5), reproducer-required language. Exemplar: `pydantic/pydantic` SECURITY.md is minimal-but-correct ("use the Security tab"). horus-os expands slightly because its threat surface (capability grants, fork PRs) is larger. |
+| T12 | **`CONTRIBUTING.md` with claim flow, branch policy, commit format, test/doc expectations** | Existing file already covers most of this. v0.6 delta: remove the "not accepting outside PRs" banner, add a "first PR walkthrough" subsection. | LOW | Banner rewritten ("contributions welcomed"). New sections: "Your first PR: end-to-end walkthrough", "What happens after you open a PR" (label, automated checks, review SLA, merge cadence). Existing scope-check, dev-setup, workflow, code-style sections retained verbatim. Exemplar: `encode/httpx/docs/contributing.md` ("contributions should generally start out with a discussion"). |
+| T13 | **PR template with `Closes #`, test plan, checklist** | Existing file is well-structured. v0.6 delta: remove "NOTICE: not accepting outside PRs" HTML comment, add explicit "I have read CONTRIBUTING.md" checkbox. | LOW | Existing PULL_REQUEST_TEMPLATE.md gets the contribution banner removed and gets one new checkbox: `[ ] I have read CONTRIBUTING.md and CODE_OF_CONDUCT.md`. Exemplar: the existing template is already at the bar set by `pydantic/pydantic`. |
+| T14 | **Issue templates: bug, feature, security pointer** | Existing bug + feature templates work. v0.6 delta: update the "heads-up: not accepting PRs" markdown blocks to "first-time contributors welcome; read CONTRIBUTING.md before substantial PRs." `config.yml` already points security reports to GHSA correctly. | LOW | Both YAML templates updated. `config.yml` unchanged. Exemplar: existing `config.yml` matches the pydantic pattern. |
+| T15 | **CODEOWNERS** with maintainer auto-assignment | Auto-assigns the maintainer as reviewer on every PR, no exceptions. For a solo maintainer, this is one line: `* @Ridou`. | LOW | `.github/CODEOWNERS` ships with `* @Ridou` plus area-specific overrides (`/docs/ @Ridou`, `/src/horus_os/plugins/ @Ridou`). Trivial today; valuable if a second maintainer joins. Exemplar: `python/cpython/.github/CODEOWNERS`. |
+| T16 | **CODE_OF_CONDUCT.md with a reporting address** | Existing file references Contributor Covenant 2.1 but says "no public reporting address until v0.1 ships." That deadline has long passed. Reporting channel must be filled in. | LOW | Existing file edited: reporting channel becomes "open a private GHSA-style advisory at https://github.com/Ridou/horus-os/security/advisories/new, mark the title `[conduct]`" OR a dedicated email if the maintainer has one. The "private GHSA" route reuses existing infra. Exemplar: `psf/black` uses `psf-conduct@python.org`. |
+| T17 | **STATUS.md TL;DR rewritten** to "contributions OPEN" | The single externally-visible bit-flip. STATUS.md is what every contributor reads first (linked from README banner, saved replies, claim-watcher, etc.). | LOW | TL;DR rewritten: "horus-os v0.6.0 opens for outside contributions. PRs from forks are reviewed. Issue claims via the `claim:` label or by maintainer assignment are honored. See CONTRIBUTING.md." Milestone table gets v0.6 marked SHIPPED. "How to follow along" section gets a new "How to contribute" subsection. Pinned Discussion gets a follow-up reply. Exemplar: the existing STATUS.md is already structured to make this flip a single-file edit. |
+| T18 | **README "Project status" section rewritten** with contributor CTAs | Today's README hard-redirects to "outside PRs not merged." That section must flip to invite contribution. | LOW | "Project status" section rewritten: "Active milestone: v0.7 (TBD). Outside contributions welcome — start with `good first issue`, read CONTRIBUTING.md, file an issue first for substantial changes." Release-badge update to v0.6.0. Exemplar: `httpx` README pattern. |
+| T19 | **Saved replies updated** to reflect open-contribution mode | Saved replies #1, #2, #3 are written for the closed-contribution era and would be wrong if pasted post-v0.6. Reply #4 (low-effort AI PR) and #5 (stale issue) stay correct. | LOW | Saved replies #1-#3 rewritten or removed. New replies added: "PR welcome but needs an issue first", "PR is good but rebase/squash", "first-time contributor — here's the merge path". Exemplar: maintainer's discretion. |
+| T20 | **Issue-claim watcher disabled or repurposed** | The existing claim-watcher workflow auto-replies to "I'll take this" with "claims are not honored." Post-v0.6, claims ARE honored (via a `claim:` label or just maintainer assignment). The workflow must be disabled or rewritten. | LOW | `.github/workflows/issue-claim-watcher.yml` either deleted or rewritten to instead post a "thanks — please confirm you have read CONTRIBUTING.md and I'll assign in 48h" reply, with a different marker. Recommendation: delete it; the v0.5 maintainer workflow doesn't need automation here. Exemplar: most projects don't have a claim-watcher at all. |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (Mature Projects Have These; Optional but Valuable)
 
-Features that set horus-os v0.5 apart from a generic plugin system. Not required for launch, but valuable. Each is tagged for inclusion or deferral.
+Features that signal "this is a serious project, not a hobby repo" and that increase the trust budget of outside contributors and downstream consumers. They have real cost (CI minutes, maintenance burden, complexity) so each should be evaluated for fit.
 
-| Feature | Value Proposition | Complexity | v0.5 verdict |
-|---------|-------------------|------------|--------------|
-| **OBSERVE-01: Per-plugin error rate and latency on the existing `/observability` tab** | v0.4 already ships ObservationBus + SQLite persistence + p50/p95 + tool reliability. Extending `tool_invocations.plugin_name` is a column-level migration, not a new pipeline. "Plugin X tools fail 12% of the time" is a unique trust signal no other Python plugin system surfaces by default. | LOW (column addition + label propagation; query module already exists) | **INCLUDE in v0.5.** This is the single highest-leverage feature for differentiation. Reuses v0.4 entirely. |
-| **OBSERVE-02: Per-plugin LLM cost attribution (which plugin's tools spent which dollars)** | If a plugin calls back into the LLM via `delegate_to_agent` or via a tool the plugin contributes, v0.4's cost annotation should attribute that cost to the plugin. Closes the "I installed a plugin and my Anthropic bill doubled — which one?" question. | LOW-MEDIUM (column on `llm_calls`, attribution via trace context) | **INCLUDE in v0.5 if it's a column addition.** Defer if it requires new instrumentation; that's a v0.6 conversation. |
-| **MANIFEST-05: Strict TOML schema validation at install time — reject bad manifests with line-numbered errors** | `validate-pyproject` proves the pattern works; the cost is shipping a JSON schema file and a CI validator. Plugins with malformed manifests fail at install (loud), not at runtime (silent). | LOW | **INCLUDE in v0.5.** Cheap, defensible, prevents an entire class of "why doesn't my plugin work?" bug reports. |
-| **PERMISSION-04: Capability strings are a closed, documented set (not free-form), with copy that explains each in user-facing terms** | Free-form capability strings invite typos and plugin sprawl. A documented closed enum (`filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`, `process.spawn`, `agent.delegate`) keeps prompts and audit honest. | LOW (it's a Python enum + docs page) | **INCLUDE in v0.5.** Bake the enum in code, render the friendly strings in the dashboard prompt. |
-| **ISOLATE-04: Slow-start timeout — if a plugin's `start()` hook blocks more than N seconds, mark it as `slow_start` and continue boot** | Single slow plugin should not delay horus-os boot. Inherited from v0.3's adapter lifecycle (which already has start/stop). | LOW (asyncio.wait_for around start) | **INCLUDE in v0.5.** Extension of existing v0.3 pattern. |
-| **REFERENCE-03: Cookiecutter template (`horus-os-plugin-template`) — `cookiecutter gh:Ridou/horus-os-plugin-template`** | Datasette's single biggest accelerant for third-party authors. The cookiecutter generates manifest + setup.py + test + GH Actions CI in one command. | LOW-MEDIUM (it's a template repo + 1 docs page) | **CONSIDER for v0.5.** Could land in v0.5 release week or be the first follow-up. The reference plugin (`horus-os-example-plugin`) is the must-have; the cookiecutter is the nice-have. |
-| **DASH-03: Plugin-author hyperlinks on the plugins tab (homepage, issue tracker, source)** | Cheap to render from manifest fields. Closes the "I want to file a bug" loop. | LOW | **INCLUDE in v0.5.** Manifest fields exist, render them. |
-| **MANIFEST-06: `quality_scale` analog (bronze/silver/gold) declared by the author and renderable in dashboard** | Home Assistant's quality_scale gives users a quick trust signal independent of stars. For v0.5 we likely just want a "verified by maintainer" badge for the reference plugin, not a tier system. | LOW (just a field) but conceptual complexity (governance) | **DEFER to v0.6+.** A self-declared quality scale is meaningless without governance. Skip. |
-| **INSTALL-06: `horus-os plugins update <name>` and `horus-os plugins update --all`** | Symmetrical with install. Datasette ships `--upgrade` via pip pass-through, but `update` as a first-class verb is more discoverable. | LOW (pip install --upgrade pass-through) | **INCLUDE in v0.5.** It is literally one argparse subcommand. |
-| **PERMISSION-05: Read-only "dry-run" mode — load a plugin with all capabilities denied, see what it tries to do, then grant** | Useful for sketchy third-party plugins; lets users see the actual access pattern before granting. | MEDIUM (requires instrumenting every capability check to log on deny) | **DEFER to v0.6+.** Conceptually elegant, but the value is concentrated on a small audience and the cost is real. |
+| # | Feature | Value Proposition | Complexity / Cost | Shipped definition |
+|---|---------|-------------------|-------------------|--------------------|
+| D1 | **SLSA L3 build provenance** (`slsa-framework/slsa-github-generator`) | One level above PEP 740 attestations. PEP 740 proves "this artifact came from this GitHub workflow"; SLSA L3 additionally proves "in an isolated builder that the maintainer cannot tamper with mid-build." Required by regulated downstream consumers. | MEDIUM (~3-5 min added per release; one-time workflow integration) | `release.yml` invokes `slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.x.y` to emit `*.intoto.jsonl` provenance, attached as a release asset. Verifiable via `slsa-verifier verify-artifact horus_os-0.6.0-py3-none-any.whl --provenance horus_os-0.6.0.intoto.jsonl --source-uri github.com/Ridou/horus-os`. Exemplar: `sigstore/sigstore-python`. **Worth it for horus-os?** Borderline. PEP 740 attestations are ~80% of the SLSA-L3 value at 5% of the implementation cost. Recommendation: ship PEP 740 in v0.6; consider SLSA L3 in v0.7+ if a downstream user asks for it. |
+| D2 | **OpenSSF Scorecard with public badge** | Public scorecard score (e.g. 8.2/10) on README. Drives a 6-12 month feedback loop on supply-chain hygiene. Free, automated, no maintenance. | LOW (one workflow, one badge URL) | `.github/workflows/scorecard.yml` runs weekly, publishes results to `https://api.securityscorecards.dev`. Badge in README. Initial target: 7.5+. Exemplar: `pypa/pip` scores 8.6. **Cost:** ~2 min/week CI. **Worth it for horus-os?** YES — the badge is a strong external trust signal and surfaces concrete improvements (pinning, dependency review). |
+| D3 | **CodeQL code scanning on every PR** | GitHub-native SAST for Python. Catches taint flows, injection, deserialization issues. Free for public repos. | HIGH (~15-30 min added per PR run; configure language matrix) | `.github/workflows/codeql.yml` with `language: python` and the default queryset. Required status check on `main`. Results in the Security tab. **Cost:** ~15 min/PR (CodeQL on dynamic languages is significantly slower than the lint+test matrix). **Worth it for horus-os?** MEDIUM. CodeQL on Python is less valuable than on compiled languages, and 15 min/PR doubles CI wait time. Recommendation: include in v0.6 but only on `push` to `main` and on a weekly schedule, NOT as a required PR check. Defer the PR-gate decision to v0.7 once horus-os has data on false-positive rate. |
+| D4 | **`safe-to-test` label gate for fork PRs needing real CI** | Fork PRs run a reduced CI (no secrets, no LLM calls, no live-provider tests). A maintainer-applied `safe-to-test` label triggers the full CI in `pull_request_target` context. The label is auto-removed after each run to force re-vetting on every push. | MEDIUM (one workflow file + label management discipline) | `.github/workflows/fork-pr-full-ci.yml` uses `nilsreichardt/verify-safe-to-test-label` action. Label managed by maintainer. Documented in `docs/MAINTAINER-RUNBOOK.md`. Exemplar: `dvc/dvc` ships this pattern. **Worth it for horus-os?** Conditional — only if any test in the suite needs real LLM API keys or other secrets. The existing v0.5 suite says "provider tests use recorded responses and adapters" — meaning **NO secrets needed in PR CI**. Recommendation: **SKIP this feature** unless a v0.7 test needs live keys. The cheaper path is "fork PRs never see secrets, full stop." See A3 in anti-features. |
+| D5 | **`workflow_run` pattern for trusted post-test reporting** | Used when fork-CI needs to comment on the PR or post results that require write access (e.g. perf regression numbers). Workflow A runs untrusted on `pull_request`, uploads artifacts. Workflow B runs trusted on `workflow_run: completed`, downloads artifacts, comments. | MEDIUM | Two workflow files: `fork-ci.yml` (untrusted, runs the matrix on fork PRs), `fork-ci-report.yml` (trusted, downloads artifacts via `actions/download-artifact`, posts a comment). **Worth it for horus-os?** Only if a v0.7 metric (e.g. capture-overhead benchmark numbers) needs PR-side commentary. v0.6 doesn't need it; existing `pytest tests/perf/test_capture_overhead.py` job is fine running in-PR. Recommendation: SKIP for v0.6. |
+| D6 | **Triage SLA doc + label taxonomy** | `docs/TRIAGE.md` documents the triage cadence ("48h initial label, 7d substantive response"), label taxonomy (`type:bug`, `type:feature`, `area:cli`, `area:dashboard`, `area:plugins`, `area:adapters`, `area:observability`, `priority:p1/p2/p3`, `good first issue`, `help wanted`, `needs-info`, `wontfix`), and the maintainer's saved-replies inventory. | LOW (writing prose) | `docs/TRIAGE.md` shipped, label list applied to the repo, `good first issue` and `help wanted` labels seeded on 3-5 actual issues. Exemplar: `python/devguide/triaging.rst`. **Worth it for horus-os?** YES — without it, "good first issue" is a lie. Need at least 3 real `good first issue` candidates at gate-flip time. |
+| D7 | **Dependency Review action on every PR** | GitHub-native check that calls out new vulnerable dependencies introduced by the PR diff. Free for public repos. Complements pip-audit (which checks the existing tree). | LOW | `actions/dependency-review-action` step in lint-and-test workflow. Required status check. Exemplar: GitHub's own docs ship the pattern. **Worth it for horus-os?** YES — table-stakes-adjacent, near-zero cost. Borderline-table-stakes; defer to differentiator only because it's a thin layer on top of pip-audit. |
+| D8 | **`zizmor` audit in CI** | Static analyzer for GitHub Actions security issues (pwn-request, unpinned actions, missing permissions). Single command, single workflow file. | LOW | `.github/workflows/zizmor.yml` runs `zizmor .github/workflows/` on every PR. Required status check. Exemplar: `pip-audit` itself runs zizmor. **Worth it for horus-os?** YES — locks in the fork-PR hardening choices once made. Roughly the SAST equivalent of pip-audit for workflows. |
+| D9 | **`CITATION.cff`** for academic-citation metadata | Makes the repo citeable as a software artifact in academic contexts. Plain YAML, no CI cost. | LOW | `CITATION.cff` at repo root. Exemplar: many Python research projects. **Worth it for horus-os?** UNLIKELY — horus-os is not academic. Skip unless someone asks. |
+| D10 | **`FUNDING.yml`** with GitHub Sponsors / Ko-fi link | Surfaces a sponsorship button on the repo. Useful if the maintainer wants to accept sponsorship. | LOW | `.github/FUNDING.yml` with `github: [Ridou]` or `custom: [...]` link. **Worth it for horus-os?** Maintainer's call — purely a policy decision, no engineering cost. Recommend: defer. |
+| D11 | **Discussions enabled with categories pre-seeded** | Discussions is the right home for design questions, real-use feedback, and "is this in scope?" conversations — keeps the issue tracker focused on actionable defects. STATUS.md and CONTRIBUTING.md already direct users here. | LOW (repo setting) | Discussions enabled. Categories: Announcements (pinned: Project Status), Q&A, Ideas (scope proposals), Show and Tell (real-use writeups). Existing pinned STATUS post updated for v0.6.0 flip. Exemplar: `pydantic/pydantic` uses this exact category set. **Worth it for horus-os?** YES — referenced by every other contributor-facing doc; without it, the redirects are broken. |
+| D12 | **Pinned "Project Status" Discussion** | The existing `DISCUSSION_STATUS_POST.md` draft is ready. Posting it and pinning it at v0.6.0 ship turns it into the rolling external update channel. | LOW (one-time post + pin) | Post the draft (now updated for v0.6), pin in Announcements category, reply to the existing pinned post (if one exists) announcing the flip. Exemplar: the draft itself. |
+| D13 | **Reviewers SLA pinned in CONTRIBUTING.md** ("expect a first response within 7 days") | Sets realistic contributor expectations. Sub-100% adherence is fine if the doc says "best effort, solo maintainer." | LOW | New "Response SLA" section in CONTRIBUTING.md: "First triage label within 7 days. Substantive review within 14 days. Solo maintainer; cadence depends on what's on the active milestone." Exemplar: `psf/black` is honest about its review backlog. |
+| D14 | **`auto-merge` for Dependabot grouped PRs after CI** | Mature pattern: Dependabot opens a grouped PR weekly, CI passes, auto-merge fires. Reduces maintainer toil to zero on green updates. | LOW | `.github/workflows/dependabot-auto-merge.yml` that calls `gh pr merge --auto --squash` for Dependabot PRs that are patch/minor only. Major bumps still need manual review. **Worth it for horus-os?** YES once the supply-chain checks are sturdy enough to trust. Recommendation: defer to v0.6.x patch release, not v0.6.0 itself — flip the gate first, automate the green path second. |
+| D15 | **Maintainer runbook** (`docs/MAINTAINER-RUNBOOK.md`) | Internal-facing doc that captures: release procedure, triage routine, fork-PR review checklist, security-advisory drafting steps, branch-protection settings, "what to do when X breaks." Reduces the keep-this-in-my-head burden. | LOW (writing prose) | `docs/MAINTAINER-RUNBOOK.md` shipped (in the repo, public — no secrets in it). Exemplar: `python/cpython/Doc/howto` series. **Worth it for horus-os?** YES — solo maintainer, no team Slack, no Notion. This file is the institutional memory. |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+### Anti-Features (Commonly Adopted, Actively Wrong For horus-os)
 
-Features that look good in v0.5 brainstorms but create rewrite cost, security debt, or scope sprawl. Ship none of these in v0.5. PROJECT.md already calls out the hosted catalog and OS-level isolation; this section adds the ones not yet in `Out of Scope`.
+Features that are common in older or corporate-OSS projects but are recognized in 2026 as friction or anti-patterns. horus-os should explicitly NOT ship these. Naming them explicitly is more useful than silently skipping them — it documents the decision so it doesn't get re-litigated.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Hosted plugin marketplace / catalog API in v0.5** | "Users will want to browse plugins from the dashboard." | Hosted catalog = hosted service = paid ops + an attack surface (typosquatting, supply chain). Datasette ships a static `datasette.io/plugins` page generated from a repo, which is what a small project should do. PROJECT.md already deferred this. | Static `docs/plugins.md` in the horus-os repo listing the few existing plugins + the reference. Link to PyPI search `horus-os` namespace. |
-| **OS-level sandbox (subprocess or container) for plugin execution in v0.5** | "What if a plugin is malicious?" | In-process Python sandboxing is broken by design (pysandbox is the canonical cautionary tale). OS-level isolation is real work — IPC contract, lifecycle complexity, performance hit on every tool call. PROJECT.md already deferred this. | Default-deny capability declarations + clear "you trust this plugin's author" prompt + revocable grants. Trust model = "you `pip install`-ed it, you took the risk." Same model Datasette, Sphinx, pytest all use. |
-| **Custom in-process Python sandbox (RestrictedPython, AST whitelisting, etc.)** | "What about default-deny that actually blocks code?" | Strictly worse than no sandbox — it provides the illusion of safety while every introspection feature in Python is a bypass (`__import__`, `__builtins__`, `__class__.__mro__`, etc.). Industry consensus: do not ship this. | Same as above: clear consent + revocable grants. If a plugin author is hostile, no in-process sandbox will save you. |
-| **Pluggy-style hook framework for v0.5** | "Datasette and pytest use pluggy, we should too." | We already have a Tool registry (v0.1) and an Adapter Protocol with lifecycle hooks (v0.2/v0.3). Pluggy is for systems with many extension points and complex multicall semantics. horus-os has two extension points: tools and adapters. A separate hook framework would compete with the existing registries. | Stay with the existing protocols. v0.5 just packages them behind a manifest. The plugin "contributes Tool X via the manifest" — no new hook system needed. |
-| **Auto-update plugins on horus-os start** | "Users want plugins to stay current." | Auto-update silently widening capability grants (PERMISSION-02 violation) or breaking on a new version is the worst possible v0.5 first impression. Home Assistant integrations explicitly require a restart after install. | Notification-style "3 plugins have updates available" in the dashboard. User clicks update, sees the re-grant prompt if capabilities expanded. |
-| **Plugin signing / Sigstore verification in v0.5** | "Supply chain attacks are real." | Plugin signing requires a publisher identity model, a signature distribution channel, and revocation. Real work — and pip itself doesn't enforce it. v0.5 is too early. | Pin versions in `horus-plugin.toml`. Show "installed from PyPI on date X" in the dashboard. Add Sigstore in v0.6+ if real-world abuse warrants it. |
-| **Hot-reload of plugins without restart** | "It would be cool to swap a plugin in without a server restart." | Python doesn't really support clean module unload (sys.modules is sticky, references to old class objects persist). Hot-reload becomes a long tail of "why isn't my new code running?" bug reports. JupyterLab and Datasette both require restart. | Toggle disable, restart, toggle enable. The restart cost is seconds in horus-os. |
-| **Manifest in JSON instead of TOML** | "JSON is everywhere, TOML is niche." | PROJECT.md already locked TOML. JSON is fine but TOML matches `pyproject.toml`, ships in stdlib (`tomllib`) on 3.11+, and supports comments which a manifest will want. | TOML, as locked. |
-| **Per-plugin Python virtualenv** | "Two plugins might want conflicting versions of a library." | Real work (subprocess + IPC) for a marginal case. pip itself surfaces the conflict at install time. | Let pip resolve. If two plugins genuinely conflict, the user picks one or files an issue against the offending author. |
-| **Plugin "settings UI" — dynamic forms rendered from manifest schema** | "Adapters get config in the dashboard, plugins should too." | A schema-driven form renderer is its own product (think Home Assistant config_flow). For v0.5 the plugin reads env vars and config files like the rest of horus-os. | Document env-var conventions in the plugin author guide. Defer schema-driven forms to v0.6+. |
+| # | Anti-Feature | Why Sometimes Requested | Why Wrong for horus-os | What to Do Instead |
+|---|--------------|-------------------------|------------------------|---------------------|
+| A1 | **CLA (Contributor License Agreement)** | Corporate-OSS pattern (Apache Foundation, OpenStack, Google projects). Provides extra legal cover for relicensing and patent grants. | The Linux kernel community rejected CLAs; the broader 2026 consensus is that Apache 2.0's existing patent-grant clause IS the patent license, and a CLA is redundant friction. Apache 2.0 already requires the inbound-equals-outbound license for any contribution. CLAs add an out-of-band signing portal that blocks first-time contributors and breaks the "drive-by typo fix" flow. | **Rely on Apache 2.0's inbound-equals-outbound rule as documented in CONTRIBUTING.md.** Existing line ("By opening a PR you confirm you have the right to license the change under Apache 2.0") is sufficient. No CLA bot, no signing portal. |
+| A2 | **Mandatory DCO (`Signed-off-by` on every commit)** | Linux kernel convention; recommended by Linux Foundation. Provides a per-commit assertion of right-to-contribute. | DCO is strictly better than CLA but still adds friction for one-line typo fixes via the GitHub web UI (the web UI cannot append `-s`). For a project flipping its first contribution gate, the marginal legal protection is small and the friction cost is large. | **Do NOT require DCO.** If a corporate user needs DCO for their own internal policy, they can run `git commit -s` voluntarily; horus-os does not gate on it. Document the decision in CONTRIBUTING.md so it doesn't get re-litigated. |
+| A3 | **Fork-PR access to repository secrets** (via `pull_request_target` + checkout-of-PR-SHA) | "I want my full E2E suite to run on fork PRs." | The "Pwn Request" attack class. Still hitting major projects in 2026 (the GitHub Security Lab and Trail of Bits writeups remain the standard references). Even with `safe-to-test` labels, the attack surface is wider than the maintainer's review bandwidth. | **No repo secrets exposed to fork builds.** Fork PRs run the matrix with `pull_request` (no secrets, no live-provider tests). Existing v0.5 suite ALREADY works this way ("provider tests use recorded responses"). Document this as an explicit non-goal. If a v0.7 test ever needs live keys, push that test to a `nightly.yml` workflow on `main`, never to PR CI. |
+| A4 | **Mandatory Discord/Slack/Matrix join to contribute** | Common in corporate-OSS or community-led projects where governance happens in chat. | The chat-as-gateway pattern excludes async contributors and creates a parallel context that the GitHub timeline can't see. STATUS.md and the pinned Discussion already capture project state in public. | **All project discussion happens on GitHub (issues + Discussions).** No required chat join. Document explicitly: "All design conversations land in GitHub Discussions so future contributors have searchable context." |
+| A5 | **Auto-assignment of first PR to a "newcomer mentor"** | Some projects pair every first-time contributor with a designated mentor. Reduces drop-off. | Requires a mentor pool. horus-os is solo-maintainer. Promising a mentor relationship the project cannot deliver is worse than not promising it. | **Honest "solo maintainer, best-effort cadence" framing in CONTRIBUTING.md.** Direct first-time contributors to `good first issue` labels (which ARE real, vetted tasks). |
+| A6 | **`requires-changes` blocker labels with auto-close at N days** | Saves maintainer attention by auto-closing stale PRs. | Auto-close-on-stale is read as hostile by contributors and trains them not to bother opening PRs at all. The signal-to-toil ratio is bad. | **No auto-close on stale PRs.** Existing saved reply #5 ("polite ping when an issue is going stale") is the right pattern — manual nudge, not automated close. Use `stale` label as a maintainer-facing signal only. |
+| A7 | **Required squash-merge on every PR** | Cleaner main-branch history. | Loses the "this contributor made these N commits" attribution and the conventional-commit history. horus-os has used conventional commits since v0.1 and they show up in CHANGELOG generation. | **Rebase-and-merge by default; squash only when commit history is genuinely messy.** Document the policy in CONTRIBUTING.md. Exemplar: `psf/black` does NOT require squash. |
+| A8 | **Coverage gate ("PR must not decrease coverage")** | Common in mid-size Python projects. Surface appeal: "tests have value." | Coverage % is a poor proxy for test quality. Brittle in practice (false-positive PR failures on refactors that move covered code around). horus-os already has a strong testing culture (1011 tests at v0.5.0) without a coverage gate. | **No coverage gate. Existing "ship at least one regression test when feasible" rule in CONTRIBUTING.md is the policy.** |
+| A9 | **`linkcheck` or external-link-validity gate** | "Docs links should not 404." | Network-dependent, flaky, often blocks PRs on third-party outages. The signal is weak and the noise is high. | **No linkcheck in PR CI.** Run linkcheck nightly on `main` if at all; report the result as an issue, not a PR block. |
+| A10 | **"You must rebase before merging" enforced by required check** | Clean linear history. | GitHub's merge queue exists if linear history is genuinely required. For horus-os, the cost of forcing rebase on every PR exceeds the benefit. | **Branch-protection setting "Require linear history" can be set without making it a contributor responsibility.** GitHub handles the rebase automatically. |
+| A11 | **GPG-keyed maintainer release signing as the primary signing identity** | Traditional approach pre-Sigstore. Maintainer-controlled key. | Long-lived keys are the #1 OSS-supply-chain compromise vector. Key loss, key theft, key-rotation discipline are all real problems. OIDC-keyless (Sigstore) is the 2026 standard. | **Sigstore keyless via GitHub OIDC is the primary signing identity.** GPG-signed tags are optional secondary (verified by `git verify-tag`). PROJECT.md already records this decision direction; v0.6 should lock it. |
+| A12 | **Required PR description "novel" sections (testing strategy, design alternatives, security review)** | Mature projects sometimes require all four sections on every PR. | High friction for small-PR contributors. The existing PULL_REQUEST_TEMPLATE.md already covers "what / why / test plan / checklist" which is the right floor. | **Existing PR template is correct. Don't add required sections that small PRs will skip anyway.** |
 
 ## Feature Dependencies
 
 ```
-MANIFEST-01..04 (declared name/version/entry points/capabilities)
-    └──required-by──> DISCOVERY-01 (entry-points loader)
-                          └──required-by──> INSTALL-01 (install command must validate manifest after pip install)
-                                                └──required-by──> INSTALL-05 (capability prompt reads manifest)
-                                                                       └──required-by──> PERMISSION-01..03 (grant model + revocation)
-                                                                                              └──required-by──> ISOLATE-01..03 (a denied capability is enforced at runtime; ISOLATE-01 also catches load errors before grants are persisted)
-                                                                                                                     └──required-by──> DASH-01..03 (dashboard surfaces what the grant model + isolation produced)
-                                                                                                                                            └──enables──> OBSERVE-01..02 (per-plugin telemetry attaches plugin name to existing observation events)
+Trusted Publishing (T1)
+    └──enables──> PEP 740 attestations (T2)  (free with T1)
+                       └──enables──> verify command works (T2 verification)
 
-REFERENCE-01..02 (example plugin + author docs)
-    └──validates──> MANIFEST-01..04 + DISCOVERY-01..02 + INSTALL-01..06
-                    (if the reference plugin doesn't install and run cleanly via the documented path, nothing else does)
+Signed git tags (T3)  (independent of T1/T2 but ships in same release.yml)
 
-MANIFEST-05 (strict schema validation)
-    └──enhances──> INSTALL-01 (validation at install rejects bad plugins before the SQLite grant row is written)
+SBOM at release (T4)  (independent, in release.yml)
 
-ISOLATE-04 (slow-start timeout)
-    └──extends──> v0.3 adapter lifecycle hooks (start/stop already exist)
+pip-audit on PRs (T5)
+    └──blocks──> release-gate signature-present check (T4 attachment check)
 
-OBSERVE-01..02 (per-plugin telemetry)
-    └──reuses──> v0.4 ObservationBus + SQLitePersister + queries.py
-                 (column-level extension: add plugin_name to llm_calls + tool_invocations)
+Dependabot config (T6)
+    └──requires──> SHA-pinned actions (T7)
+                       └──verified-by──> zizmor (D8)
+
+pull_request hardening (T8)
+    └──verified-by──> zizmor (D8)
+
+First-time-contributor gate (T9)  (repo setting; instant)
+
+Branch protection (T10)
+    └──requires──> stable status-check names from T5, T6, T7, T8 jobs
+
+SECURITY.md update (T11)
+CONTRIBUTING.md update (T12)
+PR template update (T13)
+Issue templates update (T14)
+CODEOWNERS (T15)
+CODE_OF_CONDUCT.md fix (T16)
+
+STATUS.md flip (T17)
+    └──requires-all-of──> T1..T16 GREEN before the bit-flips
+README rewrite (T18)  └──same prerequisite──>
+Saved replies (T19)   └──same prerequisite──>
+Claim watcher disable (T20)  └──same prerequisite──>
+
+Pinned Discussion (D12) flip
+    └──requires──> T17 (STATUS.md flipped first; pin post replies "STATUS flipped on YYYY-MM-DD")
+
+CodeQL (D3) — independent, can land any time
+OSSF Scorecard (D2) — independent, free badge
+SLSA L3 (D1) — defer to v0.7
+safe-to-test (D4) — SKIP unless test needs secrets
+workflow_run (D5) — SKIP for v0.6
+Triage docs (D6) — recommend at gate-flip time
+Dependency Review (D7) — bundle with T5
+zizmor (D8) — bundle with T7 and T8
+auto-merge dependabot (D14) — defer to v0.6.x
+Maintainer runbook (D15) — recommend at gate-flip time
 ```
 
 ### Dependency Notes
 
-- **MANIFEST is the spine.** All seven categories below it depend on a parsed, validated manifest. The schema decision (TOML, locked) and the closed capability enum (PERMISSION-04) must land in the first plugin-system phase, before anything else.
-- **DISCOVERY-01 (entry points) + DISCOVERY-02 (local dir) are both required.** Entry points is the third-party distribution path; local dir is the dev path. PROJECT.md already commits to both. They share the same loader code but the load path differs (importlib.metadata vs filesystem walk).
-- **PERMISSION-02 (re-prompt on widened scope) is a hard ordering constraint.** It must land in the same phase as INSTALL-05 (first-run prompt) or it creates a security regression on every plugin upgrade. Don't ship the prompt without the re-prompt logic.
-- **ISOLATE-01 (no host crash) blocks REL.** Three-OS install verification can't go green if a synthetic broken plugin can take down the server. The "broken plugin" test fixture is part of REFERENCE.
-- **OBSERVE-01 (per-plugin error rate) is the killer differentiator** and it's almost free given v0.4. Don't drop it. It also makes ISOLATE-02 (last error visible) much richer: the dashboard shows not just "plugin error" but "plugin error 14% of the time across 320 calls in the last 7 days."
-- **REFERENCE-01 (example plugin) blocks REL too.** The release gate should refuse to tag if the example plugin doesn't install and pass its smoke test on the three-OS matrix. This is the v0.5 equivalent of v0.4's two-variant install-smoke.
+- **T1 → T2 (free)**: `pypa/gh-action-pypi-publish` does PEP 740 automatically when `id-token: write` is set; no separate step needed. Lock T1 first, T2 follows.
+- **T4 SBOM + T3 signed-tag both ride in `release.yml`**: bundle them in one release-pipeline overhaul rather than three separate phases.
+- **T7 (SHA pinning) must precede T6 (Dependabot)**: Dependabot for GitHub Actions only works meaningfully against SHA-pinned references. Convert all `uses:` lines to SHA-pinned FIRST, then turn on Dependabot. Reverse order produces noisy PRs with no anchoring SHA.
+- **T8 (fork-PR hardening) must precede T17 (STATUS.md flip)**: the moment STATUS.md says "PRs welcome," the first malicious fork PR can land. The fork-PR pipeline must be hardened FIRST. This is the single most important ordering constraint in v0.6.
+- **T10 (branch protection) must come LAST among the CI changes**: the required-status-check list can only stabilize after all the new workflows are named and known-passing. Lock workflow names first, then turn on branch protection.
+- **T17-T20 (the external bit-flips) ship ATOMICALLY at v0.6.0 release**: all four files change in one commit/release. If STATUS.md says "open" but the issue-claim-watcher still auto-closes, contributors see contradictory signals.
+- **D12 (pinned Discussion update) replies on the existing pinned post**: it does NOT create a new pinned post. Existing thread continuity is valuable; the v0.6 update is a reply, not a fresh announcement.
 
-## MVP Definition
+## MVP Definition (v0.6 ship contents)
 
-### Launch With (v0.5.0)
+### Launch With (v0.6.0)
 
-Minimum viable v0.5 — the smallest plugin system that earns user trust and unblocks third-party authors. Mapped to PROJECT.md's locked decisions plus the table-stakes rows above. Each row is the v0.5.0 release gate.
+The minimum set required to flip the gate honestly. If any of these is missing, the v0.6.0 release is incomplete and the gate should not flip.
 
-- [ ] **MANIFEST-01..04 + MANIFEST-05** — `horus-plugin.toml` with name, version, compatible-horus-os range, declared tools + adapters, requested capabilities, author/homepage/issue tracker; strict TOML schema validation at install with line-numbered errors.
-- [ ] **DISCOVERY-01 + DISCOVERY-02** — Entry points group `horus_os.plugins` (loaded via `importlib.metadata`) + `~/.horus-os/plugins/` directory drop-in. Same loader, different inputs.
-- [ ] **INSTALL-01..06** — `horus-os plugins install|uninstall|list|info|update` subcommands wrapping pip; first-run capability prompt with explicit consent.
-- [ ] **PERMISSION-01..04** — Default-deny posture; grants persisted in SQLite keyed by `(plugin_name, plugin_version)`; revocable from dashboard; re-prompt on version-upgrade scope widening; closed enum of capability strings.
-- [ ] **ISOLATE-01..04** — Plugin load failure or runtime exception caught and reported, never propagates to host; per-plugin error status surface; enable/disable toggle; slow-start timeout that doesn't block boot.
-- [ ] **DASH-01..03** — `/plugins` tab listing installed plugins with version, declared contributions, granted capabilities, lifecycle status, last error; per-plugin enable/disable toggle; manifest hyperlinks (homepage, issue tracker).
-- [ ] **OBSERVE-01** — Extend v0.4 `tool_invocations` with `plugin_name`; render per-plugin error rate on `/observability`. **This is the v0.5 differentiator. Don't cut it.**
-- [ ] **REFERENCE-01..02** — Published `horus-os-example-plugin` in the same repo as a separate package; plugin author docs (`docs/PLUGINS.md`) covering manifest, capabilities, lifecycle, testing.
-- [ ] **MIG-05** — Additive v4→v5 SQLite migration (plugin_grants table + plugin_name column on tool_invocations); v0.4 databases continue to read.
-- [ ] **TEST/REL** — Three-OS install gate (Ubuntu, macOS, Windows × Python 3.11 + 3.12) including a synthetic broken-plugin fixture that proves ISOLATE-01.
+- [ ] **T1 Trusted Publishing** — no stored PyPI token, OIDC trusted publisher configured
+- [ ] **T2 PEP 740 attestations** — automatic on every release artifact (free with T1)
+- [ ] **T3 Signed git tags** — sigstore-keyless or GPG, verifiable from outside
+- [ ] **T4 SBOM at release** — CycloneDX 1.6 JSON, attached as release asset, release-gate refuses tag without it
+- [ ] **T5 pip-audit gating** — PR-blocking, required status check
+- [ ] **T6 Dependabot config** — `pip` + `github-actions`, weekly grouped
+- [ ] **T7 SHA-pinned actions** — every `uses:` references a 40-char SHA
+- [ ] **T8 Fork-PR pipeline hardened** — `pull_request_target` is metadata-only or absent, no secrets in fork CI
+- [ ] **T9 First-time-contributor gate** — repo setting enabled
+- [ ] **T10 Branch protection** — required reviews + required status checks on `main`
+- [ ] **T11 SECURITY.md** — 48h ack, 90d disclosure, scope-expanded for plugins
+- [ ] **T12 CONTRIBUTING.md** — banner flipped, first-PR walkthrough section, SLA noted
+- [ ] **T13 PR template** — banner removed, CONTRIBUTING/CoC checkbox added
+- [ ] **T14 Issue templates** — banners flipped to welcome contributors
+- [ ] **T15 CODEOWNERS** — minimum `* @Ridou`
+- [ ] **T16 CODE_OF_CONDUCT.md** — reporting channel filled in (GHSA `[conduct]` title route)
+- [ ] **T17 STATUS.md flipped** — TL;DR rewritten, milestone table updated, v0.6 SHIPPED
+- [ ] **T18 README rewritten** — "Project status" section invites contributors, badge updated to v0.6.0
+- [ ] **T19 Saved replies updated** — closed-contribution replies retired, open-contribution replies added
+- [ ] **T20 Claim watcher** — deleted or repurposed (recommend: delete)
+- [ ] **D6 Triage doc + labels** — `docs/TRIAGE.md` + label taxonomy applied + 3-5 `good first issue` candidates labelled
+- [ ] **D7 Dependency Review** — action in PR workflow (cheap, bundle with T5)
+- [ ] **D8 zizmor in CI** — locks in T7 and T8 choices
+- [ ] **D11 Discussions enabled** — categories pre-seeded, pinned STATUS post in place
+- [ ] **D12 Pinned Discussion updated** — follow-up reply announcing the v0.6.0 flip
+- [ ] **D15 Maintainer runbook** — `docs/MAINTAINER-RUNBOOK.md` shipped
 
-### Add After v0.5.0 (v0.5.x or v0.6 follow-ups)
+That is 20 table-stakes plus 6 high-value differentiators. Each is concretely defined, each is testable, each has a release-gate check that can refuse v0.6.0 if it slips.
 
-Features that strengthen the plugin system once the core has shipped. Each row has a trigger condition — do not ship speculatively.
+### Add After Validation (v0.6.x)
 
-- [ ] **REFERENCE-03 cookiecutter template** — Add when the first third-party author opens an issue asking for one (very likely within v0.5's first month).
-- [ ] **OBSERVE-02 per-plugin LLM cost attribution** — Add when the first user asks "which plugin spent the most on Anthropic this week?" (deferral OK; ship in v0.5 only if it's a literal column addition).
-- [ ] **Notification-style update banner on dashboard** — Add when the second plugin author ships and users have stale installs.
+Features to add once the gate is open and the first cohort of outside PRs has shown what actually breaks.
 
-### Future Consideration (v0.6+ and beyond)
+- [ ] **D2 OSSF Scorecard badge** — wait two weeks post-flip to let scores stabilize, then publish
+- [ ] **D13 Response SLA** explicitly stated in CONTRIBUTING.md once a baseline cadence is established
+- [ ] **D14 auto-merge Dependabot grouped PRs** — once you have one Dependabot cycle of evidence the CI checks catch regressions
 
-Features that need more validation, more governance, or more user demand before they're worth building.
+### Future Consideration (v0.7+)
 
-- [ ] **OS-level sandbox (subprocess or container)** — Defer until there is a documented real-world abuse case for an in-process plugin. PROJECT.md already lists this in Out of Scope.
-- [ ] **Hosted plugin catalog / browse-and-install UI** — Defer until there are 10+ plugins and the static repo page has hit its limits.
-- [ ] **Plugin signing / Sigstore verification** — Defer until the supply chain attack happens to a horus-os user. Pin versions in the meantime.
-- [ ] **Schema-driven plugin settings UI** — Defer until config sprawl is a documented user complaint.
-- [ ] **PERMISSION-05 dry-run mode** — Defer until at least one third-party plugin is sketchy enough to warrant the engineering investment.
-- [ ] **Self-declared quality_scale tiers** — Defer indefinitely. Meaningless without governance.
+Features that buy real value but at real cost. Defer until v0.6 has data.
+
+- [ ] **D1 SLSA L3 provenance** — defer until a downstream consumer asks for it
+- [ ] **D3 CodeQL as a required PR check** — start in v0.6 as scheduled-only; promote to required if FP rate is low
+- [ ] **D4 safe-to-test label gating** — only if a v0.7+ test needs live keys
+- [ ] **D5 workflow_run trusted reporter** — only if PR-side automated commentary becomes valuable
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| MANIFEST-01..04 (declared name/version/entry points/capabilities/author) | HIGH | LOW | **P1** |
-| MANIFEST-05 (strict schema validation at install) | MEDIUM | LOW | **P1** |
-| DISCOVERY-01 (entry points loader) | HIGH | LOW | **P1** |
-| DISCOVERY-02 (local directory loader) | MEDIUM | LOW | **P1** |
-| INSTALL-01..04 (install/uninstall/list/info) | HIGH | LOW | **P1** |
-| INSTALL-05 (first-run capability prompt) | HIGH | MEDIUM | **P1** |
-| INSTALL-06 (update subcommand) | MEDIUM | LOW | **P1** |
-| PERMISSION-01..03 (default-deny + persisted + revocable) | HIGH | MEDIUM | **P1** |
-| PERMISSION-04 (closed capability enum) | MEDIUM | LOW | **P1** |
-| ISOLATE-01 (no host crash on plugin failure) | HIGH | MEDIUM | **P1** |
-| ISOLATE-02 (last error surface) | HIGH | LOW | **P1** |
-| ISOLATE-03 (enable/disable toggle) | HIGH | LOW | **P1** |
-| ISOLATE-04 (slow-start timeout) | MEDIUM | LOW | **P1** |
-| DASH-01 (plugins tab) | HIGH | MEDIUM | **P1** |
-| DASH-02 (enable/disable from dashboard) | HIGH | LOW | **P1** |
-| DASH-03 (author hyperlinks) | LOW | LOW | **P1** |
-| REFERENCE-01 (example plugin) | HIGH | MEDIUM | **P1** |
-| REFERENCE-02 (author docs) | HIGH | LOW | **P1** |
-| OBSERVE-01 (per-plugin error rate) | HIGH | LOW | **P1** |
-| OBSERVE-02 (per-plugin LLM cost) | MEDIUM | LOW-MEDIUM | **P2** |
-| REFERENCE-03 (cookiecutter template) | MEDIUM | LOW-MEDIUM | **P2** |
-| MANIFEST-06 (quality_scale tier) | LOW | LOW | **P3** |
-| PERMISSION-05 (dry-run mode) | LOW | MEDIUM | **P3** |
-| Hosted catalog | LOW (today) | HIGH | **P3** |
-| OS-level sandbox | LOW (today) | HIGH | **P3** |
-| Plugin signing | LOW (today) | HIGH | **P3** |
-| Hot-reload | LOW | HIGH | **P3** (anti-feature for v0.5) |
-| Auto-update on start | NEGATIVE | LOW | **anti-feature** |
-| In-process Python sandbox | NEGATIVE (illusion of safety) | MEDIUM | **anti-feature** |
+| # | Feature | User Value | Implementation Cost | Priority |
+|---|---------|------------|---------------------|----------|
+| T1 | Trusted Publishing | HIGH | LOW | P1 |
+| T2 | PEP 740 attestations | HIGH | LOW | P1 |
+| T3 | Signed git tags | HIGH | LOW | P1 |
+| T4 | SBOM at release | HIGH | LOW | P1 |
+| T5 | pip-audit gating | HIGH | LOW | P1 |
+| T6 | Dependabot | HIGH | LOW | P1 |
+| T7 | SHA-pinned actions | HIGH | MEDIUM | P1 |
+| T8 | Fork-PR hardening | HIGH | LOW | P1 |
+| T9 | First-time-contributor gate | HIGH | LOW | P1 |
+| T10 | Branch protection | HIGH | LOW | P1 |
+| T11 | SECURITY.md update | HIGH | LOW | P1 |
+| T12-T16 | Contributor docs | HIGH | LOW | P1 |
+| T17-T20 | External-surface flip | HIGH | LOW | P1 |
+| D6 | Triage doc + labels | HIGH | LOW | P1 (ship with v0.6) |
+| D7 | Dependency Review | MEDIUM | LOW | P1 (ship with v0.6) |
+| D8 | zizmor | MEDIUM | LOW | P1 (ship with v0.6) |
+| D11 | Discussions enabled | HIGH | LOW | P1 (ship with v0.6) |
+| D12 | Pinned Discussion update | HIGH | LOW | P1 (ship with v0.6) |
+| D15 | Maintainer runbook | HIGH | LOW | P1 (ship with v0.6) |
+| D2 | OSSF Scorecard | MEDIUM | LOW | P2 (v0.6.x) |
+| D13 | SLA in CONTRIBUTING | MEDIUM | LOW | P2 (v0.6.x) |
+| D14 | Auto-merge Dependabot | MEDIUM | LOW | P2 (v0.6.x) |
+| D1 | SLSA L3 | LOW | MEDIUM | P3 (v0.7+) |
+| D3 | CodeQL required check | LOW | HIGH | P3 (v0.7+) |
+| D4 | safe-to-test label | LOW | MEDIUM | P3 (only if needed) |
+| D5 | workflow_run reporter | LOW | MEDIUM | P3 (only if needed) |
+| D9 | CITATION.cff | LOW | LOW | Skip |
+| D10 | FUNDING.yml | LOW | LOW | Maintainer call |
 
 **Priority key:**
-- **P1:** Must ship in v0.5.0. The minimum that earns trust.
-- **P2:** Should ship in v0.5.x as fast follow.
-- **P3:** Defer to v0.6+ until user demand validates the cost.
-- **anti-feature:** Do not ship. Listed for explicit rejection.
+- P1: Must have for v0.6.0 launch
+- P2: Should have, add in v0.6.x patch window
+- P3: Nice to have, future consideration
 
-## Competitor Feature Analysis
+## Exemplar Repo Analysis (for direct reference)
 
-How the named plugin systems handle the same surface horus-os v0.5 is building. Use this table when implementation questions arise — do what at least two of them do, deviate only with documented reason.
+| Feature | Exemplar | What to Borrow |
+|---------|----------|----------------|
+| Trusted Publishing + PEP 740 | `pypa/sampleproject` | The reference `release.yml` workflow. Copy structure, adapt the version-extraction step. |
+| SBOM at release | `CycloneDX/cyclonedx-python` self-hosting | `cyclonedx-py environment` invocation. |
+| pip-audit gating | `pypa/pip-audit` itself | Uses `pypa/gh-action-pip-audit@v1` in its own CI; copy the workflow. |
+| Dependabot grouped | `dependabot/dependabot-core` | The grouped weekly config pattern. |
+| SHA-pinned actions | `pypa/pip-audit`, `sigstore/sigstore-python` | All actions pinned, Dependabot maintains SHAs. |
+| Fork-PR hardening | `numpy/numpy` | Audit-passed `pull_request` (not `pull_request_target`) pattern. |
+| SECURITY.md | `pydantic/pydantic` | Minimal-but-correct ("use the Security tab"). horus-os adds scope notes for plugins. |
+| CONTRIBUTING.md (existing already strong) | `encode/httpx`, `astral-sh/uv` | "Start with a discussion" framing (httpx); "Finding ways to help" + "Use of AI" sections (uv). |
+| PR template (existing already strong) | `pydantic/pydantic` | Existing template is at the bar. |
+| Issue templates | Existing horus-os templates | Already at the bar; just flip the banners. |
+| CODEOWNERS | `python/cpython` | Single-line root + area-based overrides. |
+| CODE_OF_CONDUCT.md | `psf/black` | Contributor Covenant 2.1 + named reporting address. |
+| Triage labels | `python/devguide` | `type:`, `area:`, `priority:`, plus `good first issue` + `help wanted`. |
+| Discussions categories | `pydantic/pydantic` | Announcements + Q&A + Ideas + Show and Tell. |
+| zizmor in CI | `pypa/pip-audit` | One workflow file. |
+| OSSF Scorecard badge | `pypa/pip` (scores ~8.6) | Weekly workflow + README badge. |
+| SLSA L3 builder (deferred) | `sigstore/sigstore-python` | Reference if v0.7 needs it. |
 
-| Capability | Datasette | pytest | Home Assistant | Sphinx | JupyterLab | VS Code | horus-os v0.5 plan |
-|------------|-----------|--------|----------------|--------|------------|---------|-----|
-| **Manifest format** | None (setup.py entry_points only) | None (setup.py entry_points only) | `manifest.json` (per integration) | None (setup.py + setup() function returns dict) | `package.json` + `jupyter-config-data` | `package.json` with `contributes` | `horus-plugin.toml` (TOML, stdlib `tomllib`) |
-| **Required manifest fields** | name + entry_points | name + entry_points | domain, name, codeowners, integration_type | name in setup.py | name, version, jupyterlab field | name, version, publisher, engines.vscode | name, version, horus_os_compatible_range, contributions |
-| **Discovery — primary** | entry-points group `datasette` | entry-points group `pytest11` | core integrations bundled + `custom_components/` dir | `conf.py extensions = []` list | entry-points + `jupyter labextension install` | VS Code marketplace + local install | entry-points group `horus_os.plugins` |
-| **Discovery — drop-in dir** | `--plugins-dir=plugins/` | `conftest.py` auto-discovery | `custom_components/` | `sys.path.append('exts')` then list in conf.py | `--app-dir` | n/a | `~/.horus-os/plugins/` |
-| **Install command** | `datasette install <name>` (pip wrapper) | `pip install` (no wrapper) | HACS (third-party UI) | `pip install` (no wrapper) | `pip install` + `jupyter labextension enable` | Marketplace UI + CLI | `horus-os plugins install <pip-spec>` |
-| **Uninstall command** | `datasette uninstall <name>` | `pip uninstall` | HACS Remove | `pip uninstall` | `jupyter labextension uninstall` | Marketplace UI + CLI | `horus-os plugins uninstall <name>` |
-| **List command** | `datasette plugins` | n/a (`pip list \| grep pytest-`) | Settings > Devices & Services | n/a (read conf.py) | `jupyter labextension list` | Extensions view | `horus-os plugins list` |
-| **Permission model** | None (in-process trust) | None (in-process trust) | Entity-level grants in policy | None (in-process trust) | None (in-process trust) | Workspace Trust + publisher trust + `capabilities.untrustedWorkspaces` | Closed enum of capability strings, default-deny, per-plugin grant persisted in SQLite |
-| **First-run consent prompt** | No | No | Config flow per integration | No | No | Yes (1.97+: trust the publisher dialog) | Yes |
-| **Failure isolation** | pluggy try/except per hook | pytest plugin load errors caught + reported | `ConfigEntryNotReady` triggers retry; Recovery Mode for catastrophic failures | Errors surface in build log; one bad extension can break build | Errors caught, plugin disabled | Extension host crash isolated from editor | Try/except around load + start + tool invocations; degrade to "plugin error" status; never crash host |
-| **Per-plugin observability** | `/-/plugins` JSON; no error rate | Plugin name shows in test output; no error rate | System Health endpoint per integration; error count on integrations page | Build log per extension; no telemetry | Plugin Manager surface; no error rate | Extensions view + extension host metrics | **Per-plugin error rate + latency p50/p95 on `/observability` (v0.4 reuse). This is the differentiator.** |
-| **Enable/disable toggle** | No (uninstall = remove) | n/a | Yes (per integration) | No (edit conf.py) | Yes (`jupyter labextension disable`) | Yes (per extension) | Yes |
-| **Reference / template** | `simonw/datasette-plugin` cookiecutter | Examples in docs | `example_integration` in core | Various tutorial extensions | `extension-cookiecutter-ts` | `vscode-extension-samples` repo | `horus-os-example-plugin` (separate package) + future cookiecutter |
-| **Hosted catalog** | Static `datasette.io/plugins` page | None | HACS (third-party UI on top of GitHub) | None | PyPI search + Plugin Manager UI | Yes (Marketplace) | None in v0.5 (static `docs/plugins.md`) |
+## Open Questions for Requirements Phase
 
-**Pattern that emerges:** Datasette is the closest analog — a small Python-first project with entry-points + a cookiecutter + a CLI wrapper around pip + a JSON endpoint listing installed plugins. horus-os v0.5 = Datasette's plugin model + Home Assistant's manifest + capability declaration + VS Code's first-run consent prompt + v0.4's existing observability stack. None of those four pieces is new engineering; the work is wiring them together cleanly.
+These are decisions that need to be locked at requirements time, not assumed by research:
+
+1. **Signing identity**: Sigstore keyless via GitHub OIDC (recommended by PROJECT.md, recommended by this research) vs GPG vs both. PROJECT.md already records the lean toward keyless; lock it.
+2. **SBOM format**: CycloneDX (recommended — every Python-ecosystem SBOM on PyPI is CycloneDX, zero SPDX per the Sbomify 2026 scan) vs SPDX. PROJECT.md already leans CycloneDX; lock CycloneDX 1.6 JSON.
+3. **Supply-chain scanner**: pip-audit (P1 — PyPA-blessed, OSV-backed, zero-config) vs pip-audit + safety as second opinion vs pip-audit + osv-scanner. Recommendation: pip-audit alone for v0.6, defer second-opinion to v0.7 if a real CVE is missed.
+4. **Fork-PR gating mechanism**: NO secrets in fork CI (recommended, simpler, safer) vs `safe-to-test` label gate (more flexibility, more attack surface). Recommendation: no-secrets-in-fork-CI is the right v0.6 choice; revisit only if v0.7 introduces a test that needs live keys.
+5. **DCO requirement**: Recommendation: NO. Document the decision in CONTRIBUTING.md.
+6. **CLA requirement**: Recommendation: NO. Apache 2.0 inbound=outbound handles it.
+7. **CodeQL scope**: Recommendation: scheduled-only + push-to-main in v0.6; defer required-PR-check decision to v0.7.
+8. **Maintainer runbook visibility**: public-in-repo (recommended for transparency) vs private. Recommendation: public — nothing in v0.6 maintainer ops is secret.
+9. **Conduct reporting channel**: GHSA-style private advisory with `[conduct]` title (recommended, reuses existing infra, no new email needed) vs a dedicated email. Lock at requirements time.
+10. **`claim:` label adoption** post-flip: recommendation: simple maintainer-assigns-by-comment model in v0.6, deferring any label-driven claim automation to v0.7 once there's data on claim cadence.
 
 ## Sources
 
-### Datasette (primary analog)
-- [Plugins — Datasette documentation](https://docs.datasette.io/en/stable/plugins.html) — `datasette install/uninstall/plugins` CLI; entry-points group `datasette`; `/-/plugins` endpoint; pluggy hook system
-- [Writing plugins — Datasette documentation](https://docs.datasette.io/en/stable/writing_plugins.html) — minimum setup.py, one-off plugin pattern via `--plugins-dir`, hookimpl decorator
-- [simonw/datasette-plugin cookiecutter template](https://github.com/simonw/datasette-plugin) — reference structure for third-party authors
-- [A cookiecutter template for writing Datasette plugins (Simon Willison)](https://simonwillison.net/2020/Jun/20/cookiecutter-plugins/) — author rationale
+### PyPI Trusted Publishing + PEP 740 Attestations
 
-### pytest
-- [Writing plugins — pytest documentation](https://docs.pytest.org/en/stable/how-to/writing_plugins.html) — three plugin types: builtin, external (entry points), conftest auto-discovery
-- [How to install and use plugins — pytest documentation](https://docs.pytest.org/en/stable/how-to/plugins.html) — `pytest11` entry-points group
-- [pluggy default multicall exception handling — issue 259](https://github.com/pytest-dev/pluggy/issues/259) — failure isolation behavior
+- [PyPI Docs: Producing Attestations](https://docs.pypi.org/attestations/producing-attestations/)
+- [PyPI Docs: Attestation Security Model](https://docs.pypi.org/attestations/security-model/)
+- [pypi/pypi-attestations on GitHub](https://github.com/pypi/pypi-attestations)
+- [Sigstore blog: PyPI's Sigstore-powered attestations are GA](https://blog.sigstore.dev/pypi-attestations-ga/)
+- [PyPI blog: PyPI now supports digital attestations (2024-11-14)](https://blog.pypi.org/posts/2024-11-14-pypi-now-supports-digital-attestations/)
+- [Trail of Bits: Attestations, a new generation of signatures on PyPI](https://blog.trailofbits.com/2024/11/14/attestations-a-new-generation-of-signatures-on-pypi/)
+- [pypa/gh-action-pypi-publish on GitHub](https://github.com/pypa/gh-action-pypi-publish)
+- [sigstore/gh-action-sigstore-python on GitHub](https://github.com/sigstore/gh-action-sigstore-python)
 
-### Home Assistant
-- [Integration manifest — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/creating_integration_manifest/) — manifest.json schema, required vs optional fields
-- [Permissions — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/auth_permissions/) — policy model, default-deny via `True=grant, None=deny`
-- [Handling setup failures — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/integration_setup_failures/) — `ConfigEntryNotReady`, retry semantics, recovery patterns
-- [Recovery mode — Home Assistant](https://www.home-assistant.io/integrations/recovery_mode/) — fallback boot model when user integrations break startup
-- [Integration system health — Home Assistant Developer Docs](https://developers.home-assistant.io/docs/core/integration/system_health/) — per-integration health surface
-- [HACS — Home Assistant Community Store](https://www.hacs.xyz/) — community plugin manager UX patterns
+### SLSA + Build Provenance
 
-### Sphinx
-- [Sphinx Extensions — Sphinx documentation](https://documentation.help/Sphinx/extensions.html) — setup() function contract, `extensions = []` config
-- [Sphinx API — Sphinx documentation](https://www.sphinx-doc.org/en/master/extdev/index.html) — setup() return dict (version, env_version, parallel_read_safe)
+- [slsa-framework/slsa-github-generator on GitHub](https://github.com/slsa-framework/slsa-github-generator)
+- [SLSA blog: Build your own SLSA 3+ provenance builder on GitHub Actions](https://slsa.dev/blog/2023/08/bring-your-own-builder-github)
+- [Seth Larson: Python and SLSA](https://sethmlarson.dev/python-and-slsa)
+- [Attest build provenance for a Python package in GitHub actions](https://browniebroke.com/blog/2024-08-08-attest-build-provenance-for-a-python-package-in-github-actions/)
 
-### JupyterLab
-- [Extensions — JupyterLab documentation (stable)](https://jupyterlab.readthedocs.io/en/stable/user/extensions.html) — enable/disable, discovery, `jupyter labextension` CLI
-- [Is there a way to enable/disable a lab extension through entries in a .py file — Jupyter Discourse](https://discourse.jupyter.org/t/is-there-a-way-to-enable-disable-a-lab-extension-through-entries-in-a-py-file/18141) — config-driven disable
+### SBOM (CycloneDX vs SPDX, Python tooling)
 
-### VS Code
-- [Extension Manifest — Visual Studio Code Extension API](https://code.visualstudio.com/api/references/extension-manifest) — package.json fields, contributes section
-- [Activation Events — Visual Studio Code Extension API](https://code.visualstudio.com/api/references/activation-events) — `activationEvents` declarative startup
-- [Workspace Trust Extension Guide — Visual Studio Code Extension API](https://code.visualstudio.com/api/extension-guides/workspace-trust) — `capabilities.untrustedWorkspaces.supported`, `restrictedConfigurations`, Restricted Mode
-- [Extension runtime security — Visual Studio Code](https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security) — trust-the-publisher dialog from 1.97+
+- [CycloneDX/cyclonedx-python on GitHub](https://github.com/CycloneDX/cyclonedx-python)
+- [Sbomify: CycloneDX vs SPDX comparison (2026-01-15)](https://sbomify.com/2026/01/15/sbom-formats-cyclonedx-vs-spdx/)
+- [Sbomify: SBOM Adoption on PyPI Is at 1.58% (2026-03-12)](https://sbomify.com/2026/03/12/pypi-sbom-analysis/)
+- [Sbomify: SBOM Generation Tools Compared (2026-01-26)](https://sbomify.com/2026/01/26/sbom-generation-tools-comparison/)
+- [SoftwareSeni: SBOM Generation in CI/CD with GitHub Actions](https://www.softwareseni.com/sbom-generation-in-ci-cd-complete-github-actions-implementation-tutorial/)
 
-### Python packaging primitives
-- [Creating and discovering plugins — Python Packaging User Guide](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/) — entry points vs namespace packages vs naming convention
-- [Entry points specification — Python Packaging User Guide](https://packaging.python.org/specifications/entry-points/) — spec for the discovery mechanism we'll use
-- [validate-pyproject — PyPI](https://pypi.org/project/validate-pyproject/) — pattern for strict TOML manifest validation
-- [Python and TOML: Read, Write, and Configure with tomllib — Real Python](https://realpython.com/python-toml/) — `tomllib` in stdlib 3.11+
+### Supply-Chain Scanning (pip-audit)
 
-### Security model
-- [Sandboxing Untrusted Python Code (UBOS)](https://ubos.tech/news/sandboxing-untrusted-python-code-secure-execution-strategies-and-ubos-solutions/) — default-deny posture as industry consensus
-- [pysandbox — vstinner](https://github.com/vstinner/pysandbox) — canonical "in-process Python sandboxing is broken by design" reference
-- [Running Untrusted Python Code (Andrew Healey)](https://healeycodes.com/running-untrusted-python-code) — practical failure modes
+- [pypa/pip-audit on GitHub](https://github.com/pypa/pip-audit)
+- [pypa/gh-action-pip-audit on GitHub](https://github.com/pypa/gh-action-pip-audit)
+- [McGarrah: Using GitHub Actions with pip-audit for PR auditing](https://mcgarrah.org/github-actions-pip-audit-pr/)
+
+### Fork-PR Hardening + `pull_request_target` security
+
+- [GitHub Security Lab: Keeping your GitHub Actions secure, Part 1 — Preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)
+- [SecureBin: The Pwn Request Attack — How GitHub Actions PRs Steal Your Secrets](https://securebin.ai/blog/github-actions-pwn-request-attack/)
+- [Paul Serban: Auditing your GitHub Actions for the pull_request_target flaw](https://www.paulserban.eu/blog/post/am-i-vulnerable-how-to-audit-your-github-actions-for-the-pullrequesttarget-flaw/)
+- [Michael Heap: Accessing secrets from forks safely](https://michaelheap.com/access-secrets-from-forks/)
+- [DVC blog: Testing external contributions using GitHub Actions secrets](https://dvc.org/blog/testing-external-contributions-using-github-actions-secrets/)
+- [GitHub Marketplace: nilsreichardt/verify-safe-to-test-label](https://github.com/marketplace/actions/verify-safe-to-test-label)
+- [DEV: pull_request_target Without Regret — Secure Fork PRs](https://dev.to/ollieb89/pullrequesttarget-without-regret-secure-fork-prs-in-github-actions-1jpi)
+- [GitHub Docs: Approving workflow runs from forks](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/approve-runs-from-forks)
+- [GitHub Changelog: Maintainers must approve first-time contributor workflow runs (2021-04-22)](https://github.blog/changelog/2021-04-22-github-actions-maintainers-must-approve-first-time-contributor-workflow-runs/)
+
+### Action Pinning + Hardening (zizmor, StepSecurity, Dependabot)
+
+- [StepSecurity: Pinning GitHub Actions for Enhanced Security](https://www.stepsecurity.io/blog/pinning-github-actions-for-enhanced-security-a-complete-guide)
+- [Matthias Schoettle: Harden your GitHub Actions Workflows with zizmor (2026-03-28)](https://mattsch.com/blog/2026/03/28/harden-your-github-actions-workflows-with-zizmor-dependency-pinning-and-dependency-cooldowns/)
+- [GitHub Changelog: Actions policy supports SHA pinning enforcement (2025-08-15)](https://github.blog/changelog/2025-08-15-github-actions-policy-now-supports-blocking-and-sha-pinning-actions/)
+- [Wiz: Hardening GitHub Actions, Lessons from Recent Attacks](https://www.wiz.io/blog/github-actions-security-guide)
+- [step-security/secure-repo on GitHub](https://github.com/step-security/secure-repo)
+- [Pydevtools: How to pin GitHub Actions by SHA for Python projects](https://pydevtools.com/handbook/how-to/how-to-pin-github-actions-by-sha-for-python-projects/)
+- [GitHub Docs: Keeping your actions up to date with Dependabot](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)
+- [StepSecurity: Dependabot Configuration Enhancements — Cooldown and Group Support](https://www.stepsecurity.io/blog/announcing-dependabot-configuration-enhancements-cooldown-and-group-support)
+
+### Branch Protection + Required Status Checks
+
+- [GitHub Docs: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+- [GitHub Docs: Managing a branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule)
+- [GitHub Docs: Troubleshooting required status checks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks)
+
+### Contributor Experience (Exemplars)
+
+- [astral-sh/uv CONTRIBUTING.md](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md)
+- [encode/httpx contributing guide](https://github.com/encode/httpx/blob/master/docs/contributing.md)
+- [psf/black CONTRIBUTING.md](https://github.com/psf/black/blob/main/CONTRIBUTING.md)
+- [pydantic/pydantic security policy](https://github.com/pydantic/pydantic/security/policy)
+- [GitHub Docs: About issue and pull request templates](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/about-issue-and-pull-request-templates)
+
+### CODEOWNERS, Triage, Labels
+
+- [Python devguide: GitHub labels](https://devguide.python.org/triage/labels/)
+- [Python devguide: Triaging an Issue](https://devguide.python.org/triaging/)
+- [pip docs: Issue Triage](https://pip.pypa.io/en/latest/development/issue-triage/)
+
+### Security Policy + Coordinated Disclosure
+
+- [GitHub Docs: About coordinated disclosure of security vulnerabilities](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/about-coordinated-disclosure-of-security-vulnerabilities)
+- [GitHub Docs: Privately reporting a security vulnerability](https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability)
+- [GitHub Blog: Coordinated vulnerability disclosure (CVD) for open source](https://github.blog/security/vulnerability-research/coordinated-vulnerability-disclosure-cvd-open-source-projects/)
+
+### CLA / DCO Anti-Pattern
+
+- [Opensource.com: Why CLAs aren't good for open source](https://opensource.com/article/19/2/cla-problems)
+- [Opensource.com: CLA vs DCO — What's the difference?](https://opensource.com/article/18/3/cla-vs-dco-whats-difference)
+- [FINOS: CLAs And DCOs](https://osr.finos.org/docs/bok/artifacts/clas-and-dcos)
+- [ConsortiumInfo: All About CLAs and DCOs](https://consortiuminfo.org/open-source/all-about-clas-and-dcos/)
+
+### OSSF Scorecard
+
+- [ossf/scorecard on GitHub](https://github.com/ossf/scorecard)
+- [OpenSSF Scorecard project page](https://openssf.org/projects/scorecard/)
+- [ossf/scorecard-action on GitHub](https://github.com/ossf/scorecard-action)
+
+### CodeQL
+
+- [GitHub Docs: About code scanning with CodeQL](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning-with-codeql)
+- [GitHub: github/codeql](https://github.com/github/codeql)
+
+### Repository Metadata
+
+- [Citation File Format (CFF)](https://citation-file-format.github.io/)
 
 ---
-*Feature research for: horus-os v0.5 Plugin System*
-*Researched: 2026-05-26*
-*Consumer: REQUIREMENTS.md categories MANIFEST, DISCOVERY, INSTALL, PERMISSION, ISOLATE, DASH, OBSERVE, REFERENCE — each row above is REQ-ID-able as listed.*
+*Feature research for: contribution-gate readiness, horus-os v0.6*
+*Researched: 2026-05-29*
