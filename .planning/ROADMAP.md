@@ -584,10 +584,11 @@ Plans:
   3. Tag signing via `gitsign` (Sigstore keyless, OIDC); no long-lived GPG keypair required; `docs/RELEASE.md` STOP-BEFORE-TAG block documents the gitsign-configured `git tag` invocation; tag verification uses workflow-scoped identity. `docs/MAINTAINER-RUNBOOK.md` (Phase 56) documents the one-time `gitsign` configuration the maintainer runs before v0.6.0 (SIGN-03)
   4. `scripts/verify_release.py` NEW is a 5-check user-facing trust-chain verifier with workflow-scoped EXACT-match `EXPECTED_IDENTITY = "https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/{version}"` (no wildcards, no regex); mandatory `--cert-oidc-issuer` flag; the script refuses to run without the issuer flag. A canonical fixture in `tests/fixtures/sigstore/canonical/` is verified by the script; a wrong-identity fixture in `tests/fixtures/sigstore/wrong_identity/` is REJECTED by the script (TEST-24 owner is Phase 58; positive fixture lands here) (SIGN-04)
   5. PyPI Trusted Publishing (PEP 807) is OUT OF SCOPE for v0.6; deferral documented in `.planning/decisions/no-pypi-in-v0.6.md` with rationale (horus-os does not currently publish to PyPI; v0.7+ may revisit); decision file referenced from PROJECT.md key-decisions table (SIGN-05)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 52-01: TBD
+- [ ] 52-01-PLAN.md - Wave 0 RED-by-design test scaffolding (4 test files + canonical fixture README; covers SIGN-01..05 via RED-by-design production assertions + non-vacuity scanners)
+- [ ] 52-02-PLAN.md - Wave 1 GREEN-flip (release.yml + verify_release.py + no-pypi-in-v0.6.md + docs/RELEASE.md edits + .planning/PROJECT.md key-decisions append; depends on 52-01)
 
 ### Phase 53: SBOM + supply-chain scan substrate (`audit.yml` NEW)
 **Goal**: Add release-time SBOM generation and PR-time supply-chain scanning. SBOMs are CycloneDX 1.6 JSON generated against a FRESH `pip install <wheel>` venv (NOT `pip freeze` of the dev venv); two per release (clean + `[dev,otel]`); both signed via sigstore in the same `release.yml` job from Phase 52; SBOM attestations bind contents to the wheel. `audit.yml` NEW runs `pip-audit` dual-mode on every PR plus `dependency-review-action` with a license allowlist. `pip-audit` added to `[dev]` extras — the ONE base-dep-extras change in v0.6.
