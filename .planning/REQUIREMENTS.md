@@ -585,11 +585,11 @@ Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth:
 | CIHARD-04 | 51 | Pending |
 | CIHARD-05 | 51 | Pending |
 | TEST-23 | 51 | Pending |
-| SIGN-01 | 52 | Pending |
-| SIGN-02 | 52 | Pending |
-| SIGN-03 | 52 | Pending |
-| SIGN-04 | 52 | Pending |
-| SIGN-05 | 52 | Pending |
+| SIGN-01 | 52 | Complete |
+| SIGN-02 | 52 | Complete |
+| SIGN-03 | 52 | Complete |
+| SIGN-04 | 52 | Complete |
+| SIGN-05 | 52 | Complete |
 | SBOM-01 | 53 | Pending |
 | SBOM-02 | 53 | Pending |
 | SBOM-03 | 53 | Pending |

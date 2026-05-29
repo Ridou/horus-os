@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Contribution Gate
-status: executing
+status: ready_to_plan
 last_updated: "2026-05-29T12:53:33.331Z"
 last_activity: 2026-05-29 -- Phase 52 execution started
 progress:
   total_phases: 38
-  completed_phases: 30
+  completed_phases: 31
   total_plans: 33
   completed_plans: 31
-  percent: 94
+  percent: 82
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md and .planning/README.md.
 
 ## Current Position
 
-Phase: 52 (Signing substrate (release.yml NEW)) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 52
-Last activity: 2026-05-29 -- Phase 52 execution started
+Phase: 53
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-29
 
 ## Prior Milestones
 

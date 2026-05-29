@@ -749,7 +749,7 @@ Plans:
 | 49. Three-OS install gate + release-gate extension | v0.5 | 1/1 | Complete   | 2026-05-26 |
 | 50. v0.5.0 release | v0.5 | 1/1 | Complete   | 2026-05-27 |
 | 51. CI hardening substrate | v0.6 | 2/2 | Complete   | 2026-05-29 |
-| 52. Signing substrate (`release.yml` NEW) | v0.6 | 2/2 | Complete   | 2026-05-29 |
+| 52. Signing substrate (`release.yml` NEW) | v0.6 | 2/2 | Complete    | 2026-05-29 |
 | 53. SBOM + supply-chain scan substrate (`audit.yml` NEW) | v0.6 | 0/1 | Not started | - |
 | 54. Dependabot tuning + zizmor | v0.6 | 0/1 | Not started | - |
 | 55. Contributor docs + templates | v0.6 | 0/1 | Not started | - |
