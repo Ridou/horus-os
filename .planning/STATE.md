@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Contribution Gate
 status: executing
-last_updated: "2026-05-29T12:51:50.185Z"
-last_activity: 2026-05-29 -- Phase 52 planning complete
+last_updated: "2026-05-29T12:53:33.331Z"
+last_activity: 2026-05-29 -- Phase 52 execution started
 progress:
   total_phases: 38
   completed_phases: 30
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.6 Contribution Gate milestone in planning. Roadmap shaped: 9 phases (51-59), all 46 v0.6 requirements covered at 100%. Next step: `/gsd-plan-phase 51` for the CI hardening substrate.
+**Current focus:** Phase 52 — Signing substrate (release.yml NEW)
 
 ## Current Position
 
-Phase: 51 — COMPLETE
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 52 planning complete
+Phase: 52 (Signing substrate (release.yml NEW)) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 52
+Last activity: 2026-05-29 -- Phase 52 execution started
 
 ## Prior Milestones
 
