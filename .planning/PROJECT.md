@@ -14,7 +14,7 @@ Run a personal team of AI agents on your laptop, with full transparency over eve
 
 ### Active
 
-Defined in REQUIREMENTS.md under `## v0.5 Plugin System` (PLUG, MANIFEST, ISOLATE, DIST, plus continuation TEST/REL/MIG categories).
+Defined in REQUIREMENTS.md under `## v0.6 Contribution Gate` (SIGN, SUPPLY, CIHARD, CONTRIB, SECDISC, plus continuation TEST/REL categories).
 
 ### Validated
 
@@ -22,26 +22,28 @@ Defined in REQUIREMENTS.md under `## v0.5 Plugin System` (PLUG, MANIFEST, ISOLAT
 - v0.2 Multi-Agent + Streaming: MA, STREAM, ADAPT, MIG, TEST-04..06, REL-03..04 (shipped 2026-05-23, tag `v0.2.0`).
 - v0.3 Adapter Ecosystem: ART, DISC, SLAK, MAIL, CAL, DASH-3, TEST-07..10, REL-05..06 (shipped 2026-05-24, tag `v0.3.0`).
 - v0.4 Observability: METRIC, STORE, PRICE, DASH-4, USAGE, OTEL, BASELINE, TEST-11..15, REL-07..09, MIG-04 (shipped 2026-05-26, tag `v0.4.0`).
+- v0.5 Plugin System: PLUG, MANIFEST, ISOLATE, INSTALL, PERMISSION, DASH-5, REFERENCE, TEST-16..21, REL-10..12, MIG-05 (shipped 2026-05-27, tag `v0.5.0`).
 
-## Current Milestone: v0.5 Plugin System
+## Current Milestone: v0.6 Contribution Gate
 
-**Goal:** Turn horus-os from "built-in adapters and tools only" into "anyone can ship a horus-os plugin." A plugin manifest contract, an installer flow, a runtime that loads third-party tools and adapters from a manifest with bounded permissions, and a dashboard surface for inspecting / enabling / disabling installed plugins.
+**Goal:** Flip horus-os from solo-development mode to "outside contributions welcome" by landing the trust, supply-chain, and contributor-experience infrastructure required to safely accept fork PRs, then flipping the public gate at v0.6.0 ship.
 
 **Target features:**
-- Plugin manifest schema — versioned `horus-plugin.toml` (or JSON) declaring name, version, entry points, declared tools and adapters, capabilities/permissions requested, compatible horus-os range.
-- Discovery and loading — discover plugins via Python entry points group (`horus_os.plugins`) plus an explicit `~/.horus-os/plugins/` directory; load through the same Tool registry and AdapterRegistry contracts shipped in v0.1/v0.2.
-- Permission model — declared capabilities (e.g. `filesystem.read`, `net.outbound`, `secrets.read`) with a default-deny posture; user grants explicit on first run; revocable from dashboard.
-- Installer flow — `horus-os plugins install <pip-spec>` (and `uninstall`, `list`, `info`) that wraps `pip install` into the active venv, validates manifest, and surfaces requested capabilities before the user confirms.
-- Dashboard plugins tab — list installed plugins, their declared tools/adapters, granted capabilities, lifecycle status, and last error. Toggle enable/disable per plugin.
-- Failure isolation — a broken plugin must not crash horus-os; load failures, runtime errors, and slow start/stop hooks degrade to "plugin error" status with telemetry rolling into the v0.4 observability surface (latency, error rate per plugin).
-- Reference plugin — one published example plugin (`horus-os-example-plugin`) shipped as a separate package on the same repo, serving as the contract reference for third-party authors.
-- Additive v4→v5 SQLite schema migration; v0.4 databases continue to read.
+- CI signing and signed releases — sigstore/cosign on built artifacts (wheel + sdist), signed git tags, signed GitHub Releases.
+- Supply-chain checks — SBOM generation at release time, pip-audit + safety scans on every PR (both base and `[dev,otel]` extras), Dependabot for runtime and dev deps.
+- Fork-PR CI hardening — secrets restricted to in-repo PRs, maintainer-label gating for full CI on fork PRs (`safe-to-test` style), pinned action versions by SHA.
+- Contributor docs and templates — CONTRIBUTING.md expansion (claim flow, branch policy, commit format, test/doc expectations), PR template with checklist (tests, docs, changelog, license header), issue templates (bug, feature, security advisory), CODEOWNERS, triage SLA doc.
+- SECURITY.md and vulnerability disclosure — private disclosure channel, response SLO, public advisory flow with CVE coordination notes.
+- Release-gate extension — new checks (signature present on artifacts, SBOM attached, pip-audit clean) refuse an unsigned, un-SBOMed, or vulnerable tag.
+- Three-OS hard gate (default for every milestone).
+- Gate flip — STATUS.md TL;DR rewritten ("contributions OPEN"), README CTAs land, first-PR-window opens at v0.6.0 ship.
 
 **Decisions to confirm during planning:**
-- Manifest format: TOML preferred (consistent with `pyproject.toml`; ships in stdlib via `tomllib` on Python 3.11+). To be locked at requirements time.
-- Discovery: Python entry points first (works for `pip install`-ed plugins), explicit local directory second (works for unpublished dev plugins). No HTTP catalog in v0.5.
-- Permission grants: persisted in SQLite; user-visible in dashboard; never silently re-granted across plugin upgrades that change the requested set.
-- Anti-goal still in force: no paid third-party account required.
+- Signing identity: GitHub OIDC via sigstore (keyless) preferred over long-lived maintainer keys; lock at requirements time.
+- SBOM format: CycloneDX vs SPDX. Likely CycloneDX (Python tooling more mature). Lock at requirements time.
+- Supply-chain scanner: pip-audit (PyPA, vulnerability DB) confirmed; safety as optional second opinion. Lock at requirements time.
+- Fork-PR gating mechanism: GitHub Actions `pull_request_target` boundary vs maintainer-label trigger. Lock at requirements time.
+- Anti-goal still in force: no paid third-party account required for any check.
 - Apache 2.0 license (unchanged).
 - Three-OS hard gate before release (macOS, Ubuntu, Windows), Python 3.11 + 3.12.
 
@@ -50,6 +52,7 @@ Defined in REQUIREMENTS.md under `## v0.5 Plugin System` (PLUG, MANIFEST, ISOLAT
 - v0.2 Multi-Agent + Streaming — named agent profiles, `delegate_to_agent`, provider streaming, adapter plugin contract (2026-05-23, tag `v0.2.0`).
 - v0.3 Adapter Ecosystem — lifecycle hooks, Discord/Slack/Email/Calendar adapters, AdapterRegistry, dashboard Adapters tab (2026-05-24, tag `v0.3.0`).
 - v0.4 Observability — ObservationBus, SQLite cost/latency/reliability persistence, bundled pricing.json, `/observability` dashboard tab, `horus-os usage` CLI, opt-in OTel adapter behind `[otel]` extra (2026-05-26, tag `v0.4.0`).
+- v0.5 Plugin System — TOML manifest contract, entry-point + filesystem discovery, default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin (2026-05-27, tag `v0.5.0`).
 
 See `.planning/ROADMAP.md` for full phase-level history.
 
@@ -86,7 +89,7 @@ See `.planning/ROADMAP.md` for full phase-level history.
 - Features that require any paid third-party account beyond user-supplied LLM API keys.
 - Voice integrations (no current milestone).
 - Hosted plugin marketplace / discovery catalog (post-v0.5; v0.5 uses Python entry points + local directory only).
-- Sandboxed plugin execution via OS-level isolation (subprocess/container). v0.5 uses in-process loading with capability-declaration permission grants; OS isolation is a v0.6+ consideration if real-world abuse warrants it.
+- Sandboxed plugin execution via OS-level isolation (subprocess/container). v0.5 uses in-process loading with capability-declaration permission grants; OS isolation remains a post-v0.6 consideration if real-world abuse warrants it (deferred — v0.6 focuses on contribution-gate readiness instead).
 
 ## Evolution
 
@@ -107,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ## Footer
 
-*Last updated: 2026-05-26 — milestone v0.5 Plugin System started; v0.4 Observability shipped as v0.4.0.*
+*Last updated: 2026-05-29 - milestone v0.6 Contribution Gate started; v0.5 Plugin System shipped as v0.5.0 on 2026-05-27.*

@@ -6,7 +6,7 @@
 - [x] **v0.2 Multi-Agent + Streaming** (Phases 12-21), shipped 2026-05-23 as v0.2.0. Named agent profiles, coordinator-to-sub-agent delegation, provider streaming on both CLI and dashboard, adapter plugin interface.
 - [x] **v0.3 Adapter Ecosystem** (Phases 22-31), shipped 2026-05-24 as v0.3.0. Discord, Slack, email, and calendar adapters on top of the v0.2 plugin contract, plus adapter lifecycle hooks and dashboard adapter management.
 - [x] **v0.4 Observability** (Phases 32-39), shipped 2026-05-26 as v0.4.0. Local-first cost, latency, and tool-reliability instrumentation. New `llm_calls` + `tool_invocations` child tables, bundled `pricing.json`, `/observability` dashboard tab, `horus-os usage` CLI subcommand, opt-in OpenTelemetry exporter behind a `[otel]` extra.
-- [x] **v0.5 Plugin System** (Phases 40-50), shipped 2026-05-26 as v0.5.0 (pending maintainer tag per STOP-BEFORE-TAG block). Third-party plugin runtime: TOML manifest contract, entry-point + filesystem discovery, default-deny capability grants, two-phase `pip install` flow, in-process loader with bounded lifecycle and failure isolation, `/plugins` dashboard tab, per-plugin observability, reference plugin, additive v5→v6 schema migration.
+- [x] **v0.5 Plugin System** (Phases 40-50), shipped 2026-05-27 as v0.5.0. Third-party plugin runtime: TOML manifest contract, entry-point + filesystem discovery, default-deny capability grants, two-phase `pip install` flow, in-process loader with bounded lifecycle and failure isolation, `/plugins` dashboard tab, per-plugin observability, reference plugin, additive v5→v6 schema migration.
 
 ## Phases
 
@@ -97,7 +97,7 @@
 - [x] **Phase 47: Documentation refresh (docs trio)** - `docs/PLUGINS.md` (plugin-author guide: manifest + capabilities + lifecycle + testing + walkthrough of the four reference-plugin scenarios). `docs/PLUGIN-SECURITY.md` with explicit "Threat model" section containing the literal sentence "plugins execute in the horus-os Python process" and enumerating the capability-grant trust contract. `docs/MIGRATION-v0.4-to-v0.5.md` covering v5→v6 schema + the two new direct deps. Plus `docs/manifest-v1.schema.json` (Phase 49 release-gate target), `scripts/build_manifest_schema.py` (idempotent regenerator), 4 docs-test files (18 new tests). The previously-skipped Phase 46 Pitfall 12 docs-drift test auto-activates. README + CHANGELOG extended. Installer grant prompt links to PLUGIN-SECURITY.md. (completed 2026-05-26)
 - [x] **Phase 48: Reference plugin (`horus-os-example-plugin`)** (completed 2026-05-26) - `examples/horus-os-example-plugin/` shipped as a separate package with its own `pyproject.toml` and `horus-plugin.toml`. Demonstrates four scenarios: simple tool + capability check, config-reading tool, lifecycle adapter with start/stop, plugin registering both tool + adapter. CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (TEST-21, ruff `flake8-tidy-imports.banned-api` + pytest source-tree backstop).
 - [x] **Phase 49: Three-OS install gate + release-gate extension** (completed 2026-05-26) - `.github/workflows/ci.yml` gained the `install-smoke-plugin` job (3-OS x 2-Python = 6 matrix entries; 20 OS-fanned steps; `pip install -e ./examples/horus-os-example-plugin` -> boot serve -> assert `/api/plugins` pending -> `horus-os plugins grant horus-os-example-plugin --all` -> restart -> assert loaded). `scripts/release_gate.py` extended from 4 to 8 checks (docs-drift, plugin-install-smoke-ci, reference-plugin-manifest-valid, v0-4-fixture-roundtrip). New `horus-os plugins grant --all` ergonomics flag wires a mutex argparse group + `installer.grant_all_capabilities` helper. `docs/RELEASE.md` documents the expanded gate + schema-regen step. 25 new tests (18 + 7). Suite: 1011 passing. TEST-20 + REL-11 complete.
-- [x] **Phase 50: v0.5.0 release** (completed 2026-05-26, pending maintainer tag) - Version bumped to `0.5.0` in `pyproject.toml` + `src/horus_os/__init__.py`. CHANGELOG `[0.5.0] - YYYY-MM-DD` draft promoted to `[0.5.0] - 2026-05-26` with fresh `[Unreleased]` stub above; v0.5 body content preserved byte-identical from the Phases 47-49 draft. Phase 50 SUMMARY carries the STOP-BEFORE-TAG block reproducing `git tag -a v0.5.0`, `git push origin v0.5.0`, `gh release create v0.5.0`, and STATE.md milestone roll-forward verbatim from docs/RELEASE.md `## Release procedure`. Release-gate active checks (pricing-freshness, ci-two-variant-smoke, docs-drift, plugin-install-smoke-ci, reference-plugin-manifest-valid, v0-4-fixture-roundtrip) all OK; wheel-pricing-bundle + pytest SKIPped under executor env overrides for the maintainer to re-run at full strength as STOP-BEFORE-TAG step 1. Full pytest suite 1011 passed, 3 skipped. REL-10 complete.
+- [x] **Phase 50: v0.5.0 release** (completed 2026-05-27, tag v0.5.0 published) - Version bumped to `0.5.0` in `pyproject.toml` + `src/horus_os/__init__.py`. CHANGELOG `[0.5.0] - YYYY-MM-DD` draft promoted to `[0.5.0] - 2026-05-26` with fresh `[Unreleased]` stub above; v0.5 body content preserved byte-identical from the Phases 47-49 draft. Phase 50 SUMMARY carries the STOP-BEFORE-TAG block reproducing `git tag -a v0.5.0`, `git push origin v0.5.0`, `gh release create v0.5.0`, and STATE.md milestone roll-forward verbatim from docs/RELEASE.md `## Release procedure`. Release-gate active checks (pricing-freshness, ci-two-variant-smoke, docs-drift, plugin-install-smoke-ci, reference-plugin-manifest-valid, v0-4-fixture-roundtrip) all OK; wheel-pricing-bundle + pytest SKIPped under executor env overrides for the maintainer to re-run at full strength as STOP-BEFORE-TAG step 1. Full pytest suite 1011 passed, 3 skipped. REL-10 complete.
 
 ## Phase Details
 
@@ -554,13 +554,13 @@ Plans:
 | 38. OpenTelemetry adapter | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 39. Three-OS gate, release, migration doc | v0.4 | 1/1 | Complete   | 2026-05-26 |
 | 40. v0.5 baseline artifact | v0.5 | 1/1 | Complete   | 2026-05-26 |
-| 41. Manifest schema, public API, persistence migration | v0.5 | 0/1 | Pending | — |
-| 42. Discovery + loading + failure isolation | v0.5 | 0/1 | Pending | — |
-| 43. Permission model + bounded lifecycle | v0.5 | 0/1 | Pending | — |
+| 41. Manifest schema, public API, persistence migration | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 42. Discovery + loading + failure isolation | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 43. Permission model + bounded lifecycle | v0.5 | 1/1 | Complete   | 2026-05-26 |
 | 44. Installer flow (two-phase install + upgrade diff) | v0.5 | 1/1 | Complete   | 2026-05-26 |
-| 45. REST API + `/plugins` dashboard tab + per-plugin observability | v0.5 | 0/1 | Pending | — |
-| 46. Test surface (three-tier fixtures + pitfall regression suite) | v0.5 | 0/1 | Pending | — |
-| 47. Documentation refresh (docs trio) | v0.5 | 0/1 | Pending | — |
-| 48. Reference plugin (`horus-os-example-plugin`) | v0.5 | 0/1 | Pending | — |
-| 49. Three-OS install gate + release-gate extension | v0.5 | 0/1 | Pending | — |
-| 50. v0.5.0 release | v0.5 | 1/1 | Complete (pending maintainer tag) | 2026-05-26 |
+| 45. REST API + `/plugins` dashboard tab + per-plugin observability | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 46. Test surface (three-tier fixtures + pitfall regression suite) | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 47. Documentation refresh (docs trio) | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 48. Reference plugin (`horus-os-example-plugin`) | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 49. Three-OS install gate + release-gate extension | v0.5 | 1/1 | Complete   | 2026-05-26 |
+| 50. v0.5.0 release | v0.5 | 1/1 | Complete   | 2026-05-27 |
