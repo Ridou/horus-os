@@ -382,107 +382,107 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| CIHARD-01 | `pull_request_target` is FORBIDDEN by default across every workflow; release-gate lint rejects any new occurrence unless guarded by a `# SECURITY:` comment AND a `safe-to-test` label gate; v0.6 ships ZERO `pull_request_target` triggers (v0.5 tests use recorded provider responses) | active | TBD |
-| CIHARD-02 | Top-level `permissions: read-all` set on `.github/workflows/ci.yml`, `audit.yml`, `release.yml`; per-job opt-in for any write scope; lint asserts no workflow inherits the legacy GITHUB_TOKEN default scope | active | TBD |
-| CIHARD-03 | Every `actions/checkout` step sets `persist-credentials: false` unless explicitly required for push; no `${{ github.event.pull_request.* }}` interpolation appears in any `run:` shell line | active | TBD |
-| CIHARD-04 | Every third-party `uses:` is pinned to a 40-character commit SHA (`@<sha>` exact match); release-gate `actions-pinned-by-sha` check rejects any `@v<N>`, `@main`, `@master`, or short-SHA pin; `pinact` is documented as the local maintainer refresh tool | active | TBD |
-| CIHARD-05 | `actionlint` runs on every PR via a new workflow lint job; failures block merge; covers untrusted-input interpolation, expired action references, missing `permissions:` | active | TBD |
+| CIHARD-01 | `pull_request_target` is FORBIDDEN by default across every workflow; release-gate lint rejects any new occurrence unless guarded by a `# SECURITY:` comment AND a `safe-to-test` label gate; v0.6 ships ZERO `pull_request_target` triggers (v0.5 tests use recorded provider responses) | active | 51 |
+| CIHARD-02 | Top-level `permissions: read-all` set on `.github/workflows/ci.yml`, `audit.yml`, `release.yml`; per-job opt-in for any write scope; lint asserts no workflow inherits the legacy GITHUB_TOKEN default scope | active | 51 |
+| CIHARD-03 | Every `actions/checkout` step sets `persist-credentials: false` unless explicitly required for push; no `${{ github.event.pull_request.* }}` interpolation appears in any `run:` shell line | active | 51 |
+| CIHARD-04 | Every third-party `uses:` is pinned to a 40-character commit SHA (`@<sha>` exact match); release-gate `actions-pinned-by-sha` check rejects any `@v<N>`, `@main`, `@master`, or short-SHA pin; `pinact` is documented as the local maintainer refresh tool | active | 51 |
+| CIHARD-05 | `actionlint` runs on every PR via a new workflow lint job; failures block merge; covers untrusted-input interpolation, expired action references, missing `permissions:` | active | 51 |
 
 ### Signing substrate (SIGN)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| SIGN-01 | NEW `.github/workflows/release.yml` triggered on `release: types: [published]`; signs wheel + sdist + SBOM JSON via `sigstore/gh-action-sigstore-python@<sha>` (sigstore-python >=4.2,<5); produces `.sigstore` bundle (NOT detached `.sig`); sign step runs within 5 minutes of `id-token: write` OIDC mint | active | TBD |
-| SIGN-02 | `actions/attest-build-provenance@<sha>` generates SLSA Build L2 provenance attestations bound to the GitHub workflow identity; verifiable via `gh attestation verify`; runs for every signed artifact | active | TBD |
-| SIGN-03 | Tag signing via `gitsign` (Sigstore keyless, OIDC); no long-lived GPG keypair required; `docs/RELEASE.md` STOP-BEFORE-TAG block documents the gitsign-configured `git tag` invocation; tag verification uses workflow-scoped identity | active | TBD |
-| SIGN-04 | `scripts/verify_release.py` (NEW) is a 5-check user-facing trust-chain verifier with workflow-scoped EXACT-match `EXPECTED_IDENTITY = "https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/{version}"` (no wildcards, no regex); mandatory `--cert-oidc-issuer` flag; negative test rejects wrong-identity fixture | active | TBD |
-| SIGN-05 | PyPI Trusted Publishing (PEP 807) is OUT OF SCOPE for v0.6 (horus-os does not currently publish to PyPI); deferral documented in `.planning/decisions/no-pypi-in-v0.6.md`; v0.7+ may revisit | active | TBD |
+| SIGN-01 | NEW `.github/workflows/release.yml` triggered on `release: types: [published]`; signs wheel + sdist + SBOM JSON via `sigstore/gh-action-sigstore-python@<sha>` (sigstore-python >=4.2,<5); produces `.sigstore` bundle (NOT detached `.sig`); sign step runs within 5 minutes of `id-token: write` OIDC mint | active | 52 |
+| SIGN-02 | `actions/attest-build-provenance@<sha>` generates SLSA Build L2 provenance attestations bound to the GitHub workflow identity; verifiable via `gh attestation verify`; runs for every signed artifact | active | 52 |
+| SIGN-03 | Tag signing via `gitsign` (Sigstore keyless, OIDC); no long-lived GPG keypair required; `docs/RELEASE.md` STOP-BEFORE-TAG block documents the gitsign-configured `git tag` invocation; tag verification uses workflow-scoped identity | active | 52 |
+| SIGN-04 | `scripts/verify_release.py` (NEW) is a 5-check user-facing trust-chain verifier with workflow-scoped EXACT-match `EXPECTED_IDENTITY = "https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/{version}"` (no wildcards, no regex); mandatory `--cert-oidc-issuer` flag; negative test rejects wrong-identity fixture | active | 52 |
+| SIGN-05 | PyPI Trusted Publishing (PEP 807) is OUT OF SCOPE for v0.6 (horus-os does not currently publish to PyPI); deferral documented in `.planning/decisions/no-pypi-in-v0.6.md`; v0.7+ may revisit | active | 52 |
 
 ### Supply-chain SBOM (SBOM)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| SBOM-01 | Release-time SBOM generated via `cyclonedx-bom` (`cyclonedx-py environment`) against a FRESH `pip install <wheel>` venv (NOT `pip freeze` of the dev venv); CycloneDX 1.6 JSON format locked; signed via sigstore in the same `release.yml` job | active | TBD |
-| SBOM-02 | Two SBOMs ship per release: clean install (`pip install <wheel>`) AND extras install (`pip install <wheel>[dev,otel]`); both attached to the GitHub Release alongside their `.sigstore` bundles; matches existing two-variant install-smoke convention | active | TBD |
-| SBOM-03 | `actions/attest-sbom@<sha>` generates SBOM attestations bound to the artifact each SBOM describes; release-gate diffs SBOM contents against the published wheel's actual installed dependency tree | active | TBD |
+| SBOM-01 | Release-time SBOM generated via `cyclonedx-bom` (`cyclonedx-py environment`) against a FRESH `pip install <wheel>` venv (NOT `pip freeze` of the dev venv); CycloneDX 1.6 JSON format locked; signed via sigstore in the same `release.yml` job | active | 53 |
+| SBOM-02 | Two SBOMs ship per release: clean install (`pip install <wheel>`) AND extras install (`pip install <wheel>[dev,otel]`); both attached to the GitHub Release alongside their `.sigstore` bundles; matches existing two-variant install-smoke convention | active | 53 |
+| SBOM-03 | `actions/attest-sbom@<sha>` generates SBOM attestations bound to the artifact each SBOM describes; release-gate diffs SBOM contents against the published wheel's actual installed dependency tree | active | 53 |
 
 ### Supply-chain scanning (SUPPLY)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| SUPPLY-01 | NEW `.github/workflows/audit.yml` runs `pypa/gh-action-pip-audit@<sha>` (pip-audit >=2.10,<3) on every PR in dual-mode (`-s osv` AND `-s pypi`); failures block merge; `pip-audit` added to `[dev]` extras for local use | active | TBD |
-| SUPPLY-02 | `actions/dependency-review-action@<sha>` runs on every PR with explicit license allowlist (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, PSF-2.0); rejects new deps under unlisted licenses | active | TBD |
-| SUPPLY-03 | `.github/pip-audit-ignore.txt` is the ignore-list with mandatory dated-comment discipline (every entry includes `# YYYY-MM-DD: <reason>`); release-gate rejects undated entries; `.github/pip-audit-tracking/` directory carries fix-tracking docs for unfixable transitives | active | TBD |
-| SUPPLY-04 | `pip-audit` runs on BOTH `[dev]` AND `[dev,otel]` install variants to match the existing two-variant install-smoke pattern; matches the Phase 39 OTel-variant precedent | active | TBD |
+| SUPPLY-01 | NEW `.github/workflows/audit.yml` runs `pypa/gh-action-pip-audit@<sha>` (pip-audit >=2.10,<3) on every PR in dual-mode (`-s osv` AND `-s pypi`); failures block merge; `pip-audit` added to `[dev]` extras for local use | active | 53 |
+| SUPPLY-02 | `actions/dependency-review-action@<sha>` runs on every PR with explicit license allowlist (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, PSF-2.0); rejects new deps under unlisted licenses | active | 53 |
+| SUPPLY-03 | `.github/pip-audit-ignore.txt` is the ignore-list with mandatory dated-comment discipline (every entry includes `# YYYY-MM-DD: <reason>`); release-gate rejects undated entries; `.github/pip-audit-tracking/` directory carries fix-tracking docs for unfixable transitives | active | 53 |
+| SUPPLY-04 | `pip-audit` runs on BOTH `[dev]` AND `[dev,otel]` install variants to match the existing two-variant install-smoke pattern; matches the Phase 39 OTel-variant precedent | active | 53 |
 
 ### Dependabot + zizmor (DEPBOT)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| DEPBOT-01 | `.github/dependabot.yml` v2 with `package-ecosystem: pip` (groups: `ai-sdks` for anthropic + google-genai, `otel`, `web-stack`, `dev-tools`; cooldown 3 days default, 14 days majors; `applies-to: version-updates`) AND `package-ecosystem: github-actions` (SHA-pin refresh, weekly cadence) | active | TBD |
-| DEPBOT-02 | Security updates are explicitly UN-grouped (no `applies-to: security-updates` matcher); one PR per CVE; PRs gain a distinct `security-update` label; CVE PRs never hide inside a weekly grouped bump | active | TBD |
-| DEPBOT-03 | `zizmor` workflow runs on every PR + on `.github/workflows/**` edits; static-analysis findings block merge; complements actionlint by covering known-bad expression interpolation patterns | active | TBD |
+| DEPBOT-01 | `.github/dependabot.yml` v2 with `package-ecosystem: pip` (groups: `ai-sdks` for anthropic + google-genai, `otel`, `web-stack`, `dev-tools`; cooldown 3 days default, 14 days majors; `applies-to: version-updates`) AND `package-ecosystem: github-actions` (SHA-pin refresh, weekly cadence) | active | 54 |
+| DEPBOT-02 | Security updates are explicitly UN-grouped (no `applies-to: security-updates` matcher); one PR per CVE; PRs gain a distinct `security-update` label; CVE PRs never hide inside a weekly grouped bump | active | 54 |
+| DEPBOT-03 | `zizmor` workflow runs on every PR + on `.github/workflows/**` edits; static-analysis findings block merge; complements actionlint by covering known-bad expression interpolation patterns | active | 54 |
 
 ### Contributor docs + templates (CONTRIB)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| CONTRIB-01 | `CONTRIBUTING.md` rewritten: claim flow ("comment to claim, maintainer assigns"), branch policy, commit format (conventional commits, present tense, no em-dashes per CLAUDE.md), test/doc/changelog expectations; honest solo-maintainer language ("aim to acknowledge within 7 days"); NO 24-hour SLA, NO CLA, Discord optional | active | TBD |
-| CONTRIB-02 | `.github/PULL_REQUEST_TEMPLATE.md` NOTICE block removed at gate-flip; gains a checklist (tests added/updated, docs updated if user-visible, CHANGELOG `[Unreleased]` entry added if user-visible, license header on new files), and a reference to CONTRIBUTING.md + CODE_OF_CONDUCT.md | active | TBD |
-| CONTRIB-03 | `.github/ISSUE_TEMPLATE/` carries three forms: `bug.yml`, `feature.yml`, `security.yml` (security form redirects to GHSA private-vulnerability-reporting); banners flipped at gate-flip to drop "not accepting contributions" | active | TBD |
-| CONTRIB-04 | `.github/CODEOWNERS` NEW with PATH-SCOPED ownership (workflows, scripts/release_gate.py, scripts/verify_release.py, SECURITY.md, .planning/), NOT `* @Ridou` blanket assignment; reviewers auto-assigned by directory | active | TBD |
-| CONTRIB-05 | `docs/TRIAGE.md` NEW: label taxonomy with ≤15 hard cap (type:bug, type:feature, area:adapters, area:dashboard, area:cli, good-first-issue, help-wanted, security-update, breaking, blocked, needs-info, waiting-for-author, accepted, claimed, wontfix); `good-first-issue` rubric; weekly Sunday triage cadence; "may go silent up to 2 weeks" disclaimer; NO `actions/stale` auto-close | active | TBD |
-| CONTRIB-06 | `docs/LABEL-TAXONOMY.md` documents the label set + when each applies + saved-reply text for common scenarios (claim accepted, claim conflict, missing repro, stale-but-real bug) | active | TBD |
-| CONTRIB-07 | `.planning/decisions/` directory carries one-page rationale files: `no-cla.md`, `no-stale-bot.md`, `sigstore-keyless.md`, `sbom-cyclonedx.md`, `no-pypi-in-v0.6.md`; referenced from CONTRIBUTING.md and PROJECT.md key-decisions table | active | TBD |
+| CONTRIB-01 | `CONTRIBUTING.md` rewritten: claim flow ("comment to claim, maintainer assigns"), branch policy, commit format (conventional commits, present tense, no em-dashes per CLAUDE.md), test/doc/changelog expectations; honest solo-maintainer language ("aim to acknowledge within 7 days"); NO 24-hour SLA, NO CLA, Discord optional | active | 55 |
+| CONTRIB-02 | `.github/PULL_REQUEST_TEMPLATE.md` NOTICE block removed at gate-flip; gains a checklist (tests added/updated, docs updated if user-visible, CHANGELOG `[Unreleased]` entry added if user-visible, license header on new files), and a reference to CONTRIBUTING.md + CODE_OF_CONDUCT.md | active | 55 |
+| CONTRIB-03 | `.github/ISSUE_TEMPLATE/` carries three forms: `bug.yml`, `feature.yml`, `security.yml` (security form redirects to GHSA private-vulnerability-reporting); banners flipped at gate-flip to drop "not accepting contributions" | active | 55 |
+| CONTRIB-04 | `.github/CODEOWNERS` NEW with PATH-SCOPED ownership (workflows, scripts/release_gate.py, scripts/verify_release.py, SECURITY.md, .planning/), NOT `* @Ridou` blanket assignment; reviewers auto-assigned by directory | active | 55 |
+| CONTRIB-05 | `docs/TRIAGE.md` NEW: label taxonomy with ≤15 hard cap (type:bug, type:feature, area:adapters, area:dashboard, area:cli, good-first-issue, help-wanted, security-update, breaking, blocked, needs-info, waiting-for-author, accepted, claimed, wontfix); `good-first-issue` rubric; weekly Sunday triage cadence; "may go silent up to 2 weeks" disclaimer; NO `actions/stale` auto-close | active | 55 |
+| CONTRIB-06 | `docs/LABEL-TAXONOMY.md` documents the label set + when each applies + saved-reply text for common scenarios (claim accepted, claim conflict, missing repro, stale-but-real bug) | active | 55 |
+| CONTRIB-07 | `.planning/decisions/` directory carries one-page rationale files: `no-cla.md`, `no-stale-bot.md`, `sigstore-keyless.md`, `sbom-cyclonedx.md`, `no-pypi-in-v0.6.md`; referenced from CONTRIBUTING.md and PROJECT.md key-decisions table | active | 55 |
 
 ### SECURITY disclosure refresh (SECDISC)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| SECDISC-01 | `SECURITY.md` "(not active yet)" / staged-pipeline section deleted at gate-flip; replaced with active vulnerability-disclosure flow pointing at GitHub Security Advisories private reporting | active | TBD |
-| SECDISC-02 | Severity-tier SLOs replace any blanket SLO: "aim to acknowledge within 7 days"; fix targets critical 14d / high 30d / medium 90d / low no commitment; coordinated disclosure 90-day default; over-capacity acknowledgement language explicit ("if we go silent, file a public issue tagged `security-update-followup`") | active | TBD |
-| SECDISC-03 | Supported-versions table refreshed to cover v0.5.x and v0.6.x; clear retirement policy (only the most recent minor receives security fixes); test-advisory ritual ("we publish at least one rehearsal GHSA before any real CVE") documented | active | TBD |
-| SECDISC-04 | One-time GitHub repo settings checklist appended to `docs/RELEASE.md`: enable private vulnerability reporting, enable Dependabot alerts + security updates, enable secret scanning + push protection; checklist items each include a verification command (`gh api`) the maintainer runs once | active | TBD |
+| SECDISC-01 | `SECURITY.md` "(not active yet)" / staged-pipeline section deleted at gate-flip; replaced with active vulnerability-disclosure flow pointing at GitHub Security Advisories private reporting | active | 56 |
+| SECDISC-02 | Severity-tier SLOs replace any blanket SLO: "aim to acknowledge within 7 days"; fix targets critical 14d / high 30d / medium 90d / low no commitment; coordinated disclosure 90-day default; over-capacity acknowledgement language explicit ("if we go silent, file a public issue tagged `security-update-followup`") | active | 56 |
+| SECDISC-03 | Supported-versions table refreshed to cover v0.5.x and v0.6.x; clear retirement policy (only the most recent minor receives security fixes); test-advisory ritual ("we publish at least one rehearsal GHSA before any real CVE") documented | active | 56 |
+| SECDISC-04 | One-time GitHub repo settings checklist appended to `docs/RELEASE.md`: enable private vulnerability reporting, enable Dependabot alerts + security updates, enable secret scanning + push protection; checklist items each include a verification command (`gh api`) the maintainer runs once | active | 56 |
 
 ### Runbook (RUNBOOK)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| RUNBOOK-01 | NEW single `docs/MAINTAINER-RUNBOOK.md` covers BOTH the v0.6.0 release procedure (mirror of v0.5's STOP-BEFORE-TAG block) AND the post-flip operational playbook (freeze triggers, throttle triggers, burnout triggers, decision matrix for "is this PR worth my time?"); supersedes the candidate `docs/POSTFLIP-PLAYBOOK.md` name (one doc, not two) | active | TBD |
-| RUNBOOK-02 | `.planning/rollback/flip-gate-revert.md` carries the one-commit revert template that restores the pre-flip prose; tested by running `git apply` against a stale working tree in a Phase 59 rehearsal | active | TBD |
+| RUNBOOK-01 | NEW single `docs/MAINTAINER-RUNBOOK.md` covers BOTH the v0.6.0 release procedure (mirror of v0.5's STOP-BEFORE-TAG block) AND the post-flip operational playbook (freeze triggers, throttle triggers, burnout triggers, decision matrix for "is this PR worth my time?"); supersedes the candidate `docs/POSTFLIP-PLAYBOOK.md` name (one doc, not two) | active | 56 |
+| RUNBOOK-02 | `.planning/rollback/flip-gate-revert.md` carries the one-commit revert template that restores the pre-flip prose; tested by running `git apply` against a stale working tree in a Phase 59 rehearsal | active | 56 |
 
 ### Discussions + status channel (DISCGH)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| DISCGH-01 | GitHub Discussions enabled with categories (General, Q&A, Show and Tell, Ideas); enabling is a one-time repo settings step documented in `docs/MAINTAINER-RUNBOOK.md` repo-settings checklist | active | TBD |
-| DISCGH-02 | Pinned "Project Status" Discussion post created at v0.6.0 ship; text mirrors STATUS.md `## TL;DR` plus a "follow this post" CTA; updated at each release | active | TBD |
+| DISCGH-01 | GitHub Discussions enabled with categories (General, Q&A, Show and Tell, Ideas); enabling is a one-time repo settings step documented in `docs/MAINTAINER-RUNBOOK.md` repo-settings checklist | active | 56 |
+| DISCGH-02 | Pinned "Project Status" Discussion post created at v0.6.0 ship; text mirrors STATUS.md `## TL;DR` plus a "follow this post" CTA; updated at each release | active | 59 |
 
 ### Gate flip (FLIP)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| FLIP-01 | All gate-flip prose changes land in ONE atomic commit at v0.6.0 ship: STATUS.md TL;DR rewritten to "contributions OPEN" + milestone row marked SHIPPED; README "Project status" section + CTAs updated + badge bumped to v0.6.0; CONTRIBUTING.md NOTICE blocks deleted; PR template NOTICE block deleted; SECURITY.md "(not active yet)" section deleted; `.github/workflows/issue-claim-watcher.yml` deleted; saved replies updated; CHANGELOG `[0.6.0]` promoted | active | TBD |
-| FLIP-02 | First-time-contributor approval gate enabled in branch protection settings: every fork-PR from a user without prior merged PRs requires explicit "Approve and run" before CI runs; documented in `docs/MAINTAINER-RUNBOOK.md` | active | TBD |
-| FLIP-03 | `accepted-for-review` throttle active for first 30 days post-flip: PRs without that label do not block the queue; documented in `docs/MAINTAINER-RUNBOOK.md` as the burnout-prevention valve; removed after first 30 days unless retained based on volume | active | TBD |
+| FLIP-01 | All gate-flip prose changes land in ONE atomic commit at v0.6.0 ship: STATUS.md TL;DR rewritten to "contributions OPEN" + milestone row marked SHIPPED; README "Project status" section + CTAs updated + badge bumped to v0.6.0; CONTRIBUTING.md NOTICE blocks deleted; PR template NOTICE block deleted; SECURITY.md "(not active yet)" section deleted; `.github/workflows/issue-claim-watcher.yml` deleted; saved replies updated; CHANGELOG `[0.6.0]` promoted | active | 59 |
+| FLIP-02 | First-time-contributor approval gate enabled in branch protection settings: every fork-PR from a user without prior merged PRs requires explicit "Approve and run" before CI runs; documented in `docs/MAINTAINER-RUNBOOK.md` | active | 58 |
+| FLIP-03 | `accepted-for-review` throttle active for first 30 days post-flip: PRs without that label do not block the queue; documented in `docs/MAINTAINER-RUNBOOK.md` as the burnout-prevention valve; removed after first 30 days unless retained based on volume | active | 59 |
 
 ### Test and CI (continued from v0.5)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| TEST-22 | `tests/test_contribution_gate_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers (mirrors v0.5 TEST-17 pattern) | active | TBD |
-| TEST-23 | Workflow-lint regression test enforces CIHARD-01..05: scans every `.github/workflows/*.yml` for forbidden patterns (`pull_request_target` unguarded, missing top-level `permissions:`, non-SHA action pin, `${{ github.event.* }}` in shell, missing `persist-credentials: false`) | active | TBD |
-| TEST-24 | Sigstore identity negative-test: fixture signature signed by a different workflow identity MUST fail `scripts/verify_release.py`; positive fixture signed by the canonical identity passes; both fixtures committed under `tests/fixtures/sigstore/` | active | TBD |
-| TEST-25 | Three-OS install-smoke matrix (macOS + Ubuntu + Windows × Python 3.11 + 3.12) remains green; new `verify_release.py` test runs on every OS to catch platform-specific sigstore-python regressions; existing install-smoke + install-smoke-plugin jobs byte-identical (no rename) | active | TBD |
-| TEST-26 | Pre-flip soft-launch rehearsal (Phase 59): 3-5 invited contributors land sample PRs end-to-end through the new audit + sign + verify pipeline; friction findings tracked in `.planning/phases/59-*/REHEARSAL.md`; rehearsal PRs credited in CHANGELOG | active | TBD |
+| TEST-22 | `tests/test_contribution_gate_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers (mirrors v0.5 TEST-17 pattern) | active | 58 |
+| TEST-23 | Workflow-lint regression test enforces CIHARD-01..05: scans every `.github/workflows/*.yml` for forbidden patterns (`pull_request_target` unguarded, missing top-level `permissions:`, non-SHA action pin, `${{ github.event.* }}` in shell, missing `persist-credentials: false`) | active | 51 |
+| TEST-24 | Sigstore identity negative-test: fixture signature signed by a different workflow identity MUST fail `scripts/verify_release.py`; positive fixture signed by the canonical identity passes; both fixtures committed under `tests/fixtures/sigstore/` | active | 58 |
+| TEST-25 | Three-OS install-smoke matrix (macOS + Ubuntu + Windows × Python 3.11 + 3.12) remains green; new `verify_release.py` test runs on every OS to catch platform-specific sigstore-python regressions; existing install-smoke + install-smoke-plugin jobs byte-identical (no rename) | active | 58 |
+| TEST-26 | Pre-flip soft-launch rehearsal (Phase 59): 3-5 invited contributors land sample PRs end-to-end through the new audit + sign + verify pipeline; friction findings tracked in `.planning/phases/59-*/REHEARSAL.md`; rehearsal PRs credited in CHANGELOG | active | 58 |
 
 ### Release (continued from v0.5)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| REL-13 | Tag v0.6.0 with CHANGELOG and GitHub Release; gitsign-signed tag; `docs/MIGRATION-v0.5-to-v0.6.md` documents: no schema migration, no new base dependencies (signing/SBOM/audit are CI-time), one new `[dev]` addition (`pip-audit`), the gate flip's external-facing changes | active | TBD |
-| REL-14 | `scripts/release_gate.py` extended from 8 to 13 checks (5 new): `release-workflow-signing-present` (grep for sigstore-python + attest-build-provenance literals), `release-workflow-sbom-present` (grep for cyclonedx-py + attest-sbom), `audit-workflow-present` (grep for pip-audit + dependency-review-action), `local-pip-audit-clean` (`pip-audit -s osv` exits 0), `actions-pinned-by-sha` (regex asserts every `uses:` is `@<40-hex>`); `--check` enum APPENDED, existing 8 values byte-identical | active | TBD |
-| REL-15 | Two-tier release-gate execution: tier 1 (pre-merge, local, <10s) covers the grep-only checks + lint; tier 2 (pre-release, network, ~60s) adds `pip-audit` network call + sigstore-verify on the built wheel; tier choice via `--tier {local,release}` CLI flag (default `release`); offline mode short-circuits tier-2 with explicit `--allow-offline` flag plus warning | active | TBD |
+| REL-13 | Tag v0.6.0 with CHANGELOG and GitHub Release; gitsign-signed tag; `docs/MIGRATION-v0.5-to-v0.6.md` documents: no schema migration, no new base dependencies (signing/SBOM/audit are CI-time), one new `[dev]` addition (`pip-audit`), the gate flip's external-facing changes | active | 59 |
+| REL-14 | `scripts/release_gate.py` extended from 8 to 13 checks (5 new): `release-workflow-signing-present` (grep for sigstore-python + attest-build-provenance literals), `release-workflow-sbom-present` (grep for cyclonedx-py + attest-sbom), `audit-workflow-present` (grep for pip-audit + dependency-review-action), `local-pip-audit-clean` (`pip-audit -s osv` exits 0), `actions-pinned-by-sha` (regex asserts every `uses:` is `@<40-hex>`); `--check` enum APPENDED, existing 8 values byte-identical | active | 57 |
+| REL-15 | Two-tier release-gate execution: tier 1 (pre-merge, local, <10s) covers the grep-only checks + lint; tier 2 (pre-release, network, ~60s) adds `pip-audit` network call + sigstore-verify on the built wheel; tier choice via `--tier {local,release}` CLI flag (default `release`); offline mode short-circuits tier-2 with explicit `--allow-offline` flag plus warning | active | 57 |
 
 ## Coverage summary
 
@@ -572,3 +572,58 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | REL-10 | 50 | Complete (2026-05-26) |
 
 **Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.
+
+## Traceability — v0.6 Contribution Gate
+
+Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth: the Phase column in each category table above. Mirrors v0.5 traceability shape.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CIHARD-01 | 51 | Pending |
+| CIHARD-02 | 51 | Pending |
+| CIHARD-03 | 51 | Pending |
+| CIHARD-04 | 51 | Pending |
+| CIHARD-05 | 51 | Pending |
+| TEST-23 | 51 | Pending |
+| SIGN-01 | 52 | Pending |
+| SIGN-02 | 52 | Pending |
+| SIGN-03 | 52 | Pending |
+| SIGN-04 | 52 | Pending |
+| SIGN-05 | 52 | Pending |
+| SBOM-01 | 53 | Pending |
+| SBOM-02 | 53 | Pending |
+| SBOM-03 | 53 | Pending |
+| SUPPLY-01 | 53 | Pending |
+| SUPPLY-02 | 53 | Pending |
+| SUPPLY-03 | 53 | Pending |
+| SUPPLY-04 | 53 | Pending |
+| DEPBOT-01 | 54 | Pending |
+| DEPBOT-02 | 54 | Pending |
+| DEPBOT-03 | 54 | Pending |
+| CONTRIB-01 | 55 | Pending |
+| CONTRIB-02 | 55 | Pending |
+| CONTRIB-03 | 55 | Pending |
+| CONTRIB-04 | 55 | Pending |
+| CONTRIB-05 | 55 | Pending |
+| CONTRIB-06 | 55 | Pending |
+| CONTRIB-07 | 55 | Pending |
+| SECDISC-01 | 56 | Pending |
+| SECDISC-02 | 56 | Pending |
+| SECDISC-03 | 56 | Pending |
+| SECDISC-04 | 56 | Pending |
+| RUNBOOK-01 | 56 | Pending |
+| RUNBOOK-02 | 56 | Pending |
+| DISCGH-01 | 56 | Pending |
+| REL-14 | 57 | Pending |
+| REL-15 | 57 | Pending |
+| TEST-22 | 58 | Pending |
+| TEST-24 | 58 | Pending |
+| TEST-25 | 58 | Pending |
+| TEST-26 | 58 | Pending |
+| FLIP-02 | 58 | Pending |
+| FLIP-01 | 59 | Pending |
+| FLIP-03 | 59 | Pending |
+| DISCGH-02 | 59 | Pending |
+| REL-13 | 59 | Pending |
+
+**Coverage:** 46 v0.6 requirements, 46 mapped, 0 orphans, 0 duplicates. Phase 52 (fork-PR CI split) consolidated into Phase 51 per research SUMMARY recommendation (v0.5 tests use recorded provider responses; no live-secret fork-CI path needed in v0.6). Result: 9-phase shape (51-59) instead of 10.
