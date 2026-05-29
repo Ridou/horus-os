@@ -139,8 +139,14 @@ The full sequence:
    `chore(release): bump to N.M.P`.
 6. Push to `main`. Wait for CI green on the full 3-OS x 2-Python
    matrix (`gh run list --branch main --limit 1`).
+6.5. Confirm `gitsign` is configured. Run
+     `git config --get gitsign.connectorID` and confirm the
+     output is non-empty (typically
+     `https://github.com/login/oauth`). If empty, follow the
+     one-time gitsign setup in `docs/MAINTAINER-RUNBOOK.md`.
+     Do not proceed to step 7 until configured.
 7. Create the annotated tag:
-   `git tag -a vN.M.P -m "vN.M.P - <milestone-name>"`.
+   `git tag -s vN.M.P -m "vN.M.P - <milestone-name>"`.
    Push: `git push origin vN.M.P`.
 8. Publish the GitHub Release. Extract the new CHANGELOG section
    into a tmp file and hand it to `gh release create`:

@@ -79,6 +79,7 @@ See `.planning/ROADMAP.md` for full phase-level history.
 | CLI and web chat parallel at v0.1 | Different users prefer different surfaces. Both share the same backend so the marginal cost is the second UI shell, not a second runtime. | accepted (v0.1) |
 | SQLite over Postgres for default | Single file, zero ops, trivially portable, ships with the binary. Postgres is an option later for users who want it. | accepted (v0.1) |
 | Apache 2.0 license | Permissive, patent-grant clause important for AI tooling. Compatible with most third-party libraries we will use. | accepted (v0.1) |
+| No PyPI publishing in v0.6 (Trusted Publishing PEP 807 deferred) | horus-os does not currently publish to PyPI. Standing up Trusted Publishing requires a PyPI project + maintainer setup outside the v0.6 contribution-gate scope. Decision documented in `.planning/decisions/no-pypi-in-v0.6.md`. | accepted (v0.6) |
 
 ## Out of Scope (initial release)
 
