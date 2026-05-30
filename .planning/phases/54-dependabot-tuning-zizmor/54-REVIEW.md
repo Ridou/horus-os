@@ -26,7 +26,7 @@ status: clean
 Retroactive standard-depth review of the two non-test source files added in Phase 54 (Dependabot v2 config + zizmor static-analysis workflow). The implementation is straightforward and aligns with the documented DEPBOT-01..03 requirements:
 
 - dependabot.yml uses v2 schema, separates pip + github-actions ecosystems, and groups version-updates into 4 buckets (ai-sdks, otel, web-stack, dev-tools). Critically, NONE of the four groups carries `applies-to: security-updates`. DEPBOT-02's hard rule (every CVE gets its own PR) is structurally enforced.
-- cooldown windows are reasonable (default 3 days, semver-major 14 days) — prevents flapping while still landing security bumps quickly.
+- cooldown windows are reasonable (default 3 days, semver-major 14 days); prevents flapping while still landing security bumps quickly.
 - zizmor.yml limits trigger paths to `.github/workflows/**` (efficient) and uses `pull_request` (not `pull_request_target`), so fork PRs cannot abuse the security-events: write permission.
 - zizmor.yml grants `security-events: write` only at the job level (SARIF upload to Security tab); no id-token: write anywhere.
 - Every `uses:` line is SHA-pinned with `# vN.N.N` version comment (CIHARD-04).

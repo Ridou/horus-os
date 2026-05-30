@@ -47,8 +47,8 @@ No Critical or Warning issues found. Two Info-tier observations below.
 ### IN-01: SBOM dev-otel install path uses shell glob
 
 **File:** `.github/workflows/release.yml:67`
-**Issue:** `pip install 'dist/*.whl[dev,otel]'` quotes the entire pattern, so the shell never expands `dist/*.whl`. pip then sees the literal string `dist/*.whl[dev,otel]` which it parses as a path pattern with extras. This works in practice because pip resolves the path glob internally, but the contrast with line 56 (`pip install dist/*.whl` — shell-expanded) is visually inconsistent.
-**Fix:** Either unquote both for shell-expansion consistency, or document the quoting choice in the comment. The current behavior is correct — flagged for readability only:
+**Issue:** `pip install 'dist/*.whl[dev,otel]'` quotes the entire pattern, so the shell never expands `dist/*.whl`. pip then sees the literal string `dist/*.whl[dev,otel]` which it parses as a path pattern with extras. This works in practice because pip resolves the path glob internally, but the contrast with line 56 (`pip install dist/*.whl`, shell-expanded) is visually inconsistent.
+**Fix:** Either unquote both for shell-expansion consistency, or document the quoting choice in the comment. The current behavior is correct, flagged for readability only:
 ```yaml
 # pip resolves the glob internally so the literal string is correct here
 .venv-sbom-extras/bin/pip install 'dist/*.whl[dev,otel]'
@@ -58,7 +58,7 @@ No Critical or Warning issues found. Two Info-tier observations below.
 
 **File:** `.github/workflows/release.yml:78`
 **Issue:** `inputs: ./dist/*.whl ./dist/*.tar.gz ./dist/*.cdx.json` relies on the sigstore action expanding globs. If the SBOM-generation steps above silently produce zero `.cdx.json` files (for example, cyclonedx-py exits 0 with no output on an empty venv), the sigstore step still passes because the action treats no-match as no-op. The two SBOM-generation steps DO have implicit exit-on-error from `set -e` defaults in `run:` blocks, so a real failure exits the job, but a corner case (cyclonedx-py emits warnings to stderr and exits 0 with no file) is silently absorbed.
-**Fix:** Optional defense — assert SBOM file existence between SBOM-generation and sigstore-sign:
+**Fix:** Optional defense; assert SBOM file existence between SBOM-generation and sigstore-sign:
 ```yaml
 - name: Assert SBOMs were generated
   run: |

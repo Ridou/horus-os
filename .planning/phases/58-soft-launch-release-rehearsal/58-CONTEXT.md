@@ -46,9 +46,9 @@ This CONTEXT.md scopes the autonomous portion; the human portion is enumerated i
 
 This is the AUTONOMOUS-ONLY portion: a hand-crafted negative fixture at `tests/fixtures/sigstore/wrong-identity/`. The fixture is documented as "this is a crafted stub for negative testing only; the canonical positive case requires the human UAT recording." Composition:
 
-- `tests/fixtures/sigstore/wrong-identity/README.md` — purpose statement; explicit note that the bundle is hand-crafted (not gh-action-sigstore-python output).
-- `tests/fixtures/sigstore/wrong-identity/wrong-identity-bundle.sigstore.json` — minimal stub with `verificationMaterial.certificate.subject` carrying a non-`Ridou/horus-os` repo identity (e.g., `https://github.com/Other/repo/.github/workflows/release.yml@refs/tags/v0.6.0`).
-- `tests/test_verify_release_wrong_identity.py` — one test that invokes `scripts/verify_release.py --check identity ...` against the fixture and asserts exit code != 0. If the fixture stub is not realistic enough for the real verifier to round-trip, the test is `pytest.mark.skip(reason="awaits canonical fixture recording")` with a clear TODO.
+- `tests/fixtures/sigstore/wrong-identity/README.md`: purpose statement; explicit note that the bundle is hand-crafted (not gh-action-sigstore-python output).
+- `tests/fixtures/sigstore/wrong-identity/wrong-identity-bundle.sigstore.json`: minimal stub with `verificationMaterial.certificate.subject` carrying a non-`Ridou/horus-os` repo identity (e.g., `https://github.com/Other/repo/.github/workflows/release.yml@refs/tags/v0.6.0`).
+- `tests/test_verify_release_wrong_identity.py`: one test that invokes `scripts/verify_release.py --check identity ...` against the fixture and asserts exit code != 0. If the fixture stub is not realistic enough for the real verifier to round-trip, the test is `pytest.mark.skip(reason="awaits canonical fixture recording")` with a clear TODO.
 
 ### TEST-25 (install-smoke matrix byte-identical)
 

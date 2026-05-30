@@ -9,7 +9,7 @@ exposure.
 
 The Phase 54 DEPBOT-02 fix: every Dependabot group declares
 `applies-to: version-updates` (NOT all-updates, NOT security-updates).
-Security updates are explicitly UNGROUPED — every CVE gets its own PR
+Security updates are explicitly UNGROUPED; every CVE gets its own PR
 labelled `security-update`.
 
 This regression pins:
