@@ -291,3 +291,101 @@ def test_tier_local_under_10_seconds() -> None:
     elapsed = time.monotonic() - start
     assert proc.returncode == 0, f"tier-local must pass today; stderr: {proc.stderr}"
     assert elapsed < 15.0, f"tier-local wall-clock {elapsed:.2f}s exceeds 15s sanity ceiling"
+
+
+# Phase 57-followup (review WR-01): pip-audit-ignore.txt format validator
+
+
+def test_pip_audit_ignore_format_validator_accepts_empty(tmp_path: Path) -> None:
+    """An empty (or comment-only) ignore file passes the validator (v0.6.0 launch state)."""
+    mod = _load_release_gate_module()
+    ignore = tmp_path / "ignore.txt"
+    ignore.write_text("# this file is empty at launch\n", encoding="utf-8")
+    assert mod._validate_pip_audit_ignore_format(ignore) is None
+
+
+def test_pip_audit_ignore_format_validator_accepts_dated(tmp_path: Path) -> None:
+    """A correctly dated entry passes the validator."""
+    mod = _load_release_gate_module()
+    ignore = tmp_path / "ignore.txt"
+    ignore.write_text(
+        "# 2026-05-30: urllib3 transitive, awaiting upstream 2.x patch\nGHSA-xxxx-yyyy-zzzz\n",
+        encoding="utf-8",
+    )
+    assert mod._validate_pip_audit_ignore_format(ignore) is None
+
+
+def test_pip_audit_ignore_format_validator_rejects_undated(tmp_path: Path) -> None:
+    """An ignore entry without a dated comment above it FAILS the validator."""
+    mod = _load_release_gate_module()
+    ignore = tmp_path / "ignore.txt"
+    ignore.write_text("GHSA-xxxx-yyyy-zzzz\n", encoding="utf-8")
+    err = mod._validate_pip_audit_ignore_format(ignore)
+    assert err is not None, "undated ignore entry must be rejected"
+    assert "GHSA-xxxx-yyyy-zzzz" in err
+    assert "YYYY-MM-DD" in err
+
+
+def test_pip_audit_ignore_format_validator_rejects_undated_comment(tmp_path: Path) -> None:
+    """A bare comment without a date does NOT satisfy the dated-reason contract."""
+    mod = _load_release_gate_module()
+    ignore = tmp_path / "ignore.txt"
+    ignore.write_text(
+        "# this is a non-dated comment\nGHSA-xxxx-yyyy-zzzz\n",
+        encoding="utf-8",
+    )
+    err = mod._validate_pip_audit_ignore_format(ignore)
+    assert err is not None
+    assert "GHSA-xxxx-yyyy-zzzz" in err
+
+
+def test_pip_audit_ignore_format_validator_handles_missing_file(tmp_path: Path) -> None:
+    """When the ignore file doesn't exist, the validator returns None (no contract to enforce)."""
+    mod = _load_release_gate_module()
+    assert mod._validate_pip_audit_ignore_format(tmp_path / "absent.txt") is None
+
+
+def test_local_pip_audit_clean_fails_on_malformed_ignore(tmp_path: Path, monkeypatch) -> None:
+    """check_local_pip_audit_clean returns ok=False when the ignore file is malformed.
+
+    This closes the SUPPLY-03 contract gap: the .github/pip-audit-ignore.txt
+    header docstring promises the release-gate rejects undated ignore entries.
+    """
+    mod = _load_release_gate_module()
+    bad_ignore = tmp_path / "ignore.txt"
+    bad_ignore.write_text("CVE-2026-99999\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "DEFAULT_PIP_AUDIT_IGNORE_PATH", bad_ignore)
+    result = mod.check_local_pip_audit_clean(allow_offline=False)
+    assert result.ok is False
+    assert "format violation" in result.diagnostic
+
+
+# Phase 57-followup (review WR-02): incompatible flag combination
+
+
+def test_local_tier_plus_pip_audit_check_errors_out() -> None:
+    """--tier local + --check local-pip-audit-clean errors with a clear message.
+
+    Previously this combination silently produced no result and returned 0,
+    misleading the maintainer into believing the check passed.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(RELEASE_GATE_PATH),
+            "--tier",
+            "local",
+            "--check",
+            "local-pip-audit-clean",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert proc.returncode != 0, (
+        "incompatible --tier local + --check local-pip-audit-clean must exit non-zero"
+    )
+    combined = (proc.stdout + proc.stderr).lower()
+    assert "incompatible" in combined or "local" in combined
+    assert "local-pip-audit-clean" in proc.stdout + proc.stderr

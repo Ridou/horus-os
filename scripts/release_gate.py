@@ -745,11 +745,46 @@ def check_audit_workflow_present(audit_yml: Path) -> CheckResult:
     )
 
 
+_PIP_AUDIT_DATED_COMMENT_PATTERN = re.compile(r"^\s*#\s*\d{4}-\d{2}-\d{2}:\s+\S")
+
+
+def _validate_pip_audit_ignore_format(ignore_path: Path) -> str | None:
+    """Return None on valid file, or a diagnostic string on the first violation.
+
+    Each non-comment, non-blank line in .github/pip-audit-ignore.txt MUST be
+    immediately preceded by a `# YYYY-MM-DD: <reason>` comment line per the
+    Phase 53 SUPPLY-03 contract (file header docstring). This validator
+    enforces the contract before pip-audit is invoked, closing the gap
+    where an undocumented ignore entry would silently pass the gate.
+    """
+    if not ignore_path.is_file():
+        return None
+    lines = ignore_path.read_text(encoding="utf-8").splitlines()
+    prev_comment_has_date = False
+    for idx, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped:
+            prev_comment_has_date = False
+            continue
+        if stripped.startswith("#"):
+            prev_comment_has_date = bool(_PIP_AUDIT_DATED_COMMENT_PATTERN.match(line))
+            continue
+        if not prev_comment_has_date:
+            return (
+                f"line {idx}: {stripped!r} is missing the required "
+                "`# YYYY-MM-DD: <reason>` comment on the line above"
+            )
+        prev_comment_has_date = False
+    return None
+
+
 def check_local_pip_audit_clean(allow_offline: bool = False) -> CheckResult:
     """Run pip-audit -s osv against current install; pass only on clean scan (REL-14 + REL-15).
 
     Short-circuits with SKIP when allow_offline=True (tier-local offline path).
-    Honors the .github/pip-audit-ignore.txt ignore list (SUPPLY-03 substrate).
+    Honors the .github/pip-audit-ignore.txt ignore list (SUPPLY-03 substrate)
+    AND enforces the dated-reason comment contract documented in the
+    ignore-file header.
     """
     if allow_offline:
         return CheckResult(
@@ -758,6 +793,17 @@ def check_local_pip_audit_clean(allow_offline: bool = False) -> CheckResult:
             diagnostic=(
                 "SKIPPED - --allow-offline set; rerun without the flag to verify "
                 "network-backed pip-audit scan against OSV"
+            ),
+        )
+    # SUPPLY-03 contract: every ignore entry MUST have a dated reason comment.
+    ignore_format_err = _validate_pip_audit_ignore_format(DEFAULT_PIP_AUDIT_IGNORE_PATH)
+    if ignore_format_err is not None:
+        return CheckResult(
+            name="local-pip-audit-clean",
+            ok=False,
+            diagnostic=(
+                f"pip-audit-ignore.txt format violation: {ignore_format_err}; "
+                "see .github/pip-audit-ignore.txt header for required format"
             ),
         )
     ignore_file_arg: list[str] = []
@@ -889,7 +935,7 @@ def _resolved_v0_4_fixture_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the eight release-gate checks. Return 0 on full pass, 1 on any fail."""
+    """Run the thirteen release-gate checks. Return 0 on full pass, 1 on any fail."""
     parser = argparse.ArgumentParser(
         description="Pre-tag release-quality gate for horus-os.",
     )
@@ -936,6 +982,16 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    # WR-02 fix: the `local-pip-audit-clean` check requires tier=release
+    # (network-backed pip-audit scan). Reject the inconsistent combination
+    # with a clear error rather than silently producing no result.
+    if args.check == "local-pip-audit-clean" and args.tier == "local":
+        parser.error(
+            "--check local-pip-audit-clean is incompatible with --tier local "
+            "(local tier excludes the network-backed pip-audit scan); "
+            "rerun with --tier release"
+        )
 
     skip_build = args.skip_build or _truthy_env("HORUS_OS_RELEASE_GATE_SKIP_BUILD")
     skip_tests = _truthy_env("HORUS_OS_RELEASE_GATE_SKIP_TESTS")
