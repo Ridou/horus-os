@@ -1,9 +1,10 @@
-"""Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49 + Phase 57).
+"""Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49 + Phase 57 + Phase 53-followup).
 
-Runs THIRTEEN checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5 + 5 v0.6).
-The 5 v0.6 (Phase 57) checks are APPENDED to the existing enum; the 8
-v0.4/v0.5 enum values are byte-identical to v0.5 (load-bearing constraint #3
-from .planning/STATE.md).
+Runs FOURTEEN checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5 + 5 v0.6
+Phase 57 + 1 v0.6 Phase 53-followup SBOM-03 wheel-vs-SBOM diff). The 5 Phase 57
+v0.6 checks are APPENDED to the existing v0.5 enum; the SBOM-03 diff check is
+appended after. The 8 v0.4/v0.5 enum values remain byte-identical to v0.5
+(load-bearing constraint #3 from .planning/STATE.md).
 
 1. pricing-freshness: src/horus_os/observability/pricing.json
    `updated_at` is within HORUS_OS_PRICING_MAX_AGE_DAYS (default 14)
@@ -851,6 +852,196 @@ def check_local_pip_audit_clean(allow_offline: bool = False) -> CheckResult:
     )
 
 
+def _extract_pip_report_components(report_payload: dict) -> set[tuple[str, str]]:
+    """Return {(canonical_name, version)} for every entry in the pip --report install array.
+
+    Per PEP 658 / pip 22.2+ JSON report shape, each `install` entry has
+    `metadata.name` + `metadata.version`. Name canonicalization mirrors
+    PEP 503 (lowercase, normalize `_`/`.` to `-`) so the diff is robust
+    against the cosmetic name variants (`pydantic_core` vs `pydantic-core`)
+    that cyclonedx-py and pip emit interchangeably.
+    """
+    components: set[tuple[str, str]] = set()
+    for entry in report_payload.get("install", []) or []:
+        metadata = entry.get("metadata") or {}
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            canonical = re.sub(r"[-_.]+", "-", name.strip().lower())
+            components.add((canonical, version.strip()))
+    return components
+
+
+def _extract_sbom_components(sbom_payload: dict) -> set[tuple[str, str]]:
+    """Return {(canonical_name, version)} for every CycloneDX 1.6 `components[]` entry.
+
+    Tolerates absent fields; entries without both name + version are dropped
+    on the floor (matching pip-report behavior).
+    """
+    components: set[tuple[str, str]] = set()
+    for component in sbom_payload.get("components", []) or []:
+        name = component.get("name")
+        version = component.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            canonical = re.sub(r"[-_.]+", "-", name.strip().lower())
+            components.add((canonical, version.strip()))
+    return components
+
+
+def check_sbom_matches_wheel(
+    wheel_path: Path,
+    sbom_path: Path,
+    *,
+    extras: str = "",
+    pip_report_payload: dict | None = None,
+) -> CheckResult:
+    """Diff a CycloneDX 1.6 SBOM against the wheel's actual dependency tree (SBOM-03).
+
+    Runs `pip install --dry-run --ignore-installed --report <tmpfile> <wheel>[extras]`
+    to compute the transitive dependency tree pip would install, then diffs
+    that tree against the components listed in the CycloneDX 1.6 JSON SBOM.
+
+    Returns:
+    - ok=None (SKIP) when either path is absent (release_gate runs pre-release
+      where the wheel + SBOM are not yet built; this check is only relevant at
+      release-rehearsal time when both artifacts exist).
+    - ok=False on any STALE (SBOM has a component pip does not install) OR
+      MISSING (pip installs a component the SBOM does not list) divergence.
+      The wheel's own name is never compared (cyclonedx-py never lists the
+      wheel itself; pip --report does).
+    - ok=True when every pip-report component (excluding the wheel itself)
+      appears in the SBOM AND every SBOM component appears in pip-report.
+
+    The optional `pip_report_payload` kw lets tests inject a synthetic pip
+    report dict; production callers always pass None and the function shells
+    out to pip. Test-friendly injection avoids requiring a working pip + wheel
+    in unit tests while still exercising the diff logic end-to-end.
+    """
+    if wheel_path is None or not wheel_path.is_file():
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=None,
+            diagnostic=(
+                f"SKIPPED - wheel not available at {wheel_path}; this check is "
+                "relevant only at release-rehearsal time when the wheel and SBOM exist"
+            ),
+        )
+    if sbom_path is None or not sbom_path.is_file():
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=None,
+            diagnostic=(
+                f"SKIPPED - SBOM not available at {sbom_path}; this check is "
+                "relevant only at release-rehearsal time when the wheel and SBOM exist"
+            ),
+        )
+    try:
+        sbom_payload = json.loads(sbom_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=False,
+            diagnostic=f"could not read or parse SBOM at {sbom_path}: {type(exc).__name__}: {exc}",
+        )
+
+    if pip_report_payload is None:
+        spec = f"{wheel_path}{extras}" if extras else str(wheel_path)
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="release-gate-pip-report-"
+        ) as tmp:
+            report_path = Path(tmp.name)
+        try:
+            try:
+                proc = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--dry-run",
+                        "--ignore-installed",
+                        "--quiet",
+                        "--report",
+                        str(report_path),
+                        spec,
+                    ],
+                    cwd=str(REPO_ROOT),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=180,
+                )
+            except (FileNotFoundError, OSError) as exc:
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(f"pip not available ({type(exc).__name__}): {exc}"),
+                )
+            if proc.returncode != 0:
+                tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(
+                        f"pip install --dry-run failed for {spec}: exit {proc.returncode}; "
+                        "tail: " + " | ".join(tail)
+                    ),
+                )
+            try:
+                pip_report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(f"could not read pip --report output: {type(exc).__name__}: {exc}"),
+                )
+        finally:
+            try:
+                report_path.unlink()
+            except OSError:
+                pass
+
+    pip_components = _extract_pip_report_components(pip_report_payload)
+    sbom_components = _extract_sbom_components(sbom_payload)
+
+    # Strip the wheel's own component out of the pip-report side; cyclonedx-py
+    # `environment` scans never include the project itself, only its deps.
+    # The wheel filename shape per PEP 427 is `<name>-<version>-...whl`; the
+    # canonicalized first segment matches the wheel's distribution name.
+    wheel_self_name = re.sub(r"[-_.]+", "-", wheel_path.stem.split("-")[0].strip().lower())
+    pip_components = {(n, v) for (n, v) in pip_components if n != wheel_self_name}
+
+    stale = sbom_components - pip_components  # in SBOM but pip would not install
+    missing = pip_components - sbom_components  # pip would install but absent from SBOM
+
+    if stale or missing:
+        parts: list[str] = []
+        if stale:
+            stale_str = ", ".join(sorted(f"{n}=={v}" for (n, v) in stale)[:5])
+            suffix = f" (+{len(stale) - 5} more)" if len(stale) > 5 else ""
+            parts.append(
+                f"STALE {len(stale)} component(s) in SBOM but not in wheel: {stale_str}{suffix}"
+            )
+        if missing:
+            missing_str = ", ".join(sorted(f"{n}=={v}" for (n, v) in missing)[:5])
+            suffix = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+            parts.append(f"MISSING {len(missing)} wheel dep(s) not in SBOM: {missing_str}{suffix}")
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=False,
+            diagnostic="; ".join(parts),
+        )
+
+    return CheckResult(
+        name="sbom-matches-wheel",
+        ok=True,
+        diagnostic=(
+            f"SBOM at {sbom_path.name} matches the {len(pip_components)} "
+            "transitive deps of the wheel (canonical name + version diff clean)"
+        ),
+    )
+
+
 def check_actions_pinned_by_sha(workflows_dir: Path) -> CheckResult:
     """Every uses: line in every workflow has a 40-char hex SHA ref (REL-14, CIHARD-04)."""
     if not workflows_dir.is_dir():
@@ -935,7 +1126,7 @@ def _resolved_v0_4_fixture_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the thirteen release-gate checks. Return 0 on full pass, 1 on any fail."""
+    """Run the fourteen release-gate checks. Return 0 on full pass, 1 on any fail."""
     parser = argparse.ArgumentParser(
         description="Pre-tag release-quality gate for horus-os.",
     )
@@ -955,6 +1146,7 @@ def main(argv: list[str] | None = None) -> int:
             "audit-workflow-present",
             "local-pip-audit-clean",
             "actions-pinned-by-sha",
+            "sbom-matches-wheel",
         ),
         default=None,
         help="Run only the named check.",
@@ -1081,6 +1273,45 @@ def main(argv: list[str] | None = None) -> int:
 
     if selected in (None, tier_local_sentinel, "actions-pinned-by-sha"):
         results.append(check_actions_pinned_by_sha(workflows_dir))
+
+    # SBOM-03 second clause (Phase 53 carry-forward closed in 57-followup):
+    # diff the published wheel's dependency tree against the CycloneDX SBOM.
+    # Tier-release only: requires both wheel + SBOM artifacts on disk, which
+    # is the case at release-rehearsal time (post-`python -m build` +
+    # post-`cyclonedx-py environment`). Auto-discovers candidates in dist/;
+    # an explicit env override (HORUS_OS_WHEEL_PATH_OVERRIDE /
+    # HORUS_OS_SBOM_PATH_OVERRIDE) takes precedence for test mode and the
+    # rehearsal-checklist workflow.
+    if selected in (None, "sbom-matches-wheel") and tier == "release":
+        wheel_override = os.environ.get("HORUS_OS_WHEEL_PATH_OVERRIDE")
+        sbom_override = os.environ.get("HORUS_OS_SBOM_PATH_OVERRIDE")
+        if wheel_override and sbom_override:
+            results.append(check_sbom_matches_wheel(Path(wheel_override), Path(sbom_override)))
+        else:
+            dist = REPO_ROOT / "dist"
+            wheels = sorted(dist.glob("*.whl")) if dist.is_dir() else []
+            sboms = sorted(dist.glob("*.cdx.json")) if dist.is_dir() else []
+            if wheels and sboms:
+                # Default: latest wheel + the clean-install SBOM (matches the
+                # SBOM-01 contract: clean install = wheel deps, no extras).
+                clean_sbom = next(
+                    (s for s in sboms if "clean" in s.name),
+                    sboms[-1],
+                )
+                results.append(check_sbom_matches_wheel(wheels[-1], clean_sbom))
+            else:
+                results.append(
+                    CheckResult(
+                        name="sbom-matches-wheel",
+                        ok=None,
+                        diagnostic=(
+                            "SKIPPED - no wheel + SBOM pair found in dist/; "
+                            "this check is relevant at release-rehearsal time only. "
+                            "Set HORUS_OS_WHEEL_PATH_OVERRIDE + HORUS_OS_SBOM_PATH_OVERRIDE "
+                            "or run `python -m build` and SBOM generation first"
+                        ),
+                    )
+                )
 
     for result in results:
         _print_result(result)

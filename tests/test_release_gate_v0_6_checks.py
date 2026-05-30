@@ -78,18 +78,24 @@ def test_check_enum_byte_identical_first_eight() -> None:
     )
 
 
-def test_check_enum_has_13_total() -> None:
+def test_check_enum_has_14_total() -> None:
+    """REL-14 + 53-followup: 13 v0.6 launch checks + 1 SBOM-03 diff check = 14."""
     values = _check_enum_values()
-    assert len(values) == 13, (
-        f"REL-14: --check enum must have exactly 13 values (8 v0.4/v0.5 + 5 v0.6); got {len(values)}"
+    assert len(values) == 14, (
+        f"REL-14 + 53-followup: --check enum must have 14 values "
+        f"(8 v0.4/v0.5 + 5 Phase 57 v0.6 + 1 Phase 53-followup sbom-matches-wheel); "
+        f"got {len(values)}"
     )
 
 
 def test_check_enum_v0_6_appended() -> None:
-    """The 5 new v0.6 check values are appended at the end (positions 8..12)."""
+    """The 5 Phase 57 v0.6 check values are at positions 8..12; SBOM-03 diff is the 14th."""
     values = _check_enum_values()
-    assert set(values[8:]) == set(V0_6_NEW_CHECKS), (
-        f"REL-14: the 5 v0.6 checks must be at positions 8..12; got {values[8:]}"
+    assert set(values[8:13]) == set(V0_6_NEW_CHECKS), (
+        f"REL-14: the 5 Phase 57 v0.6 checks must be at positions 8..12; got {values[8:13]}"
+    )
+    assert values[13] == "sbom-matches-wheel", (
+        f"53-followup: sbom-matches-wheel must be the 14th check; got {values[13]!r}"
     )
 
 
