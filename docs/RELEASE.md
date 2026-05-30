@@ -172,6 +172,78 @@ The full sequence:
 - Open a tracking issue or note for the next milestone's planning
   phase.
 
+## One-time repo settings checklist (v0.6 contribution-gate setup)
+
+The v0.6 contribution-gate flip (Phase 59) assumes the following repo settings are enabled. They are one-time toggles; the maintainer runs through this list ONCE at v0.6 setup time and then never again. Each item includes a `gh api` verification command so the state can be re-confirmed if a downstream consumer asks.
+
+### Private vulnerability reporting (GHSA)
+
+Enable via Settings > Code security > Private vulnerability reporting > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os \
+  --field security_and_analysis.private_vulnerability_reporting.status=enabled
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.security_and_analysis.private_vulnerability_reporting.status'
+```
+
+Expect `enabled`. This is the substrate the SECURITY.md reporting flow assumes.
+
+### Dependabot alerts
+
+Enable via Settings > Code security > Dependabot alerts > Enable. There is no documented `gh api` toggle for this scope; the UI is the source of truth. Verify by visiting the Security tab > Dependabot alerts; if the link is live (not "enable"), the feature is on.
+
+### Dependabot security updates
+
+Enable via Settings > Code security > Dependabot security updates > Enable. This is what causes Dependabot to auto-open PRs for advisories. Combined with the Phase 54 `.github/dependabot.yml` config (DEPBOT-02 hard rule: no `applies-to: security-updates` grouping), every advisory gets its own PR labelled `security-update`.
+
+### Secret scanning + push protection
+
+Enable via Settings > Code security > Secret scanning > Enable, then Push protection > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os \
+  --field security_and_analysis.secret_scanning.status=enabled \
+  --field security_and_analysis.secret_scanning_push_protection.status=enabled
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.security_and_analysis.secret_scanning.status, .security_and_analysis.secret_scanning_push_protection.status'
+```
+
+Expect both `enabled`.
+
+### GitHub Discussions
+
+Enable via Settings > General > Features > Discussions > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os --field has_discussions=true
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.has_discussions'
+```
+
+Expect `true`. Then create the four categories via the Discussions Settings UI (no `gh api` mutation path for categories):
+
+- **General**: catch-all conversation.
+- **Q&A**: question-with-marked-answer format.
+- **Show and Tell**: user-built things on top of horus-os.
+- **Ideas**: future-direction proposals (not concrete enough for an issue).
+
+See `docs/MAINTAINER-RUNBOOK.md` Part 4 for the rationale per category.
+
+The pinned "Project Status" Discussion post is created at v0.6.0 ship time as Phase 59 work.
+
 ## Why the release gate exists
 
 The two pitfalls the gate closes:
