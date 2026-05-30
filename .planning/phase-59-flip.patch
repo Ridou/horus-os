@@ -1,0 +1,548 @@
+diff --git a/.github/ISSUE_TEMPLATE/bug.yml b/.github/ISSUE_TEMPLATE/bug.yml
+index 7f5ae9f..b647866 100644
+--- a/.github/ISSUE_TEMPLATE/bug.yml
++++ b/.github/ISSUE_TEMPLATE/bug.yml
+@@ -3,34 +3,13 @@ description: Report a defect in horus-os.
+ title: "[bug] "
+ labels: ["type:bug"]
+ body:
+-  - type: markdown
+-    attributes:
+-      value: |
+-        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
+-        ### Heads-up: this repo is not accepting outside PRs yet
+-
+-        Filing this bug does **not** assign you to fix it. The
+-        maintainer holds the issue queue and assigns all work
+-        internally. Issue-claim comments ("on it", "claim this",
+-        "assign to me") are not honored, and an automation will
+-        reply to common claim phrasing.
+-
+-        See
+-        [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
+-        for the project timeline and the gate for when outside
+-        contributions open (earliest v0.6, not promised).
+-
+-        Reproducible bug reports are still the single most useful
+-        thing an outside reader can submit, so please do file the
+-        bug if you hit one. The fields below are the required
+-        signal for triage.
+-
+   - type: markdown
+     attributes:
+       value: |
+         Thanks for taking the time to file a bug. Please fill out the
+         sections below so the issue can be reproduced and triaged
+-        quickly.
++        quickly. See `docs/TRIAGE.md` for the triage cadence and
++        label rubric.
+ 
+   - type: textarea
+     id: what-happened
+diff --git a/.github/ISSUE_TEMPLATE/feature.yml b/.github/ISSUE_TEMPLATE/feature.yml
+index 157f341..264eaa1 100644
+--- a/.github/ISSUE_TEMPLATE/feature.yml
++++ b/.github/ISSUE_TEMPLATE/feature.yml
+@@ -3,33 +3,15 @@ description: Propose a new feature or capability.
+ title: "[feat] "
+ labels: ["type:feature"]
+ body:
+-  - type: markdown
+-    attributes:
+-      value: |
+-        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
+-        ### Heads-up: this repo is not accepting outside PRs yet
+-
+-        Filing this feature request does **not** reserve the work
+-        for you. The maintainer holds the queue and assigns all
+-        work internally. Issue-claim comments ("on it", "claim
+-        this", "assign to me") are not honored, and an automation
+-        will reply to common claim phrasing.
+-
+-        See
+-        [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
+-        for the project timeline and the gate for when outside
+-        contributions open (earliest v0.6, not promised).
+-
+-        Open-ended design questions belong in a Discussion, not
+-        an issue. Use this template only for concrete proposals
+-        scoped to the current `ROADMAP.md`.
+-
+   - type: markdown
+     attributes:
+       value: |
+         Thanks for the proposal. Before filing, please read
+         `PROJECT.md` and `ROADMAP.md` to confirm your idea fits the
+-        project's scope and current direction.
++        project's scope and current direction. Open-ended design
++        questions belong in a Discussion, not an issue; use this
++        template only for concrete proposals scoped to the current
++        `ROADMAP.md`.
+ 
+   - type: textarea
+     id: problem
+diff --git a/.github/ISSUE_TEMPLATE/security.yml b/.github/ISSUE_TEMPLATE/security.yml
+index 9caa66d..ed91b15 100644
+--- a/.github/ISSUE_TEMPLATE/security.yml
++++ b/.github/ISSUE_TEMPLATE/security.yml
+@@ -6,7 +6,6 @@ body:
+   - type: markdown
+     attributes:
+       value: |
+-        <!-- PHASE-59-FLIP: when contributions open, no banner change needed; the redirect stays -->
+         ## Do NOT file security issues here
+ 
+         This is a public issue tracker. Security issues filed here
+diff --git a/.github/PULL_REQUEST_TEMPLATE.md b/.github/PULL_REQUEST_TEMPLATE.md
+index c2388f9..638aa72 100644
+--- a/.github/PULL_REQUEST_TEMPLATE.md
++++ b/.github/PULL_REQUEST_TEMPLATE.md
+@@ -1,13 +1,7 @@
+ <!--
+-NOTICE: horus-os is in a solo development phase and is NOT currently
+-accepting outside pull requests. PRs from forks will be acknowledged
+-and closed without review. See README.md "Project status" section
+-and CONTRIBUTING.md.
+-
+-If you are the maintainer working from a local branch, ignore this
+-notice and fill out the template.
+-
+ Drafts are welcome; mark the PR as Draft if it's not ready for review.
++See CONTRIBUTING.md for the contribution flow and docs/TRIAGE.md for
++the triage cadence.
+ -->
+ 
+ ## What this PR does
+diff --git a/.github/workflows/issue-claim-watcher.yml b/.github/workflows/issue-claim-watcher.yml
+deleted file mode 100644
+index ad5d02c..0000000
+--- a/.github/workflows/issue-claim-watcher.yml
++++ /dev/null
+@@ -1,85 +0,0 @@
+-name: Issue claim watcher
+-
+-# Posts a canned reply when an outside commenter uses
+-# claim-the-issue phrasing on an open issue or PR conversation.
+-# The marker comment <!-- horus-os-claim-watcher --> in the reply
+-# body prevents duplicate replies on the same thread.
+-#
+-# Tune or disable by editing the regex in the "Check for claim
+-# language" step, or by disabling this workflow in the repo's
+-# Actions settings. Maintainer comments and bot comments are
+-# skipped.
+-
+-on:
+-  issue_comment:
+-    types: [created]
+-
+-permissions: read-all
+-
+-jobs:
+-  detect-claim:
+-    permissions:
+-      issues: write
+-    if: >-
+-      github.event.issue.state == 'open'
+-      && github.event.comment.user.type != 'Bot'
+-      && github.event.comment.user.login != github.event.repository.owner.login
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Check for claim language
+-        id: check
+-        env:
+-          BODY: ${{ github.event.comment.body }}
+-        run: |
+-          set -eo pipefail
+-          body_lower=$(printf '%s' "$BODY" | tr '[:upper:]' '[:lower:]')
+-          if printf '%s' "$body_lower" | grep -Eq '(\bi (can|will|would like to|want to|am going to|am gonna|am about to|am happy to|would love to) (take|work on|tackle|pick up|handle|claim|do|fix|implement|grab|own)\b|\b(claiming|i claim|dibs on|i.?ll (take|work on|tackle|pick up|handle|do|fix|implement|grab))\b|\bworking on this\b|\b(im|i am) on it\b|\bassign(ing| this| me| it)?( to)? me\b|\bplease assign\b|\b(may|can|could) i (take|work on|tackle|pick up|handle|do|fix|implement|have|claim|grab)\b|\blet me (take|work on|tackle|pick up|handle|do|fix|implement|have|claim|grab)\b|\bi.?d like to (take|work on|tackle|pick up|handle|do|fix|implement|claim|grab|own) this\b)'; then
+-            echo "matched=true" >> "$GITHUB_OUTPUT"
+-          else
+-            echo "matched=false" >> "$GITHUB_OUTPUT"
+-          fi
+-
+-      - name: Skip if already replied on this thread
+-        id: dedupe
+-        if: steps.check.outputs.matched == 'true'
+-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+-        with:
+-          script: |
+-            const marker = '<!-- horus-os-claim-watcher -->';
+-            const comments = await github.paginate(
+-              github.rest.issues.listComments,
+-              {
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: context.issue.number,
+-                per_page: 100,
+-              }
+-            );
+-            const already = comments.some(
+-              (c) => (c.body || '').includes(marker)
+-            );
+-            core.setOutput('already', already ? 'true' : 'false');
+-
+-      - name: Post canned reply
+-        if: steps.check.outputs.matched == 'true' && steps.dedupe.outputs.already == 'false'
+-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+-        with:
+-          script: |
+-            const owner = context.repo.owner;
+-            const repo = context.repo.repo;
+-            const body = [
+-              '<!-- horus-os-claim-watcher -->',
+-              'Hey, thanks for the offer.',
+-              '',
+-              `horus-os is in solo development mode right now and the issue queue is not open for claims. The README and [STATUS.md](https://github.com/${owner}/${repo}/blob/main/STATUS.md) cover the gate (earliest v0.6, not promised). I am leaving this issue open for tracking, but it is not assigned to you, and a fork PR against it will not be merged until the contribution gate opens.`,
+-              '',
+-              'The most useful thing you can do today: run horus-os locally and write up what worked and what did not in a Discussion. Real-use feedback shapes the roadmap.',
+-              '',
+-              'Sorry for the canned reply, an automation flagged the wording. If you were not claiming, ignore me.',
+-            ].join('\n');
+-            await github.rest.issues.createComment({
+-              owner,
+-              repo,
+-              issue_number: context.issue.number,
+-              body,
+-            });
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index bf49017..5e6fd17 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -6,6 +6,90 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
+ 
+ ## [Unreleased]
+ 
++## [0.6.0] - 2026-05-30
++
++Sixth alpha. The "Contribution Gate" milestone: the project flips
++from solo development mode to OPEN for outside contributions on top
++of a hardened release pipeline. Ships sigstore-signed wheel + sdist
+++ SBOM (CycloneDX 1.6 JSON), SLSA Build L2 provenance, audit.yml
++PR-time supply-chain scan (pip-audit dual-mode + dependency-review),
++Dependabot v2 with ungrouped security updates, zizmor workflow
++static-analysis, contributor docs (CONTRIBUTING flow, TRIAGE guide,
++LABEL-TAXONOMY, path-scoped CODEOWNERS, 3 issue templates), SECURITY
++severity-tier SLOs, MAINTAINER-RUNBOOK, and a release-gate extended
++from 8 to 14 checks.
++
++### Added
++
++- **Sigstore-signed release artifacts.** `release.yml` signs the
++  wheel, sdist, and both CycloneDX 1.6 JSON SBOMs (clean + dev-otel)
++  via `sigstore/gh-action-sigstore-python`. Bundles upload to the
++  GitHub Release page automatically. SLSA Build L2 provenance via
++  two `actions/attest-build-provenance` invocations; SBOM
++  attestations via two `actions/attest-sbom` invocations.
++- **User-facing trust-chain verifier.** `scripts/verify_release.py`
++  runs FIVE checks: wheel-signature, sdist-signature, tag-signature,
++  sbom-signature, changelog-cross-ref. Pure stdlib; shells out to
++  `python -m sigstore verify identity` with the workflow-scoped
++  exact-match identity `https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/v<version>`.
++- **PR-time supply-chain scan.** `audit.yml` runs pip-audit
++  (osv + pypi sources) on `[dev]` and `[dev,otel]` install variants,
++  plus `actions/dependency-review-action` for license allowlist
++  enforcement. Honors `.github/pip-audit-ignore.txt` with dated-
++  reason discipline; per-CVE tracking docs under
++  `.github/pip-audit-tracking/`.
++- **Dependabot v2.** `pip` and `github-actions` ecosystems, weekly
++  cadence, cooldown windows (3 days default, 14 days semver-major),
++  four version-updates groups (ai-sdks, otel, web-stack, dev-tools).
++  Security updates are explicitly UNGROUPED: every CVE gets its own
++  PR labelled `security-update`.
++- **zizmor workflow static analysis.** `.github/workflows/zizmor.yml`
++  runs on every PR that touches `.github/workflows/**`; SARIF lands
++  in the Security tab.
++- **Contributor docs + templates.** CONTRIBUTING.md updated with the
++  active contribution flow (claim-then-PR, 7-day acknowledgement,
++  related decisions section). New `docs/TRIAGE.md` documents the
++  Sunday-triage cadence + good-first-issue rubric + claim flow.
++  New `docs/LABEL-TAXONOMY.md` documents the 15-label hard cap with
++  saved-reply text per label. Path-scoped `.github/CODEOWNERS`
++  (workflows, release scripts, SECURITY, planning). Three issue
++  templates: bug, feature, security (private-reporting redirect).
++  Four decision files: no-cla, no-stale-bot, sigstore-keyless,
++  sbom-cyclonedx, no-pypi-in-v0.6.
++- **SECURITY refresh.** Severity-tier SLOs (Critical 14d, High 30d,
++  Medium 90d, Low none). Over-capacity escalation path.
++  Test-advisory ritual.
++- **Maintainer runbook.** `docs/MAINTAINER-RUNBOOK.md` extends
++  `docs/RELEASE.md` with the gitsign signed-tag procedure, the
++  release.yml outputs to verify, `gh attestation verify` commands,
++  one-time repo settings checklist, and the `accepted-for-review`
++  30-day throttle for post-flip PR queue management.
++- **Release-gate extended to 14 checks.** Five Phase 57 checks
++  (release-workflow-signing-present, release-workflow-sbom-present,
++  audit-workflow-present, local-pip-audit-clean,
++  actions-pinned-by-sha) plus Phase 53-followup sbom-matches-wheel.
++  Two-tier execution model: `--tier local` (under 10s, grep-only)
++  vs `--tier release` (full network + scan). `--allow-offline`
++  short-circuits network checks with SKIP semantics.
++- **Pitfall regression suite.** `tests/test_contribution_gate_pitfalls/`
++  ships 12+ regression tests, one per pitfall in
++  `.planning/research/PITFALLS.md` (mirrors v0.5 TEST-17 pattern).
++
++### Changed
++
++- **Contribution gate flipped OPEN.** STATUS.md, README.md,
++  CONTRIBUTING.md, SECURITY.md, the PR template, and the issue
++  templates all updated to reflect the post-flip state. The
++  `issue-claim-watcher.yml` workflow is removed (no longer needed
++  now that claims are honored per the documented flow).
++- **SECURITY.md supported versions.** v0.5.x and v0.6.x supported;
++  earlier lines retired.
++
++### Removed
++
++- `.github/workflows/issue-claim-watcher.yml` (the canned-reply
++  automation; obsolete after the gate flip).
++
+ ## [0.5.0] - 2026-05-27
+ 
+ Fifth alpha. Adds a third-party plugin system on top of the v0.4
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index 69b07bb..bc47e4e 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -1,65 +1,23 @@
+ # Contributing to horus-os
+ 
+-<!-- PHASE-59-FLIP: when contributions open, replace the entire Status block (next H2 below) with "Status: open for contributions" and delete the "Future contribution flow (not active yet)" section. The "Future contribution flow (active after v0.6 gate flip)" section becomes the current flow. -->
+-## Status: not currently accepting outside contributions
+-
+-`horus-os` is in a solo development phase as of v0.3.0. The project
+-was open-sourced out of a working private command center, and the
+-maintainer is still moving fast through the early milestones (v0.4
+-Observability is in planning right now). Outside pull requests will
+-not be merged at this time, and "I want to claim this issue"
+-comments will not be assigned.
+-
+-This guide stays public so the standards are clear in advance, and so
+-contributors can mirror them locally if they want to. **Treat
+-everything below as the contract that will apply once the project
+-opens for contributions, not as an invitation to open a PR today.**
+-
+-What you can do today:
+-- **File issues** for real bugs you hit running `horus-os` locally.
+-- **Open Discussions** for design questions or scope proposals.
+-- **Star or watch** the repo to follow along.
+-- **Run the project for real** and write up your experience. That
+-  feedback is the most valuable input at this stage.
+-
+-What is not currently accepted:
+-- Pull requests from forks. They will be acknowledged and closed.
+-- Issue claims ("on it", "working on this", "assign to me"). The
+-  maintainer keeps the issue queue and assigns work to themselves.
+-- Scope-expansion proposals via PR. Use Discussions instead.
+-
+-The maintainer will update this banner once the internal
+-readiness gate is met. Most likely milestone for that is **v0.6
+-or later**; not promised, not scheduled.
++## Status: open for contributions
++
++`horus-os` is open for outside contributions as of v0.6.0
++(2026-05-30). The contribution gate flipped open after a 9-phase
++contribution-readiness milestone landed sigstore-signed releases,
++SBOM substrate, audit.yml supply-chain scan, Dependabot v2,
++contributor docs and templates, severity-tier disclosure flow, and
++a 14-check release-gate.
++
++This guide covers the day-to-day contribution flow, code style, and
++standards. For the triage cadence and label rubric, read
++`docs/TRIAGE.md`. For the security disclosure flow, read
++`SECURITY.md`.
+ 
+ If anything in this guide is wrong, unclear, or out of date, open an
+ issue.
+ 
+-## Future contribution flow (not active yet)
+-
+-When the project opens up, every incoming PR will go through:
+-
+-1. **Author vetting.** Maintainer checks GitHub account history and
+-   prior public work. First-time contributors get a small intro task
+-   (typo fix, doc tweak) before any code review on substantive
+-   changes.
+-2. **Automated review.** Incoming PRs go through a private
+-   pre-review process before any human review. Details are
+-   intentionally not published.
+-3. **Sandboxed CI.** Forked-PR CI runs with restricted tokens. No
+-   repository secrets are exposed to fork builds.
+-4. **Maintainer review.** Human review only after the above gates
+-   pass. No auto-merge.
+-5. **Graduated trust.** Repeated quality contributions move a
+-   contributor from "unknown" to "intro-task-passed" to
+-   "reviewed-PR-merged" to "trusted". Trust level affects which
+-   labels and review depth apply.
+-
+-The rest of this document covers the workflow, code style, and
+-standards. Everything below is still accurate for code already in
+-the repo and for the maintainer's own development.
+-
+-## Future contribution flow (active after v0.6 gate flip)
++## Contribution flow
+ 
+ When the project opens for contributions, the day-to-day flow is:
+ 
+diff --git a/README.md b/README.md
+index 1114f71..1178429 100644
+--- a/README.md
++++ b/README.md
+@@ -3,7 +3,7 @@
+ [![CI](https://github.com/Ridou/horus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/Ridou/horus-os/actions/workflows/ci.yml)
+ [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+ [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
+-[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](CHANGELOG.md)
++[![Release](https://img.shields.io/badge/release-v0.6.0-blue.svg)](CHANGELOG.md)
+ 
+ An open-source, self-hosted autonomous AI command center.
+ 
+@@ -11,18 +11,18 @@ An open-source, self-hosted autonomous AI command center.
+ 
+ ## Project status
+ 
+-**Solo dev mode. Outside PRs are not merged. Issue claims are not honored.**
++**v0.6.0 SHIPPED (2026-05-30). Outside contributions are OPEN.**
+ 
+-The full timeline, the gate for when this changes, and the canonical "what's shipped and what's next" view live in [STATUS.md](STATUS.md). Read that first.
++The full timeline and the canonical "what's shipped and what's next" view live in [STATUS.md](STATUS.md). For the contribution flow, read [CONTRIBUTING.md](CONTRIBUTING.md). For triage cadence and label rubric, read [docs/TRIAGE.md](docs/TRIAGE.md). For the disclosure flow and severity-tier SLOs, read [SECURITY.md](SECURITY.md).
+ 
+ The short version:
+ 
+-- `horus-os` was open-sourced out of a working private command center. The repo is public for transparency, not because the contribution flow is open.
+-- Pull requests from forks are acknowledged and closed without review until the project formally opens for outside contributions. Earliest milestone for that: **v0.6**. Not promised, not scheduled.
+-- Issue claim comments ("on it", "working on this", "claim this", "assign to me") are not honored. The maintainer holds the queue and assigns all work internally. An automation will reply to common claim phrasing pointing you at [STATUS.md](STATUS.md); apologies in advance for the canned tone.
+-- Star or watch to follow along. File bug reports when you hit one. Open Discussions for design questions. Run `horus-os` locally and write up real-use feedback. That feedback is the single most valuable outside contribution today.
++- `horus-os` was open-sourced out of a working private command center. The contribution gate flipped open at v0.6.0 after a 9-phase contribution-readiness milestone (sigstore-signed releases, SBOM substrate, audit.yml supply-chain scan, Dependabot v2, contributor docs + templates, severity-tier disclosure flow, 14-check release-gate).
++- Pull requests from forks are reviewed per the documented flow. First-time contributors require explicit "Approve and run" before CI runs (branch-protection setting).
++- Triage cadence: weekly Sunday pass; maintainer may go silent up to 2 weeks. Aim is to acknowledge within 7 days. No 24-hour SLA promised.
++- Released artifacts are sigstore-signed and SBOM-attested. Verify a downloaded wheel via `python scripts/verify_release.py --version 0.6.0 --cert-oidc-issuer https://token.actions.githubusercontent.com --bundle <wheel.sigstore> --artifact <wheel.whl>`.
+ 
+-Current release: **v0.3.0** (2026-05-24). Active milestone: v0.4 Observability (planning). See [STATUS.md](STATUS.md), [CHANGELOG.md](CHANGELOG.md), and [ROADMAP.md](ROADMAP.md).
++Current release: **v0.6.0** (2026-05-30). See [STATUS.md](STATUS.md), [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+ 
+ ## Quickstart
+ 
+diff --git a/SECURITY.md b/SECURITY.md
+index 1510dae..96b03ee 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -66,11 +66,6 @@ Out of scope:
+ 
+ The maintainer practices coordinated disclosure. Once a fix is ready, we will publish the advisory, release a patched version, and credit the reporter unless the reporter prefers to remain anonymous.
+ 
+-<!-- PHASE-59-FLIP: when contributions open, delete the "Contributor-pipeline security (not active yet)" section below; the live pre-review process replaces it. -->
+-## Contributor-pipeline security (not active yet)
+-
+-`horus-os` is in a solo development phase and **does not currently accept outside pull requests** (see `CONTRIBUTING.md` for the full notice). When the project opens for contributions, every incoming PR will pass through a private pre-review process before any human review. Until then, treat the existing surface area as single-maintainer code with no third-party PR exposure.
+-
+ ## Operational security guidance for users
+ 
+ The project ships with the following defaults that affect security:
+diff --git a/STATUS.md b/STATUS.md
+index d052391..60e21c6 100644
+--- a/STATUS.md
++++ b/STATUS.md
+@@ -8,21 +8,26 @@ yet?" question has a clear, dated answer.
+ For the deep planning detail, read `ROADMAP.md` and `.planning/`.
+ For release contents, read `CHANGELOG.md`.
+ 
+-**Last updated:** 2026-05-27.
++**Last updated:** 2026-05-30 (v0.6.0 SHIPPED; contributions OPEN).
+ 
+ ## TL;DR
+ 
+-- horus-os is in **solo development mode**.
+-- Outside pull requests are **not being merged**. Issue claim
+-  comments ("on it", "claim this", "assign to me") are **not
+-  honored**.
+-- The project opens for outside contributions once an internal
+-  readiness gate is met. Earliest milestone: **v0.6**. Not
+-  promised. Not scheduled.
+-- You can: file bug reports, open Discussions, star or watch the
+-  repo, run horus-os locally and report what worked.
+-- You cannot yet: open PRs from a fork, claim issues, get assigned
+-  to work.
++- horus-os is **open for outside contributions** as of v0.6.0
++  (2026-05-30).
++- Pull requests from forks are reviewed by the maintainer per the
++  documented flow in `CONTRIBUTING.md`. First-time contributors
++  require explicit "Approve and run" before CI runs (branch
++  protection setting).
++- Read `CONTRIBUTING.md` for the contribution flow, `docs/TRIAGE.md`
++  for the triage cadence and label rubric, and `SECURITY.md` for
++  the severity-tier disclosure flow.
++- Triage cadence: weekly Sunday pass; maintainer may go silent up
++  to 2 weeks (travel or deep work). Aim is to acknowledge within
++  7 days. No 24-hour SLA promised.
++- Released artifacts are sigstore-signed; verify a downloaded wheel
++  via `python scripts/verify_release.py --version 0.6.0
++  --cert-oidc-issuer https://token.actions.githubusercontent.com
++  --bundle <wheel.sigstore> --artifact <wheel.whl>`.
+ 
+ ## Milestone timeline
+ 
+@@ -33,7 +38,7 @@ For release contents, read `CHANGELOG.md`.
+ | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
+ | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
+ | v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPED** | `v0.5.0` | 2026-05-27 |
+-| v0.6+ Contribution gate | Earliest possible window for opening outside contributions. Tied to internal readiness. | **NOT PLANNED** | TBD | TBD |
++| v0.6 Contribution Gate | Sigstore-signed releases (wheel + sdist + SBOM), audit.yml supply-chain scan, Dependabot v2 with ungrouped security updates, contributor docs + templates, SECURITY severity-tier SLOs, release-gate extended to 14 checks, contribution-gate FLIPPED OPEN. | **SHIPPED** | `v0.6.0` | 2026-05-30 |
+ 
+ State legend: **SHIPPED** means tagged and on the Releases page.
+ **PLANNING** means roadmap drafted, plan or execution in progress.
+@@ -42,11 +47,10 @@ schedule.
+ 
+ ## Currently working on
+ 
+-**v0.5 Plugin System** shipped 2026-05-27 as `v0.5.0`. All 11
+-phases (40-50) complete; 1011 tests pass on `main` across the
+-3-OS × 2-Python matrix. All 8 release-gate checks green at tag
+-time. The full 6-job install-smoke-plugin matrix (macOS / Ubuntu /
+-Windows × Python 3.11 / 3.12) is required and green.
++**v0.6 Contribution Gate** shipped 2026-05-30 as `v0.6.0`. All 9
++phases (51-59) complete; 14 release-gate checks green at tag time.
++The contribution gate is now OPEN: outside PRs are reviewed per
++the documented flow in CONTRIBUTING.md.
+ 
+ v0.5 introduces:
+ - TOML manifest contract (`horus-plugin.toml`) with pydantic-backed
+@@ -86,24 +90,24 @@ list, read `.planning/REQUIREMENTS.md`.
+ 4. **Subscribe to the pinned "Project Status" Discussion** for
+    forward-looking updates without a commit.
+ 
+-## When collaboration opens
++## How to contribute
+ 
+-The project opens for outside contributions once an internal
+-readiness gate is met. **Earliest milestone for this: v0.6.**
+-Possibly later. Not scheduled, not promised. When it ships, this
+-page flips first, and the pinned Discussion gets a follow-up
+-reply.
++The project is OPEN for outside contributions as of v0.6.0
++(2026-05-30). The day-to-day flow lives in `CONTRIBUTING.md`; the
++triage cadence and label rubric live in `docs/TRIAGE.md`. Highlights:
+ 
+-Why the gate exists: horus-os was open-sourced from a working
+-private command center that runs against the maintainer's real
+-data and home PC. One bad merge could compromise that PC, the
+-downstream package, or both. A readiness gate is the precondition
+-for any open contribution model.
++1. Pick a `good-first-issue` or `help-wanted` issue and comment to
++   claim. Maintainer assigns. Open a draft PR within 7 days.
++2. CI (Ubuntu, macOS, Windows on Python 3.11 and 3.12) plus the
++   install-smoke matrix and supply-chain scan must pass.
++3. Path-scoped reviewers per `.github/CODEOWNERS`. Workflow and
++   release-script changes require the maintainer.
++4. No auto-merge. Maintainer hits the button after review-pass and
++   CI-green.
+ 
+-Until then, the most valuable outside contribution is **real-use
+-feedback in Discussions**. Run horus-os against a real workload
+-and write up what worked and what did not. That feedback shapes
+-the roadmap.
++Real-use feedback in Discussions is still the most valuable signal.
++Run horus-os against a real workload and write up what worked and
++what did not.
+ 
+ ## Shipped milestone detail
+ 
