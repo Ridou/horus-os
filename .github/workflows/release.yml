@@ -1,13 +1,18 @@
-# Phase 52 SIGN-01 + SIGN-02 substrate: keyless OIDC artifact signing plus
-# SLSA Build L2 provenance for every published GitHub Release. The workflow
-# fires on the release.published event so the maintainer's STOP-BEFORE-TAG
-# checklist (docs/RELEASE.md step 8) remains the human-confirmation gate.
-# Every `uses:` line is SHA-pinned per CIHARD-04 (Phase 51 convention); the
-# top-level `permissions: read-all` with per-job opt-in pattern mirrors
-# .github/workflows/ci.yml. The sigstore step bounds the OIDC budget via
-# a per-step five-minute timeout (SIGN-01 / PITFALL 2). Two per-artifact
-# attest-build-provenance invocations give 1:1 CI-step-to-verifiable-artifact
-# mapping per D-06; Phase 53 appends a third for SBOM files.
+# Phase 52 SIGN-01 + SIGN-02 substrate plus Phase 53 SBOM-01 + SBOM-02 +
+# SBOM-03 SBOM generation + attestation: keyless OIDC artifact signing,
+# SLSA Build L2 provenance, AND CycloneDX 1.6 JSON SBOMs (clean install +
+# [dev,otel] install) signed in the same job. SBOMs are generated against
+# FRESH `pip install <wheel>` venvs (NOT pip freeze of the dev venv) per
+# SBOM-01. The workflow fires on the release.published event so the
+# maintainer's STOP-BEFORE-TAG checklist (docs/RELEASE.md step 8) remains
+# the human-confirmation gate. Every `uses:` line is SHA-pinned per
+# CIHARD-04 (Phase 51 convention); the top-level `permissions: read-all`
+# with per-job opt-in pattern mirrors .github/workflows/ci.yml. The
+# sigstore step bounds the OIDC budget via a per-step five-minute timeout
+# (SIGN-01 / PITFALL 2). Two per-artifact attest-build-provenance
+# invocations give 1:1 CI-step-to-verifiable-artifact mapping per D-06;
+# Phase 53 adds two attest-sbom invocations (one per SBOM variant) for the
+# same per-artifact granularity.
 
 name: release
 
@@ -44,11 +49,33 @@ jobs:
       - name: Build wheel and sdist
         run: python -m build
 
+      - name: Generate SBOM (clean install)
+        run: |
+          python -m venv .venv-sbom-clean
+          .venv-sbom-clean/bin/pip install --upgrade pip
+          .venv-sbom-clean/bin/pip install dist/*.whl
+          .venv-sbom-clean/bin/pip install 'cyclonedx-bom>=7.3,<8'
+          .venv-sbom-clean/bin/cyclonedx-py environment .venv-sbom-clean/bin/python \
+            --output-format JSON \
+            --schema-version 1.6 \
+            --outfile dist/horus_os-clean.cdx.json
+
+      - name: Generate SBOM (dev,otel extras)
+        run: |
+          python -m venv .venv-sbom-extras
+          .venv-sbom-extras/bin/pip install --upgrade pip
+          .venv-sbom-extras/bin/pip install 'dist/*.whl[dev,otel]'
+          .venv-sbom-extras/bin/pip install 'cyclonedx-bom>=7.3,<8'
+          .venv-sbom-extras/bin/cyclonedx-py environment .venv-sbom-extras/bin/python \
+            --output-format JSON \
+            --schema-version 1.6 \
+            --outfile dist/horus_os-dev-otel.cdx.json
+
       - name: Sign artifacts (sigstore keyless OIDC)
         uses: sigstore/gh-action-sigstore-python@04cffa1d795717b140764e8b640de88853c92acc # v3.3.0
         timeout-minutes: 5
         with:
-          inputs: ./dist/*.whl ./dist/*.tar.gz
+          inputs: ./dist/*.whl ./dist/*.tar.gz ./dist/*.cdx.json
           release-signing-artifacts: true
 
       - name: Attest wheel (SLSA Build L2 provenance)
@@ -60,3 +87,15 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: 'dist/*.tar.gz'
+
+      - name: Attest SBOM (clean install)
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: 'dist/*.whl'
+          sbom-path: 'dist/horus_os-clean.cdx.json'
+
+      - name: Attest SBOM (dev,otel extras)
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: 'dist/*.whl'
+          sbom-path: 'dist/horus_os-dev-otel.cdx.json'
