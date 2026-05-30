@@ -49,7 +49,19 @@ def _scan_has_permissions_read_all(text: str) -> bool:
 
 
 def _scan_has_id_token_write(text: str) -> bool:
-    return "id-token: write" in text
+    """True if any non-comment line contains 'id-token: write'.
+
+    Comment-only lines are skipped so prose in the file header documenting
+    why id-token: write is forbidden does not register as a violation
+    (mirrors the comment-skip discipline in tests/test_contribution_gate_pitfalls
+    /test_pitfall_02_action_sha_pinning.py lines 49-52).
+    """
+    for line in text.splitlines():
+        if line.strip().startswith("#"):
+            continue
+        if "id-token: write" in line:
+            return True
+    return False
 
 
 def _scan_dual_mode_pip_audit(text: str) -> tuple[bool, bool]:
