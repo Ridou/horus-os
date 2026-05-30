@@ -1,5 +1,6 @@
 # Contributing to horus-os
 
+<!-- PHASE-59-FLIP: when contributions open, replace the entire Status block (next H2 below) with "Status: open for contributions" and delete the "Future contribution flow (not active yet)" section. The "Future contribution flow (active after v0.6 gate flip)" section becomes the current flow. -->
 ## Status: not currently accepting outside contributions
 
 `horus-os` is in a solo development phase as of v0.3.0. The project
@@ -57,6 +58,77 @@ When the project opens up, every incoming PR will go through:
 The rest of this document covers the workflow, code style, and
 standards. Everything below is still accurate for code already in
 the repo and for the maintainer's own development.
+
+## Future contribution flow (active after v0.6 gate flip)
+
+When the project opens for contributions, the day-to-day flow is:
+
+1. **Pick or open an issue.** New contributors should look for
+   `good-first-issue` and `help-wanted` labels. Read
+   `docs/TRIAGE.md` for the label rubric and what each label
+   means.
+2. **Comment to claim, maintainer assigns.** Comment "I would like
+   to take this" on the issue. The maintainer reviews recent
+   contribution history (for first-time contributors, may suggest a
+   smaller intro task first) and adds the `claimed` label plus
+   issue-assignment. Until assigned, the issue is not claimed.
+3. **Open a draft PR within 7 days.** If the draft PR does not
+   appear within 7 days, the `claimed` label is removed and the
+   issue returns to the queue.
+4. **CI must pass.** Ubuntu, macOS, Windows on Python 3.11 and
+   3.12, plus the install-smoke matrix and the supply-chain
+   scanning workflow (`pip-audit` dual-mode +
+   `dependency-review-action` license allowlist). The release-gate
+   13-check enum must pass for any change that touches the release
+   pipeline.
+5. **Code review.** Path-scoped reviewers are auto-assigned per
+   `.github/CODEOWNERS`. Workflow changes, release scripts, and the
+   SECURITY policy require the maintainer.
+6. **Merge.** No auto-merge. The maintainer hits the button after
+   review-pass and CI-green.
+
+### Service-level objective
+
+The maintainer will aim to acknowledge within 7 days of receiving a new issue or PR.
+That is a target, not a guarantee; there is no 24-hour SLA on this
+project. Honest expectations:
+
+- Weekly Sunday triage is the target cadence.
+- The queue may go silent up to 2 weeks (travel, deep work on an
+  in-flight phase, life). After 2 weeks of silence, a polite ping
+  on the issue resurfaces it.
+- The full triage policy lives in `docs/TRIAGE.md`.
+
+### Anti-features
+
+These features are intentionally absent. The rationale is documented
+in `.planning/decisions/` so the absence is a decision, not a gap.
+
+- **No CLA.** Apache 2.0 inbound-equals-outbound is the only
+  licensing requirement. See `.planning/decisions/no-cla.md`.
+- **No 24-hour SLA.** See the SLO language above.
+- **No `actions/stale` auto-close.** Aging issues are real signal,
+  not bot noise. See `.planning/decisions/no-stale-bot.md`.
+- **Discord is optional.** GitHub Issues and Discussions are the
+  canonical surfaces. No Discord-only conversations on roadmap
+  changes.
+
+## Related decisions
+
+The following one-page rationale files document load-bearing
+project choices. Read them before opening a PR that questions any
+of them:
+
+- `.planning/decisions/no-cla.md`: why no Contributor License
+  Agreement.
+- `.planning/decisions/no-stale-bot.md`: why no `actions/stale`
+  auto-close.
+- `.planning/decisions/sigstore-keyless.md`: why we sign with
+  keyless OIDC sigstore rather than long-lived GPG keys.
+- `.planning/decisions/sbom-cyclonedx.md`: why CycloneDX 1.6 JSON
+  is the SBOM format.
+- `.planning/decisions/no-pypi-in-v0.6.md`: why PyPI Trusted
+  Publishing is deferred to v0.7.
 
 ## Scope check
 

@@ -1,0 +1,19 @@
+# Phase 55 CONTRIB-04: path-scoped CODEOWNERS for horus-os.
+#
+# NO blanket `* @Ridou` assignment. Reviewers are auto-assigned per directory
+# so the maintainer sees ownership context for sensitive paths (workflows,
+# release scripts, security policy, planning artifacts) while routine
+# changes do not block on a default-owner ping.
+
+# CI workflows: every workflow change touches the release pipeline trust chain
+/.github/workflows/         @Ridou
+
+# Release-gate and verifier scripts: load-bearing for v0.6 trust substrate
+/scripts/release_gate.py    @Ridou
+/scripts/verify_release.py  @Ridou
+
+# Security policy: vulnerability disclosure flow
+/SECURITY.md                @Ridou
+
+# Planning artifacts: phase decisions, roadmap, requirements
+/.planning/                 @Ridou

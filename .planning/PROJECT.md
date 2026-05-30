@@ -80,6 +80,10 @@ See `.planning/ROADMAP.md` for full phase-level history.
 | SQLite over Postgres for default | Single file, zero ops, trivially portable, ships with the binary. Postgres is an option later for users who want it. | accepted (v0.1) |
 | Apache 2.0 license | Permissive, patent-grant clause important for AI tooling. Compatible with most third-party libraries we will use. | accepted (v0.1) |
 | No PyPI publishing in v0.6 (Trusted Publishing PEP 807 deferred) | horus-os does not currently publish to PyPI. Standing up Trusted Publishing requires a PyPI project + maintainer setup outside the v0.6 contribution-gate scope. Decision documented in `.planning/decisions/no-pypi-in-v0.6.md`. | accepted (v0.6) |
+| No Contributor License Agreement | Apache 2.0 inbound-equals-outbound on PR action is sufficient for a project of this scale. No CLA bot, no separate signing document. Decision in `.planning/decisions/no-cla.md`. | accepted (v0.6) |
+| No `actions/stale` auto-close | Aging issues are real signal; auto-close creates a false "we are responsive" impression. Honest "may go silent up to 2 weeks" disclaimer in `docs/TRIAGE.md` instead. Decision in `.planning/decisions/no-stale-bot.md`. | accepted (v0.6) |
+| Keyless OIDC signing via sigstore | Avoids long-lived GPG keys; every signature auditable in Rekor transparency log. Matches industry direction. Decision in `.planning/decisions/sigstore-keyless.md`. | accepted (v0.6) |
+| CycloneDX 1.6 JSON SBOM format | cyclonedx-py environment has mature venv introspection; FRESH-venv-aligned SBOM. Decision in `.planning/decisions/sbom-cyclonedx.md`. | accepted (v0.6) |
 
 ## Out of Scope (initial release)
 

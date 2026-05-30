@@ -1,11 +1,12 @@
 name: Bug report
 description: Report a defect in horus-os.
 title: "[bug] "
-labels: ["bug"]
+labels: ["type:bug"]
 body:
   - type: markdown
     attributes:
       value: |
+        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
         ### Heads-up: this repo is not accepting outside PRs yet
 
         Filing this bug does **not** assign you to fix it. The
@@ -74,7 +75,7 @@ body:
     attributes:
       label: horus-os version
       description: Output of `pip show horus-os | grep Version`, or commit SHA.
-      placeholder: "0.1.0"
+      placeholder: "0.6.0"
     validations:
       required: true
 
