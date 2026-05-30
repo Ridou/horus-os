@@ -10,9 +10,11 @@ D-04, D-08):
 2. sdist-signature: same shape, against the sdist tarball + bundle.
 3. tag-signature: shells out to `git verify-tag vN.M.P` in the repo
    working tree.
-4. sbom-signature: STUB returning ok=None with diagnostic
-   "SKIPPED - Phase 53 lands SBOM generation + signing". Phase 53
-   flips this single stub to active.
+4. sbom-signature: verifies BOTH SBOM .sigstore bundles (clean +
+   dev-otel) via _sigstore_verify; returns ok=None when no bundle
+   paths provided (mirrors check_wheel_signature SKIP semantics).
+   SBOM contents are FRESH-venv-aligned with the wheel at
+   release.yml generation time per SBOM-01.
 5. changelog-cross-ref: shells out to `gh release view vN.M.P --json
    body --jq .body` and asserts the body contains the CHANGELOG.md
    [N.M.P] section text (whitespace-normalized).
@@ -28,8 +30,12 @@ CLI:
     --version vN.M.P                            (REQUIRED; argparse rejects absence)
     --cert-oidc-issuer URL                      (REQUIRED; MUST equal EXPECTED_ISSUER)
     [--check {wheel|sdist|tag|sbom|changelog}]  (optional; default runs all five)
-    [--bundle PATH]                             (test mode: inject fixture bundle path)
-    [--artifact PATH]                           (test mode: inject fixture artifact path)
+    [--bundle PATH]                             (test mode: wheel/sdist bundle path)
+    [--artifact PATH]                           (test mode: wheel/sdist artifact path)
+    [--clean-bundle PATH]                       (Phase 53 SBOM check: clean .sigstore)
+    [--clean-artifact PATH]                     (Phase 53 SBOM check: clean .cdx.json)
+    [--extras-bundle PATH]                      (Phase 53 SBOM check: dev-otel .sigstore)
+    [--extras-artifact PATH]                    (Phase 53 SBOM check: dev-otel .cdx.json)
 
 Exit 0 only when no check has ok=False. Skipped checks (ok=None) do not
 count as failure (matches scripts/release_gate.py precedent and the
@@ -280,18 +286,67 @@ def check_tag_signature(version: str) -> CheckResult:
     )
 
 
-def check_sbom_signature(version: str) -> CheckResult:
-    """STUB per D-08: Phase 53 lands SBOM generation + signing.
+def check_sbom_signature(
+    version: str,
+    cert_oidc_issuer: str = EXPECTED_ISSUER,
+    clean_bundle_path: Path | None = None,
+    clean_artifact_path: Path | None = None,
+    extras_bundle_path: Path | None = None,
+    extras_artifact_path: Path | None = None,
+) -> CheckResult:
+    """Verify both SBOM .sigstore bundles for a release.
 
-    Returns CheckResult(ok=None) so the dispatch list does not need to be
-    restructured when Phase 53 flips the stub to active. SKIP does not
-    count as failure in the `any(r.ok is False ...)` semantics.
+    Phase 53 SBOM-03: flipped from the Phase 52 D-08 SKIP stub. Returns
+    ok=True only when every provided (bundle, artifact) pair verifies via
+    _sigstore_verify. Returns ok=None ONLY when all four path args are
+    None (fixture-mode-not-provided, mirrors check_wheel_signature SKIP
+    semantics so the CLI dispatcher does not crash when no SBOM bundles
+    are passed). Returns ok=False as soon as any provided pair fails.
+
+    The dependency-tree diff against the wheel (SBOM-03 second clause)
+    is deferred to the Phase 57 release-gate where pip install --dry-run
+    can run locally. SBOM contents are FRESH-venv-aligned with the wheel
+    at release.yml generation time per SBOM-01, so the bundle signature
+    is itself a sufficient integrity check at user-facing verify time.
     """
-    del version  # unused until Phase 53 flips the stub
+    pairs: list[tuple[str, Path, Path]] = []
+    if clean_bundle_path is not None and clean_artifact_path is not None:
+        pairs.append(("sbom-signature-clean", clean_bundle_path, clean_artifact_path))
+    if extras_bundle_path is not None and extras_artifact_path is not None:
+        pairs.append(("sbom-signature-dev-otel", extras_bundle_path, extras_artifact_path))
+
+    if not pairs:
+        return CheckResult(
+            name="sbom-signature",
+            ok=None,
+            diagnostic=(
+                "SKIPPED - no SBOM bundle/artifact pairs provided; pass "
+                "--clean-bundle/--clean-artifact and/or "
+                "--extras-bundle/--extras-artifact for fixture-mode verification"
+            ),
+        )
+
+    verified: list[str] = []
+    for check_name, bundle, artifact in pairs:
+        result = _sigstore_verify(
+            check_name=check_name,
+            version=version,
+            cert_oidc_issuer=cert_oidc_issuer,
+            bundle_path=bundle,
+            artifact_path=artifact,
+        )
+        if result.ok is not True:
+            return CheckResult(
+                name="sbom-signature",
+                ok=False,
+                diagnostic=f"{check_name} verify failed: {result.diagnostic}",
+            )
+        verified.append(check_name)
+
     return CheckResult(
         name="sbom-signature",
-        ok=None,
-        diagnostic="SKIPPED - Phase 53 lands SBOM generation + signing",
+        ok=True,
+        diagnostic=f"verified {', '.join(verified)} for version {version}",
     )
 
 
@@ -408,6 +463,37 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to artifact file for wheel or sdist check (test mode).",
     )
+    parser.add_argument(
+        "--clean-bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Path to .sigstore bundle for the clean-install SBOM "
+            "(Phase 53 SBOM check, fixture mode)."
+        ),
+    )
+    parser.add_argument(
+        "--clean-artifact",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the clean-install SBOM file (.cdx.json) (Phase 53 SBOM check, fixture mode)."
+        ),
+    )
+    parser.add_argument(
+        "--extras-bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Path to .sigstore bundle for the [dev,otel] SBOM (Phase 53 SBOM check, fixture mode)."
+        ),
+    )
+    parser.add_argument(
+        "--extras-artifact",
+        type=Path,
+        default=None,
+        help=("Path to the [dev,otel] SBOM file (.cdx.json) (Phase 53 SBOM check, fixture mode)."),
+    )
     return parser
 
 
@@ -485,7 +571,16 @@ def main(argv: list[str] | None = None) -> int:
         results.append(check_tag_signature(args.version))
 
     if selected in (None, "sbom"):
-        results.append(check_sbom_signature(args.version))
+        results.append(
+            check_sbom_signature(
+                version=args.version,
+                cert_oidc_issuer=args.cert_oidc_issuer,
+                clean_bundle_path=args.clean_bundle,
+                clean_artifact_path=args.clean_artifact,
+                extras_bundle_path=args.extras_bundle,
+                extras_artifact_path=args.extras_artifact,
+            )
+        )
 
     if selected in (None, "changelog"):
         results.append(check_changelog_cross_ref(args.version))

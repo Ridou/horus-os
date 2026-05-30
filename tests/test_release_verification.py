@@ -188,21 +188,24 @@ def test_wrong_issuer_refused(capsys: pytest.CaptureFixture[str]) -> None:
     )
 
 
-def test_sbom_stub_returns_skipped() -> None:
-    """SIGN-04 (D-08): sbom-signature check is a wired stub returning ok=None."""
+def test_sbom_check_returns_skipped_when_no_bundles() -> None:
+    """SBOM-03 (Phase 53 D-05 + D-09): check_sbom_signature returns ok=None ONLY when no bundle paths provided.
+
+    This test was originally `test_sbom_stub_returns_skipped` (Phase 52 D-08).
+    Phase 53 Plan 02 D-09 flipped the stub to active 2-bundle verification;
+    the SKIP path is now reached only in fixture-mode-not-provided.
+    """
     mod = _load_verify_release_module()
     result = mod.check_sbom_signature(version="0.6.0-rc1")
     assert result.ok is None, (
-        "SBOM check must return ok=None (SKIPPED) per D-08 until Phase "
-        "53 lands SBOM generation + signing."
+        "SBOM check must return ok=None when no bundle paths are provided "
+        "(fixture-mode-not-provided SKIP semantics per Phase 53 D-05)."
     )
     assert "SKIPPED" in result.diagnostic, (
-        f"SBOM stub diagnostic must contain 'SKIPPED'; got: {result.diagnostic!r}"
+        f"SBOM check diagnostic must contain 'SKIPPED'; got: {result.diagnostic!r}"
     )
-    assert "Phase 53" in result.diagnostic, (
-        f"SBOM stub diagnostic must reference 'Phase 53' so the "
-        f"maintainer reading the report knows where the active check "
-        f"lands; got: {result.diagnostic!r}"
+    assert "bundle" in result.diagnostic.lower(), (
+        f"SBOM check diagnostic must hint at the missing bundle args; got: {result.diagnostic!r}"
     )
 
 
