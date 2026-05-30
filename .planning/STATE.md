@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Contribution Gate
-status: executing
-last_updated: "2026-05-30T10:01:45.040Z"
-last_activity: 2026-05-30 -- Phase 57 execution started
+status: ready_to_plan
+last_updated: "2026-05-30T12:00:00.000Z"
+last_activity: 2026-05-30 -- v0.6 rehearsal-ready, 5 phases shipped + Phase 58 scaffold + Phase 59 patch drafted
 progress:
   total_phases: 38
-  completed_phases: 35
+  completed_phases: 37
   total_plans: 40
   completed_plans: 39
   percent: 98
