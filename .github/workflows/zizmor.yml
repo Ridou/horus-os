@@ -1,0 +1,36 @@
+# Phase 54 DEPBOT-03 substrate: zizmor static-analysis workflow as a second
+# layer of workflow-security enforcement complementing Phase 51 actionlint.
+# Covers known-bad expression interpolation patterns (e.g. ${{ github.event.* }}
+# expanded into shell context) that actionlint does not flag. Triggered on
+# every PR that touches .github/workflows/** plus pushes to main that touch
+# the same paths. Per-job security-events: write is the only elevated
+# permission so SARIF can land in the Security tab; no id-token: write.
+
+name: zizmor
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+
+permissions: read-all
+
+jobs:
+  zizmor:
+    name: zizmor static analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6

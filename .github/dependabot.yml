@@ -1,0 +1,55 @@
+# Phase 54 DEPBOT-01 + DEPBOT-02 substrate: Dependabot v2 for pip and
+# github-actions ecosystems. Version updates are grouped into four buckets
+# (ai-sdks, otel, web-stack, dev-tools) to silence routine churn while
+# preserving signal. Security updates are explicitly UN-grouped: every CVE
+# gets its own PR labelled `security-update` so a real vulnerability never
+# hides inside a weekly bumps PR. The DEPBOT-02 hard rule is enforced by
+# tests/test_dependabot_yml_structure.py::test_no_security_updates_grouping
+# which asserts the literal string `applies-to: security-updates` does not
+# appear on any non-comment line.
+
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "type:dev"
+    groups:
+      ai-sdks:
+        applies-to: version-updates
+        patterns:
+          - "anthropic"
+          - "google-genai"
+      otel:
+        applies-to: version-updates
+        patterns:
+          - "opentelemetry-*"
+      web-stack:
+        applies-to: version-updates
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "httpx"
+      dev-tools:
+        applies-to: version-updates
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "pip-audit"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
