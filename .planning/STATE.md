@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Contribution Gate
 status: executing
-last_updated: "2026-05-30T09:42:57.173Z"
-last_activity: 2026-05-30 -- Phase 54 planning complete
+last_updated: "2026-05-30T09:47:07.245Z"
+last_activity: 2026-05-30 -- Phase 55 planning complete
 progress:
   total_phases: 38
-  completed_phases: 32
-  total_plans: 37
-  completed_plans: 35
-  percent: 95
+  completed_phases: 33
+  total_plans: 38
+  completed_plans: 37
+  percent: 97
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** Phase 53 — SBOM + supply-chain scan substrate (audit.yml NEW)
+**Current focus:** Phase 54 — Dependabot tuning + zizmor
 
 ## Current Position
 
-Phase: 53 (SBOM + supply-chain scan substrate (audit.yml NEW)) — EXECUTING
+Phase: 54 (Dependabot tuning + zizmor) — EXECUTING
 Plan: 1 of 2
 Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 54 planning complete
+Last activity: 2026-05-30 -- Phase 55 planning complete
 
 ## Prior Milestones
 
