@@ -16,6 +16,35 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 1024
 
 
+def _blocks_to_anthropic(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translate provider-neutral content blocks into Anthropic SDK blocks.
+
+    A neutral text block ``{"type":"text","text":...}`` maps to the SDK text
+    block unchanged. A neutral image block
+    ``{"type":"image","media_type":...,"data_b64":...}`` maps to the SDK
+    base64 image block ``{"type":"image","source":{"type":"base64",...}}``.
+    This keeps vision content out of the providers' public surface while the
+    plain-string send path stays byte-identical.
+    """
+    out: list[dict[str, Any]] = []
+    for block in content:
+        block_type = block.get("type")
+        if block_type == "image":
+            out.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": block["media_type"],
+                        "data": block["data_b64"],
+                    },
+                }
+            )
+        else:
+            out.append({"type": "text", "text": block.get("text", "")})
+    return out
+
+
 def _tools_to_anthropic(tools: list[Tool] | None) -> list[dict[str, Any]] | None:
     if not tools:
         return None
@@ -198,16 +227,27 @@ class Conversation:
         self,
         *,
         prompt: str | None = None,
+        content: list[dict[str, Any]] | None = None,
         tool_results: list[ToolResult] | None = None,
         tools: list[Tool] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> AgentResult:
-        if prompt is None and tool_results is None:
-            raise ValueError("Conversation.send requires either prompt or tool_results")
-        if prompt is not None and tool_results is not None:
-            raise ValueError("Conversation.send accepts prompt or tool_results, not both")
+        provided = [x for x in (prompt, content, tool_results) if x is not None]
+        if not provided:
+            raise ValueError(
+                "Conversation.send requires either prompt or tool_results (or content)"
+            )
+        if len(provided) > 1:
+            raise ValueError(
+                "Conversation.send accepts prompt or tool_results or content, not more than one"
+            )
         if prompt is not None:
             self._messages.append({"role": "user", "content": prompt})
+        elif content is not None:
+            # Multimodal user turn: text and image blocks interleaved. The
+            # plain-string path above is untouched so prompt-only callers stay
+            # byte-identical.
+            self._messages.append({"role": "user", "content": _blocks_to_anthropic(content)})
         else:
             assert tool_results is not None
             if self._last_assistant_content:

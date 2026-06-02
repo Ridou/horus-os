@@ -23,7 +23,15 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Imported here only so `from __future__ import annotations` can resolve the
+    # UploadFile annotation on the /api/uploads route. fastapi stays an optional
+    # dependency: at runtime UploadFile is bound into module globals by the lazy
+    # import inside create_app (see below) so FastAPI's get_type_hints resolves
+    # the deferred string annotation without requiring fastapi at import time.
+    from fastapi import UploadFile
 
 from horus_os import __version__
 from horus_os._providers._stream_types import _StreamUsage
@@ -67,9 +75,26 @@ from horus_os.server.integrations_write import router as integrations_write_rout
 from horus_os.server.plugins_api import router as plugins_router
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
+from horus_os.tools.vision import _DEFAULT_MAX_BYTES, analyze_file_tool
+from horus_os.tools.web_search import web_search_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
 
 DEFAULT_MAX_ITERATIONS = 10
+
+# Phase 72 (VIS-03): upload guards for POST /api/uploads. The size cap reuses
+# the vision tool's pre-flight ceiling so a file the route accepts is one the
+# analyze_file tool will also read (T-72-11). The content-type allowlist maps
+# each accepted type to the extension the stored uuid filename gets, so the
+# stored name is derived from the validated type and NEVER from the untrusted
+# client filename (T-72-10, T-72-12).
+UPLOAD_MAX_BYTES = _DEFAULT_MAX_BYTES
+_UPLOAD_CONTENT_TYPES: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "application/pdf": ".pdf",
+}
 
 # ISOLATE-02: bounded plugin-lifecycle timeout. Mirrors the v0.4
 # Phase 38 OtelAdapter precedent (FORCE_FLUSH_TIMEOUT_MS = 2000); a
@@ -90,10 +115,17 @@ def create_app(
     export. When None, the packaged ``server/dashboard_dist/`` directory is used
     if it exists, otherwise the legacy single-page HTML dashboard is served.
     """
-    from fastapi import Body, FastAPI, HTTPException
+    from fastapi import Body, FastAPI, File, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, Response, StreamingResponse
     from fastapi.staticfiles import StaticFiles
+
+    # Bind UploadFile into module globals so FastAPI can resolve the deferred
+    # (string) annotation on the /api/uploads route under
+    # `from __future__ import annotations`. The name is otherwise local to this
+    # factory, so get_type_hints could not see it. fastapi stays optional: this
+    # only runs once create_app is called, by which point fastapi is imported.
+    globals()["UploadFile"] = UploadFile
 
     # Discover adapters before FastAPI instantiation so the lifespan
     # context manager can close over the resolved adapter list.
@@ -728,6 +760,63 @@ def create_app(
             "is_stale": pt.is_stale(now, 30),
         }
 
+    @app.post("/api/uploads")
+    async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+        # VIS-03: accept an image or PDF, store it under <data_dir>/uploads/
+        # with a uuid-based name, and return the absolute path the agent passes
+        # to analyze_file. The stored name is derived from the validated
+        # content type, never from the client filename, so a crafted filename
+        # cannot traverse out of the uploads dir (T-72-10).
+        content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+        extension = _UPLOAD_CONTENT_TYPES.get(content_type)
+        if extension is None:
+            raise HTTPException(
+                400,
+                detail=(
+                    f"unsupported content type {content_type!r}; allowed: "
+                    f"{sorted(_UPLOAD_CONTENT_TYPES)}"
+                ),
+            )
+
+        # T-72-11: read with a running size cap so an oversized upload is
+        # refused (413) without ever being persisted. The body is bounded in
+        # memory by stopping the first chunk that crosses the ceiling.
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = await file.read(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > UPLOAD_MAX_BYTES:
+                raise HTTPException(
+                    413,
+                    detail=(
+                        f"file exceeds the {UPLOAD_MAX_BYTES}-byte upload limit; nothing was stored"
+                    ),
+                )
+            chunks.append(chunk)
+        body = b"".join(chunks)
+
+        uploads_dir = Path(app.state.data_dir) / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        stored_path = (uploads_dir / f"{uuid.uuid4().hex}{extension}").resolve()
+        # Defense in depth: assert the resolved path stays under the uploads
+        # dir using the same Path.resolve() parent check read_file_tool uses
+        # (T-72-10). With a uuid name this always holds; the assertion makes
+        # the guarantee explicit and would catch any future name source change.
+        resolved_dir = uploads_dir.resolve()
+        if resolved_dir != stored_path and resolved_dir not in stored_path.parents:
+            raise HTTPException(400, detail="resolved upload path escapes the uploads directory")
+
+        stored_path.write_bytes(body)
+        return {
+            "path": str(stored_path),
+            "filename": file.filename,
+            "content_type": content_type,
+            "size": total,
+        }
+
     @app.post("/api/chat")
     async def chat(payload: dict = Body(...)) -> dict[str, Any]:  # noqa: B008
         prompt = (payload.get("prompt") or "").strip() if isinstance(payload, dict) else ""
@@ -1110,6 +1199,24 @@ def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistr
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
     registry.register(make_github_read_tool())
+    # Phase 72 (VIS-03): register analyze_file scoped to <data_dir>/uploads/ so
+    # the agent can analyze a file returned by POST /api/uploads by its path.
+    # base_dir confines analyze_file to the uploads area, so it cannot be steered
+    # to read arbitrary local files (T-72-08). This is additive; the existing
+    # tools stay registered.
+    registry.register(analyze_file_tool(base_dir=cfg.data_dir / "uploads"))
+    # Phase 72 (WEB-01): register the web_search tool ONLY when a provider is
+    # configured in [tools.web_search]. With no provider the registry has no
+    # "web_search" entry (default-deny, T-72-03). The provider API key is read
+    # from HORUS_OS_WEB_SEARCH_KEY and never persisted to config.toml.
+    if cfg.web_search_provider is not None:
+        registry.register(
+            web_search_tool(
+                cfg.web_search_provider,
+                api_key=os.environ.get("HORUS_OS_WEB_SEARCH_KEY"),
+                base_url=cfg.web_search_base_url,
+            )
+        )
     return registry
 
 

@@ -65,6 +65,15 @@ class Config:
     vector_memory_enabled: bool = False
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     models_dir: Path | None = None
+    # Phase 72 (WEB-01): bring-your-own web search. Both default to None so the
+    # web_search tool is ABSENT from the default registry until a provider is
+    # configured (default-deny). web_search_provider is one of searxng / brave /
+    # tavily; web_search_base_url is the SearXNG instance URL (required for
+    # searxng, optional for the hosted providers). The provider API key is read
+    # from HORUS_OS_WEB_SEARCH_KEY at registration time and is NEVER persisted
+    # to config.toml, so no secret lands in committed text.
+    web_search_provider: str | None = None
+    web_search_base_url: str | None = None
 
     def models_path(self) -> Path:
         """Return the directory that holds downloaded embedding models.
@@ -161,6 +170,8 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     pricing = data.get("pricing", {}) or {}
     local = data.get("local", {}) or {}
     memory = data.get("memory", {}) or {}
+    tools = data.get("tools", {}) or {}
+    web_search = tools.get("web_search", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -186,6 +197,10 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["embedding_model"] = str(memory["embedding_model"])
     if "models_dir" in memory:
         overrides["models_dir"] = Path(memory["models_dir"]).expanduser()
+    if "provider" in web_search:
+        overrides["web_search_provider"] = str(web_search["provider"])
+    if "base_url" in web_search:
+        overrides["web_search_base_url"] = str(web_search["base_url"])
     return replace(base, **overrides)
 
 
@@ -234,4 +249,12 @@ def _dump_toml(config: Config) -> str:
         )
         if config.models_dir is not None:
             base += f'models_dir = "{config.models_dir.as_posix()}"\n'
+    # Phase 72 (WEB-01): emit [tools.web_search] only when a provider is set,
+    # mirroring the conditional [pricing]/[local]/[memory] emissions above. The
+    # provider API key is intentionally NOT written here; it is supplied via the
+    # HORUS_OS_WEB_SEARCH_KEY env var so no secret lands in config.toml.
+    if config.web_search_provider:
+        base += f'\n[tools.web_search]\nprovider = "{config.web_search_provider}"\n'
+        if config.web_search_base_url:
+            base += f'base_url = "{config.web_search_base_url}"\n'
     return base

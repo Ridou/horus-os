@@ -103,6 +103,9 @@
       <textarea id="prompt" placeholder="Ask the agent. The configured tools include read_file, list_notes, search_notes, read_note, create_note, append_note."></textarea>
       <div class="row" style="margin-top: 8px;">
         <button class="primary" id="send">Send</button>
+        <input type="file" id="chat-file" accept="image/*,application/pdf" style="display: none;">
+        <button class="ghost" id="chat-attach">Attach image / PDF</button>
+        <span class="status" id="chat-attachment"></span>
         <span class="status" id="chat-status"></span>
       </div>
       <div class="response" id="chat-response"></div>
@@ -245,8 +248,48 @@
     }
     bootstrap();
 
+    // Phase 72 (VIS-03): chat file-upload affordance. On selection the file is
+    // POSTed to /api/uploads and the returned absolute path is stashed in
+    // attachedFile; Send prepends it to the prompt so the agent can call
+    // analyze_file on it. The filename is shown via textContent (never
+    // innerHTML) so a crafted filename cannot inject markup (T-72-14).
+    let attachedFile = null;
+
+    function clearAttachment() {
+      attachedFile = null;
+      $("#chat-file").value = "";
+      $("#chat-attachment").textContent = "";
+    }
+
+    $("#chat-attach").addEventListener("click", () => $("#chat-file").click());
+
+    $("#chat-file").addEventListener("change", async () => {
+      const file = $("#chat-file").files[0];
+      if (!file) {
+        clearAttachment();
+        return;
+      }
+      $("#chat-attachment").textContent = "uploading ...";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const data = await fetchJson("/api/uploads", { method: "POST", body: form });
+        attachedFile = data.path;
+        $("#chat-attachment").textContent = `attached: ${data.filename}`;
+      } catch (e) {
+        attachedFile = null;
+        $("#chat-file").value = "";
+        $("#chat-attachment").textContent = `attach failed: ${e.message || String(e)}`;
+      }
+    });
+
     $("#send").addEventListener("click", async () => {
-      const prompt = $("#prompt").value.trim();
+      const typed = $("#prompt").value.trim();
+      // Prepend the attached file path so the agent knows it may analyze it.
+      const prompt = attachedFile
+        ? `An image or PDF is attached at the local path: ${attachedFile}\n` +
+          `You may call analyze_file with that path to inspect it.\n\n${typed}`
+        : typed;
       if (!prompt) return;
       $("#send").disabled = true;
       $("#chat-status").textContent = "running ...";
@@ -317,6 +360,9 @@
           : `[streamed, ${latencyMs}ms${traceSuffix}, ${toolCount} tool calls]`;
         status.textContent = meta;
         $("#chat-status").textContent = "";
+        // Clear the attachment only after a successful send so a failed send
+        // keeps the attached file for a retry.
+        if (!sawError) clearAttachment();
       } catch (e) {
         pre.classList.add("stream-error");
         pre.textContent = e.message || String(e);

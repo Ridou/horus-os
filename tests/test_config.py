@@ -170,3 +170,56 @@ def test_save_is_atomic_on_overwrite(tmp_path: Path) -> None:
     # No tmp file lingers
     leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".config.toml.")]
     assert leftovers == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 72 (WEB-01): [tools.web_search] table -> web_search_provider /
+# web_search_base_url fields. Absent table leaves both None; a configured table
+# round-trips through save/load without persisting any API key.
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_defaults_to_none(tmp_path: Path) -> None:
+    cfg = Config.with_defaults(tmp_path)
+    assert cfg.web_search_provider is None
+    assert cfg.web_search_base_url is None
+
+
+def test_web_search_absent_table_leaves_none(tmp_path: Path) -> None:
+    (tmp_path / CONFIG_FILENAME).write_text('[providers]\ndefault = "anthropic"\n')
+    loaded = Config.load(tmp_path)
+    assert loaded.web_search_provider is None
+    assert loaded.web_search_base_url is None
+
+
+def test_web_search_read_from_toml(tmp_path: Path) -> None:
+    contents = (
+        "[tools.web_search]\n"
+        'provider = "searxng"\n'
+        'base_url = "http://searxng.local:8080"\n'
+    )
+    (tmp_path / CONFIG_FILENAME).write_text(contents)
+    loaded = Config.load(tmp_path)
+    assert loaded.web_search_provider == "searxng"
+    assert loaded.web_search_base_url == "http://searxng.local:8080"
+
+
+def test_save_omits_web_search_table_when_unset(tmp_path: Path) -> None:
+    cfg = Config.with_defaults(tmp_path)
+    cfg.save()
+    dumped = (tmp_path / CONFIG_FILENAME).read_text()
+    assert "[tools.web_search]" not in dumped
+
+
+def test_save_round_trips_web_search(tmp_path: Path) -> None:
+    cfg = Config.with_defaults(tmp_path)
+    cfg.web_search_provider = "searxng"
+    cfg.web_search_base_url = "http://searxng.local:8080"
+    cfg.save()
+    dumped = (tmp_path / CONFIG_FILENAME).read_text()
+    assert "[tools.web_search]" in dumped
+    # No API key is ever persisted to config.toml.
+    assert "HORUS_OS_WEB_SEARCH_KEY" not in dumped
+    loaded = Config.load(tmp_path)
+    assert loaded.web_search_provider == "searxng"
+    assert loaded.web_search_base_url == "http://searxng.local:8080"

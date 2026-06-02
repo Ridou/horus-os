@@ -65,6 +65,15 @@ local-memory = [
     "onnxruntime>=1.17.0,<1.19.0",
     "sqlite-vec>=0.1.9",
 ]
+# Phase 72 (WEB-01/WEB-03): the BYO web search tool talks to SearXNG/Brave/
+# Tavily over httpx. httpx is already transitive via openai/supabase; it is
+# listed here so the [web] extra is self-describing and web search stays
+# optional (no new required base dependency).
+web = ["httpx>=0.27"]
+# Phase 72 (vision/PDF, consumed by plan 72-02's vision tool): pypdf is a
+# pure-Python, BSD-3-Clause, cross-OS PDF text extractor with no native build.
+# Kept optional so a bare install reads images and notes without it.
+pdf = ["pypdf>=6.12.2"]
 all = [
     # The local-memory extra (fastembed, onnxruntime, sqlite-vec) is
     # intentionally NOT aggregated here; its native onnxruntime wheels are
@@ -80,6 +89,8 @@ all = [
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
     "mcp>=1.27",
+    "httpx>=0.27",
+    "pypdf>=6.12.2",
 ]
 dev = [
     "fastapi>=0.110",
