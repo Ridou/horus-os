@@ -193,11 +193,7 @@ def test_web_search_absent_table_leaves_none(tmp_path: Path) -> None:
 
 
 def test_web_search_read_from_toml(tmp_path: Path) -> None:
-    contents = (
-        "[tools.web_search]\n"
-        'provider = "searxng"\n'
-        'base_url = "http://searxng.local:8080"\n'
-    )
+    contents = '[tools.web_search]\nprovider = "searxng"\nbase_url = "http://searxng.local:8080"\n'
     (tmp_path / CONFIG_FILENAME).write_text(contents)
     loaded = Config.load(tmp_path)
     assert loaded.web_search_provider == "searxng"

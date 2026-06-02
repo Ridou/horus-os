@@ -70,6 +70,7 @@ from horus_os.plugins import (
     PluginRegistry,
     discover_plugins,
 )
+from horus_os.research.api import router as research_router
 from horus_os.server.dashboard_api import router as dashboard_router
 from horus_os.server.integrations_write import router as integrations_write_router
 from horus_os.server.plugins_api import router as plugins_router
@@ -471,6 +472,13 @@ def create_app(
     # instance the CostAnnotator subscriber uses. Guards against silent
     # dual-construction; pinned by tests/test_server_pricing_status.py.
     app.state.pricing_table = _pricing_table
+    # Phase 73 (RESEARCH-02/05): per-task progress + cancel-flag state for the
+    # research router. Keyed by task_id; each entry holds the current phase,
+    # sources_found, iterations_used, the iteration budget, and a cancel flag
+    # the in-flight background run polls between delegation turns. Held on
+    # app.state so the GET /progress and POST /cancel routes share the same
+    # dict the background run writes.
+    app.state.research_progress = {}
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -1157,6 +1165,12 @@ def create_app(
     # and POST /api/integrations/{name}/verify). Mounted after dashboard_router so
     # the read-only GET /api/integrations is already wired.
     app.include_router(integrations_write_router)
+
+    # Phase 73 (RESEARCH-02/05): mount the Deep Research router in the /api band,
+    # before the StaticFiles catch-all at "/", so POST /api/research, the
+    # progress / report GETs, and the cancel POST all take precedence over the
+    # dashboard static export. The router reads app.state.research_progress.
+    app.include_router(research_router)
 
     # Phase v0.7: mount the bundled Next.js static export at the root, AFTER every
     # /api route so the API always takes precedence. html=True serves index.html

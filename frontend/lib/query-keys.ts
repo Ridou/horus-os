@@ -16,4 +16,6 @@ export const queryKeys = {
   tools: (since: string) => ["obs-tools", since] as const,
   integrations: () => ["integrations"] as const,
   tasks: (status: string) => ["tasks", status] as const,
+  researchProgress: (id: string) => ["research-progress", id] as const,
+  researchReport: (id: string) => ["research-report", id] as const,
 };

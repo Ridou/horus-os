@@ -74,6 +74,14 @@ class Config:
     # to config.toml, so no secret lands in committed text.
     web_search_provider: str | None = None
     web_search_base_url: str | None = None
+    # Phase 73 (RESEARCH-04): hard caps for a native Deep Research run. Both
+    # are config-driven hard limits the coordinator can never silently exceed:
+    # research_max_sources caps how many distinct URLs the SourceRegistry will
+    # accept, and research_max_iterations sizes the shared IterationBudget that
+    # bounds the whole delegation tree. The defaults match FEATURES.md (10
+    # sources, 5 iterations) and round-trip through a [research] section.
+    research_max_sources: int = 10
+    research_max_iterations: int = 5
 
     def models_path(self) -> Path:
         """Return the directory that holds downloaded embedding models.
@@ -172,6 +180,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     memory = data.get("memory", {}) or {}
     tools = data.get("tools", {}) or {}
     web_search = tools.get("web_search", {}) or {}
+    research = data.get("research", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -201,6 +210,10 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["web_search_provider"] = str(web_search["provider"])
     if "base_url" in web_search:
         overrides["web_search_base_url"] = str(web_search["base_url"])
+    if "max_sources" in research:
+        overrides["research_max_sources"] = int(research["max_sources"])
+    if "max_iterations" in research:
+        overrides["research_max_iterations"] = int(research["max_iterations"])
     return replace(base, **overrides)
 
 
@@ -257,4 +270,18 @@ def _dump_toml(config: Config) -> str:
         base += f'\n[tools.web_search]\nprovider = "{config.web_search_provider}"\n'
         if config.web_search_base_url:
             base += f'base_url = "{config.web_search_base_url}"\n'
+    # Phase 73 (RESEARCH-04): emit [research] only when a budget cap diverges
+    # from the bundled defaults, mirroring the conditional [pricing]/[local]/
+    # [memory] emissions above. Both keys are ints with no env-var override.
+    default_max_sources = Config.__dataclass_fields__["research_max_sources"].default
+    default_max_iterations = Config.__dataclass_fields__["research_max_iterations"].default
+    if (
+        config.research_max_sources != default_max_sources
+        or config.research_max_iterations != default_max_iterations
+    ):
+        base += (
+            "\n[research]\n"
+            f"max_sources = {config.research_max_sources}\n"
+            f"max_iterations = {config.research_max_iterations}\n"
+        )
     return base

@@ -271,3 +271,49 @@ export interface Task {
 export interface TasksResponse {
   tasks: Task[];
 }
+
+/** One planned subtopic in a Deep Research plan (RESEARCH-02). */
+export interface ResearchSubtopic {
+  title: string;
+  query: string;
+}
+
+/** The plan returned before any execution: shown for review and cancelable. */
+export interface ResearchPlan {
+  question: string;
+  subtopics: ResearchSubtopic[];
+}
+
+/** POST /api/research response: the plan plus the new task and trace ids. */
+export interface ResearchStartResponse {
+  task_id: string;
+  trace_id: string;
+  status: "pending" | "running";
+  plan: ResearchPlan;
+}
+
+/** The live phases a run moves through, reported by the progress endpoint. */
+export type ResearchPhase =
+  | "plan"
+  | "searching"
+  | "reading"
+  | "synthesizing"
+  | "done"
+  | "cancelled"
+  | "error";
+
+/** GET /api/research/{id}/progress: live progress while a run executes. */
+export interface ResearchProgress {
+  task_id: string;
+  phase: ResearchPhase;
+  sources_found: number;
+  iterations_used: number;
+  iteration_budget: number;
+}
+
+/** GET /api/research/{id}/report: the rendered cited markdown once done. */
+export interface ResearchReport {
+  task_id: string;
+  trace_id: string | null;
+  report: string;
+}
