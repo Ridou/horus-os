@@ -24,6 +24,11 @@ from typing import Any
 CONFIG_FILENAME = "config.toml"
 DEFAULT_NOTES_SUBDIR = "notes"
 DEFAULT_DB_FILENAME = "horus.sqlite"
+# Phase 69 (LP-4): loopback default for the local provider base_url. Kept
+# here so _dump_toml can compare against it and only emit the [local]
+# section when the user has changed the URL or set a model. Never use the
+# literal "0.0.0.0" here; that would expose the local model API to the LAN.
+DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"
 
 
 @dataclass
@@ -42,6 +47,15 @@ class Config:
     # [pricing] path key in config.toml, then None. PricingTable consumes
     # this value at create_app boot.
     pricing_path: Path | None = None
+    # Phase 69: local OpenAI-compatible provider settings. The default
+    # base_url is a loopback address per LP-4; it never contains the
+    # literal "0.0.0.0", which would expose the local model API to the
+    # LAN. local_model is empty (unset) by default; a user must point it
+    # at a model their local server serves. local_context_window is a
+    # conservative LP-3 default the tool loop can budget against.
+    local_base_url: str = DEFAULT_LOCAL_BASE_URL
+    local_model: str = ""
+    local_context_window: int = 4096
 
     @classmethod
     def default_data_dir(cls) -> Path:
@@ -115,6 +129,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     storage = data.get("storage", {}) or {}
     notes = data.get("notes", {}) or {}
     pricing = data.get("pricing", {}) or {}
+    local = data.get("local", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -128,6 +143,12 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["gemini_model"] = str(providers["gemini_model"])
     if "path" in pricing:
         overrides["pricing_path"] = Path(pricing["path"]).expanduser()
+    if "base_url" in local:
+        overrides["local_base_url"] = str(local["base_url"])
+    if "model" in local:
+        overrides["local_model"] = str(local["model"])
+    if "context_window" in local:
+        overrides["local_context_window"] = int(local["context_window"])
     return replace(base, **overrides)
 
 
@@ -149,4 +170,14 @@ def _dump_toml(config: Config) -> str:
     )
     if config.pricing_path is not None:
         base += f'\n[pricing]\npath = "{config.pricing_path.as_posix()}"\n'
+    # Phase 69: emit [local] only when the user diverged from the bundled
+    # defaults (a model was set or the base_url was changed), mirroring the
+    # conditional [pricing] emission above.
+    if config.local_model or config.local_base_url != DEFAULT_LOCAL_BASE_URL:
+        base += (
+            "\n[local]\n"
+            f'base_url = "{config.local_base_url}"\n'
+            f'model = "{config.local_model}"\n'
+            f"context_window = {config.local_context_window}\n"
+        )
     return base

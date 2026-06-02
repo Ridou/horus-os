@@ -25,6 +25,10 @@ from horus_os.types import AgentProfile, AgentResult, ToolCallEvent, ToolResult
 ENV_KEY_FOR = {
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    # Phase 69: the local provider needs no cloud key. This entry only
+    # feeds the error-hint path; _api_key_for("local") always resolves a
+    # non-None value, so the no-key guard never fires for local.
+    "local": "HORUS_OS_LOCAL_BASE_URL",
 }
 
 
@@ -242,12 +246,19 @@ async def _consume_stream(
 def _api_key_for(provider: str) -> str | None:
     if provider == "anthropic":
         return os.environ.get("ANTHROPIC_API_KEY")
+    if provider == "local":
+        # Phase 69: the local provider needs no cloud key. Return the
+        # configured override or a non-None placeholder so the CLI no-key
+        # guard is not triggered for local.
+        return os.environ.get("HORUS_OS_LOCAL_API_KEY") or "horus-local"
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
 
 def _model_for(config: Config, provider: str) -> str:
     if provider == "anthropic":
         return config.anthropic_model
+    if provider == "local":
+        return config.local_model
     return config.gemini_model
 
 

@@ -17,6 +17,12 @@ Cache-aware math: Anthropic prompt-caching produces four distinct token
 counters (input, output, cache_creation, cache_read) each priced at its
 own per-million rate. Treating them as one or skipping cache_*
 counters undercounts cost (PITFALLS.md Pitfall 5 cache-handling notes).
+
+Local-provider contract (PITFALLS.md LP-2): a provider == "local" call is
+genuinely free, so it is annotated with cost_usd = 0.0 (a real float zero,
+not NULL, not pricing_missing) before the pricing-table lookup. This keeps
+an unrecognized local model name out of the Pitfall 5 None path so the
+dashboard renders "local (free)" rather than "pricing unknown".
 """
 
 from __future__ import annotations
@@ -44,6 +50,15 @@ class CostAnnotator:
         (literal None, never 0 or 0.0) and pricing_missing = True.
         """
         if not isinstance(event, LLMCallEvent):
+            return
+        if event.provider == "local":
+            # PITFALLS.md LP-2: a local run is genuinely free. Emit a real
+            # zero (LLM-04 distinguishes 0.0 from NULL) and never flag it
+            # pricing_missing, so an unrecognized local model name (e.g.
+            # "llama3.1:8b") never falls into the Pitfall 5 None path and
+            # the dashboard renders "local (free)" not "pricing unknown".
+            event.cost_usd = 0.0
+            event.pricing_missing = False
             return
         pricing = self._table.get(event.model)
         if pricing is None:

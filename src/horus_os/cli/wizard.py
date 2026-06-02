@@ -30,6 +30,12 @@ GEMINI_KEYS_URL = "https://aistudio.google.com/apikey"
 STATE_FILENAME = ".horus-init-state.json"
 ENV_FILENAME = ".env"
 
+# Type aliases for the two injectable local-provider callables. Tests pass
+# fakes so the wizard never touches a live server; production uses the real
+# implementations below.
+DiscoverModels = Callable[[str], list[str]]
+SmokeTest = Callable[[str, str], "tuple[bool, str | None]"]
+
 
 def _validate_anthropic_key(key: str) -> tuple[bool, str | None]:
     """Make a minimal Anthropic call to confirm the key works."""
@@ -77,15 +83,63 @@ DEFAULT_VALIDATORS: dict[str, Callable[[str], tuple[bool, str | None]]] = {
 }
 
 
+def _discover_local_models(base_url: str) -> list[str]:
+    """List the model ids a local OpenAI-compatible endpoint serves.
+
+    Hits `GET {base_url}/models` via the openai SDK `client.models.list()`
+    (the loopback base_url already ends in `/v1`, so the SDK appends
+    `/models` to it). Parses the OpenAI-compat `{"data": [{"id": ...}]}`
+    shape and returns the ids in order. Raises on an unreachable endpoint
+    so the caller surfaces a warm "not reachable" message; never blocks
+    indefinitely thanks to a short timeout (T-69-06).
+    """
+    from openai import OpenAI
+
+    client = OpenAI(base_url=base_url, api_key="horus-local", timeout=5.0)
+    page = client.models.list()
+    ids: list[str] = []
+    for model in getattr(page, "data", None) or []:
+        model_id = getattr(model, "id", None)
+        if model_id:
+            ids.append(str(model_id))
+    return ids
+
+
+def _smoke_test_local(base_url: str, model: str) -> tuple[bool, str | None]:
+    """Send a one-token chat completion to confirm the model answers.
+
+    Returns (True, None) on a clean response, or (False, message) with a
+    short, secret-free reason on any failure. Uses a short timeout so an
+    unresponsive server surfaces a warm error instead of hanging
+    (T-69-06).
+    """
+    from openai import OpenAI
+
+    client = OpenAI(base_url=base_url, api_key="horus-local", timeout=15.0)
+    try:
+        client.chat.completions.create(
+            model=model,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    return True, None
+
+
 def run_wizard(
     config: Config,
     *,
     stdin: TextIO,
     stdout: TextIO,
     validators: dict[str, Callable[[str], tuple[bool, str | None]]] | None = None,
+    discover_models: DiscoverModels | None = None,
+    smoke_test: SmokeTest | None = None,
 ) -> int:
     """Drive the interactive setup wizard. Returns exit code."""
     validators = validators or DEFAULT_VALIDATORS
+    discover_models = discover_models or _discover_local_models
+    smoke_test = smoke_test or _smoke_test_local
     state = _load_state(config.data_dir)
     env: dict[str, str] = _load_env(config.data_dir)
 
@@ -138,6 +192,21 @@ def run_wizard(
         _save_state(config.data_dir, state)
         if ok:
             _write_env(config.data_dir, env)
+
+    if state.get("local_done") and config.local_model:
+        stdout.write("- Local: already configured, skipping.\n")
+        validated["local"] = True
+    else:
+        ok = _prompt_local_provider(
+            config=config,
+            stdin=stdin,
+            stdout=stdout,
+            discover_models=discover_models,
+            smoke_test=smoke_test,
+        )
+        validated["local"] = ok
+        state["local_done"] = True
+        _save_state(config.data_dir, state)
 
     default_provider = _decide_default_provider(validated, stdin, stdout)
     if default_provider != config.default_provider:
@@ -196,6 +265,87 @@ def _prompt_and_validate(
     return True
 
 
+def _prompt_local_provider(
+    *,
+    config: Config,
+    stdin: TextIO,
+    stdout: TextIO,
+    discover_models: DiscoverModels,
+    smoke_test: SmokeTest,
+) -> bool:
+    """Onboard a local OpenAI-compatible provider (LLM-02, LP-3, LP-4).
+
+    Probes the loopback base_url for served models, lets the user pick one,
+    runs a one-token smoke test, and persists local_base_url / local_model /
+    local_context_window only when the smoke test passes. An unreachable or
+    empty endpoint surfaces a warm, actionable message and leaves the local
+    model unset without crashing. Never suggests a non-loopback bind address.
+    """
+    base_url = config.local_base_url
+    stdout.write("\nLocal model (Ollama, LM Studio, llama.cpp, vLLM)\n")
+    stdout.write(f"  Probing {base_url}/models for served models...\n")
+    try:
+        models = discover_models(base_url)
+    except Exception:
+        models = []
+    if not models:
+        stdout.write(
+            f"  Local endpoint not reachable at {base_url}; start your server\n"
+            "  (for example `ollama serve`) and rerun `horus-os init --interactive`.\n"
+        )
+        return False
+
+    stdout.write("  Discovered models:\n")
+    for idx, model_id in enumerate(models):
+        stdout.write(f"    [{idx}] {model_id}\n")
+    stdout.write(f"  Pick a model by number or name (default [0] {models[0]}): ")
+    stdout.flush()
+    line = stdin.readline()
+    choice = (line or "").strip()
+    chosen = _resolve_model_choice(choice, models)
+    if chosen is None:
+        stdout.write(f"  '{choice}' is not one of the discovered models; skipping local setup.\n")
+        return False
+
+    stdout.write(f"  Smoke-testing {chosen} (1 token)...\n")
+    ok, error = smoke_test(base_url, chosen)
+    if not ok:
+        stdout.write(f"  Smoke test failed: {error}\n")
+        stdout.write("  Local model not saved. Load the model and rerun the wizard.\n")
+        return False
+
+    stdout.write("  Smoke test passed.\n")
+    config.local_base_url = base_url
+    config.local_model = chosen
+    if not config.local_context_window:
+        config.local_context_window = 4096
+    config.save()
+    stdout.write(
+        f"  Saved local model {chosen} "
+        f"(context window {config.local_context_window}; override in config.toml).\n"
+    )
+    return True
+
+
+def _resolve_model_choice(choice: str, models: list[str]) -> str | None:
+    """Map a user choice (blank, index, or exact name) to a model id.
+
+    Blank defaults to the first (smallest listed) model. An integer in range
+    selects by position. An exact name match selects that model. Anything
+    else returns None so the caller can surface an error.
+    """
+    if not choice:
+        return models[0]
+    if choice.isdigit():
+        idx = int(choice)
+        if 0 <= idx < len(models):
+            return models[idx]
+        return None
+    if choice in models:
+        return choice
+    return None
+
+
 def _decide_default_provider(validated: dict[str, bool], stdin: TextIO, stdout: TextIO) -> str:
     ok_providers = [p for p, v in validated.items() if v]
     if not ok_providers:
@@ -208,16 +358,25 @@ def _decide_default_provider(validated: dict[str, bool], stdin: TextIO, stdout: 
         chosen = ok_providers[0]
         stdout.write(f"\nDefault provider: {chosen} (only one validated).\n")
         return chosen
+    # Multiple providers are working. Anthropic stays the safe default; the
+    # prompt advertises every validated provider, including local.
+    options = "  [a] anthropic  [g] gemini"
+    if "local" in ok_providers:
+        options += "  [l] local"
     stdout.write(
-        "\nBoth providers are working. Which one should be the default?\n"
-        "  [a] anthropic  [g] gemini  (default: anthropic): "
+        "\nMultiple providers are working. Which one should be the default?\n"
+        f"{options}  (default: anthropic): "
     )
     stdout.flush()
     line = stdin.readline()
     choice = (line or "").strip().lower()
-    if choice in ("g", "gemini"):
+    if choice in ("g", "gemini") and "gemini" in ok_providers:
         return "gemini"
-    return "anthropic"
+    if choice in ("l", "local") and "local" in ok_providers:
+        return "local"
+    if "anthropic" in ok_providers:
+        return "anthropic"
+    return ok_providers[0]
 
 
 def _load_state(data_dir: Path) -> dict[str, Any]:

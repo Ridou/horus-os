@@ -1041,12 +1041,19 @@ def create_app(
 def _api_key_for(provider: str) -> str | None:
     if provider == "anthropic":
         return os.environ.get("ANTHROPIC_API_KEY")
+    if provider == "local":
+        # Phase 69: the local provider needs no cloud key. Return the
+        # configured override or a non-None placeholder so the no-key 503
+        # guard at chat / chat_stream is satisfied without a cloud key.
+        return os.environ.get("HORUS_OS_LOCAL_API_KEY") or "horus-local"
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
 
 def _model_for(cfg: Config, provider: str) -> str:
     if provider == "anthropic":
         return cfg.anthropic_model
+    if provider == "local":
+        return cfg.local_model
     return cfg.gemini_model
 
 

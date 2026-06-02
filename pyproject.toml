@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
 gemini = ["google-genai>=0.3"]
+local-llm = ["openai>=2.40,<3"]
 dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30"]
 discord = ["discord.py>=2.4"]
 supabase = ["httpx>=0.27"]
@@ -53,6 +54,7 @@ otel = [
 all = [
     "anthropic>=0.40",
     "google-genai>=0.3",
+    "openai>=2.40,<3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
     "slack-sdk>=3.27",

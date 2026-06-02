@@ -22,7 +22,7 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-from horus_os._providers import _anthropic, _gemini
+from horus_os._providers import _anthropic, _gemini, _openai_compat
 from horus_os._providers._stream_types import _StreamUsage
 from horus_os.observability import get_observation_bus
 from horus_os.observability.bus import LLMCallEvent
@@ -37,7 +37,7 @@ from horus_os.tools.registry import ToolRegistry
 # replace this import without rewriting `run_agent_stream`.
 from horus_os.types import AgentResult, Tool, ToolCallEvent, ToolResult
 
-SUPPORTED_PROVIDERS = ("anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("anthropic", "gemini", "local")
 
 
 def _check_provider(provider: str) -> None:
@@ -55,6 +55,8 @@ def _new_conversation(
 ) -> Any:
     if provider == "anthropic":
         return _anthropic.Conversation(model=model, system_prompt=system_prompt)
+    if provider == "local":
+        return _openai_compat.Conversation(model=model, system_prompt=system_prompt)
     return _gemini.Conversation(model=model, system_prompt=system_prompt)
 
 
@@ -70,6 +72,8 @@ def run_agent(
     _check_provider(provider)
     if provider == "anthropic":
         return _anthropic.call_anthropic(prompt, tools=tools, model=model, **kwargs)
+    if provider == "local":
+        return _openai_compat.call_openai_compat(prompt, tools=tools, model=model, **kwargs)
     return _gemini.call_gemini(prompt, tools=tools, model=model, **kwargs)
 
 
@@ -85,6 +89,10 @@ async def run_agent_async(
     _check_provider(provider)
     if provider == "anthropic":
         return await _anthropic.call_anthropic_async(prompt, tools=tools, model=model, **kwargs)
+    if provider == "local":
+        return await _openai_compat.call_openai_compat_async(
+            prompt, tools=tools, model=model, **kwargs
+        )
     return await _gemini.call_gemini_async(prompt, tools=tools, model=model, **kwargs)
 
 
@@ -121,6 +129,14 @@ async def run_agent_stream(
             system=system,
         ):
             yield chunk
+    elif provider == "local":
+        async for chunk in _openai_compat.stream_openai_compat_async(
+            prompt,
+            model=model or _openai_compat.DEFAULT_MODEL,
+            max_tokens=max_tokens,
+            system=system,
+        ):
+            yield chunk
     else:
         async for chunk in _gemini.stream_gemini_async(
             prompt,
@@ -136,8 +152,11 @@ def _extract_usage(provider: str, usage: dict[str, Any]) -> tuple[int, int, int,
     Returns (input_tokens, output_tokens, cache_creation_input_tokens,
     cache_read_input_tokens). Anthropic surfaces all four keys directly;
     Gemini exposes only two and has no cache_* concept, so the cache
-    fields are zero. Both providers return integers from the SDK, never
-    floats; the call sites never see negative values.
+    fields are zero. The local OpenAI-compatible provider emits the
+    Anthropic-shaped input_tokens / output_tokens keys with no cache_*
+    concept, so it falls through the non-gemini branch with cache fields
+    at zero. Providers return integers from the SDK, never floats; the
+    call sites never see negative values.
     """
     if provider == "gemini":
         return (
@@ -146,7 +165,7 @@ def _extract_usage(provider: str, usage: dict[str, Any]) -> tuple[int, int, int,
             0,
             0,
         )
-    # anthropic and any future provider that uses the Anthropic-shaped keys
+    # anthropic, local, and any future provider that uses the Anthropic-shaped keys
     return (
         int(usage.get("input_tokens", 0) or 0),
         int(usage.get("output_tokens", 0) or 0),

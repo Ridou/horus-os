@@ -563,6 +563,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report whether the always-on service is registered and running.",
     )
     doctor_p.add_argument(
+        "--local",
+        action="store_true",
+        help="Probe the configured local LLM endpoint and validate its base URL.",
+    )
+    doctor_p.add_argument(
         "--data-dir",
         type=Path,
         default=None,
