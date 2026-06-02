@@ -6,31 +6,127 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-02
+
+Eighth alpha, "Local-first and Autonomous Research." horus-os gains a
+full local-first capability layer plus a flagship Deep Research
+workflow, and every piece is opt-in. A bare `pip install horus-os`
+still starts with only an LLM key and activates none of the new
+features. Each capability lives behind its own optional extra, so you
+install exactly what you turn on. SQLite schema moves from 12 to 13 to
+hold the new skills and shell_invocations tables, an additive and
+idempotent migration that runs on first start.
+
+See `docs/MIGRATION-v0.7-to-v0.8.md` for upgrade notes from v0.7.
+
 ### Added
 
-- **MCP client (opt-in).** A new optional `[mcp]` extra (`mcp>=1.27`, the
-  official Anthropic Model Context Protocol SDK) lets horus-os connect to
-  explicitly-allowlisted MCP servers over stdio, SSE, and streamable-http
-  transports. Each discovered tool registers into the shared `ToolRegistry`
-  under a `mcp:{server}:{tool}` namespace and is traced through the existing
-  `tool_invocations` path exactly like a builtin, with no schema change.
-  - **Opt-in trust gate.** Servers activate ONLY through `<data_dir>/mcp.toml`;
-    an absent or empty file registers zero MCP tools and triggers no network
-    probe. Adding a `[[mcp.servers]]` block is the single activation surface.
-  - **Namespacing with builtin collision refusal.** The registry refuses any
-    MCP tool name that would shadow a builtin (raising `CollisionError`, never
-    swallowing it) and surfaces the refusal without aborting other servers.
+- **Local LLM provider (opt-in).** A new optional `[local-llm]` extra
+  (`openai>=2.40.0`) points horus-os at any OpenAI-compatible local
+  server (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter) through a
+  single `base_url` override. The provider is constructed lazily, so a
+  bare install never imports the `openai` SDK. `HORUS_OS_LOCAL_BASE_URL`
+  and `HORUS_OS_LOCAL_MODEL` wire the endpoint; `horus-os doctor --local`
+  validates the base URL (rejecting a wildcard bind) and live-probes the
+  endpoint without printing a key.
+- **On-device vector memory (opt-in).** A new optional `[local-memory]`
+  extra (`fastembed>=0.8.0`, `onnxruntime>=1.17.0,<1.19.0`,
+  `sqlite-vec>=0.1.9`) adds local ONNX text embeddings and a `sqlite-vec`
+  KNN index alongside the markdown vault, with zero network egress on
+  memory writes. The feature is OFF by default; a user opts in and runs
+  `horus-os memory download-model` before any embedding happens. The
+  index lives in a separate, rebuildable `vectors.sqlite` cache, so it
+  triggers no schema bump. The `onnxruntime` upper pin keeps universal2
+  wheels available for Intel macOS until Microsoft restores Intel
+  coverage; this extra is intentionally excluded from `[all]` so an
+  `.[all]` install stays cross-OS clean and gets its own dedicated
+  install-smoke variant. `horus-os doctor --memory` reports model and
+  index status without ever downloading.
+- **MCP client (opt-in).** A new optional `[mcp]` extra (`mcp>=1.27.2`,
+  the official Anthropic Model Context Protocol SDK) lets horus-os
+  connect to explicitly-allowlisted MCP servers over stdio, SSE, and
+  streamable-http transports. Each discovered tool registers into the
+  shared `ToolRegistry` under a `mcp:{server}:{tool}` namespace and is
+  traced through the existing `tool_invocations` path exactly like a
+  builtin, with no schema change.
+  - **Opt-in trust gate.** Servers activate ONLY through
+    `<data_dir>/mcp.toml`; an absent or empty file registers zero MCP
+    tools and triggers no network probe. Adding a `[[mcp.servers]]`
+    block is the single activation surface.
+  - **Namespacing with builtin collision refusal.** The registry refuses
+    any MCP tool name that would shadow a builtin (raising
+    `CollisionError`, never swallowing it) and surfaces the refusal
+    without aborting other servers.
   - **Tool description sanitization.** Unicode tag characters
-    (U+E0000-U+E007F) and zero-width / format control characters are stripped
-    and descriptions are length-capped before reaching the model, defending
-    against tool poisoning.
-  - **Clean cross-OS subprocess teardown.** stdio servers get an explicit,
-    idempotent `terminate` / `wait` / `kill` teardown independent of the SDK
-    lifespan, proven to leave no zombie process on macOS, Ubuntu, and Windows.
-  - **Registered as a first-party LifecycleAdapter** in the FastAPI lifespan
-    (alongside the Discord and Email adapters) and reported by
+    (U+E0000-U+E007F) and zero-width / format control characters are
+    stripped and descriptions are length-capped before reaching the
+    model, defending against tool poisoning.
+  - **Clean cross-OS subprocess teardown.** stdio servers get an
+    explicit, idempotent `terminate` / `wait` / `kill` teardown
+    independent of the SDK lifespan, proven to leave no zombie process
+    on macOS, Ubuntu, and Windows.
+  - **Registered as a first-party LifecycleAdapter** in the FastAPI
+    lifespan (alongside the Discord and Email adapters) and reported by
     `horus-os doctor --mcp`. See `docs/MCP.md` for the schema, the three
-    transports, and the Threat model.
+    transports, and the threat model.
+- **Web access (opt-in).** A new optional `[web]` extra
+  (`readability-lxml>=0.8.4.1`, `httpx>=0.27.0`) adds a bring-your-own
+  `web_search` tool (SearXNG, Brave, or Tavily) and an SSRF-guarded web
+  fetch that extracts the main article text from noisy HTML. The
+  `web_search` tool is ABSENT from the default registry until a provider
+  is configured in `[tools.web_search]`; the provider key is read from
+  `HORUS_OS_WEB_SEARCH_KEY` and is never persisted to `config.toml`.
+- **Vision and PDF analysis (opt-in).** A new optional `[pdf]` extra
+  (`pypdf>=6.12.2`, a pure-Python text extractor) and a `[vision]` extra
+  (`Pillow>=10.0` for image resize and format conversion) let an agent
+  read uploaded files. The `analyze_file` tool is scoped to
+  `<data_dir>/uploads/`, so it cannot be steered to read arbitrary local
+  files. Vision uses the existing Anthropic and Gemini multimodal
+  message support; no new provider dependency.
+- **Deep Research (flagship).** A native coordinator workflow that
+  receives a research question, delegates to a Researcher sub-agent with
+  the web tools, and synthesizes a structured Markdown report with
+  citations. It is built entirely on the existing multi-agent delegation
+  runtime, with hard caps (`research_max_sources`,
+  `research_max_iterations`) the coordinator can never silently exceed.
+  No new framework dependency beyond the `[web]` extra.
+- **Skills system.** Reusable, TOML-defined agent behaviors discovered
+  from `<data_dir>/skills/` and composed onto an agent at runtime via the
+  `use_skill` tool. Skills use stdlib `tomllib`, so they add no
+  dependency. `use_skill` registers ONLY when a skill exists, so an
+  install with no skills produces a registry byte-identical to before.
+  Code-bearing skills are denied by default, and a skill whose name
+  collides with a builtin or plugin tool is refused.
+- **Gated shell execution.** A `shell_exec` tool gated by a double lock:
+  it registers ONLY when `HORUS_OS_SHELL_ENABLED=true` AND the agent
+  profile explicitly lists `shell_exec` in its `allowed_tools`. An
+  unrestricted profile never gains shell. Every run is confined to a safe
+  working directory, capped by an output byte limit and a timeout, and
+  written to a SQLite audit row. `horus-os doctor --shell` reports the
+  gate state and the safe working directory without spawning a process.
+- **`[research]` convenience meta-extra.** A single
+  `pip install 'horus-os[research]'` installs the full v0.8
+  infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`,
+  `pdf`, `vision`) so users who want the local-first stack and Deep
+  Research do not have to name each extra. It is self-referential, so it
+  inherits every pin, including the `local-memory` onnxruntime Intel
+  macOS pin.
+
+### Changed
+
+- **SQLite schema 12 to 13 (additive).** The skills system and the gated
+  shell audit log each add one new table (`skills` and
+  `shell_invocations`); the migration is additive and idempotent and runs
+  automatically on first start after upgrade. v0.7 (v12) databases load
+  cleanly under v13, and the v0.7 `schedules` table and all earlier rows
+  read back byte-identical. No user action is required.
+- **Two new install-smoke CI variants.** The three-OS by two-Python
+  install matrix gains a `[local-memory]` variant (forcing the
+  onnxruntime Intel-macOS pin to resolve a wheel on every cell) and a
+  light-extras variant (`local-llm`, `mcp`, `web`, `pdf`, `vision`) that
+  imports every new v0.8 module with no cloud key set. The release gate
+  greps `ci.yml` for the new job names so they cannot silently disappear
+  before a tag.
 
 ## [0.7.0] - 2026-06-02
 
@@ -167,7 +263,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   `pip install --no-deps --no-build-isolation` against the wheel.
   Any failure post-Phase-D rolls back via `pip uninstall -y` plus
   a `DELETE FROM plugins`. The single `subprocess.run` chokepoint
-  inside `run_pip` is the only audit point - a grep for the literal
+  inside `run_pip` is the only audit point, a grep for the literal
   invocation token returns 1.
 - **Default-deny capability grants.** Four-capability v1 catalog:
   `filesystem.read`, `filesystem.write`, `net.outbound`,
@@ -220,7 +316,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   tool (`lookup_secret_tool` via `@require_capability(SECRETS_READ)`,
   returns `None` on missing key), bounded-lifecycle adapter
   (`ExampleAdapter` with `asyncio.create_task(asyncio.sleep(0))` +
-  cancel/await - well inside Phase 43's
+  cancel/await, well inside Phase 43's
   `asyncio.wait_for(timeout=2.0)` ceiling), and a single
   `horus-plugin.toml` registering both tools AND the adapter through
   `[[contributions.*]]` arrays. Shipped as the canonical starting
@@ -246,7 +342,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   export. `packaging>=24.0` powers PEP 440 `horus_os_compat` parsing
   via `SpecifierSet` and `Requires-Dist` parsing via
   `Requirement`. Both are pure-Python wheels with universal install
-  surface - no 3-OS install-smoke impact.
+  surface, no 3-OS install-smoke impact.
 
 ### Migration
 

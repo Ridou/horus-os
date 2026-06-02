@@ -78,12 +78,13 @@ def test_check_enum_byte_identical_first_eight() -> None:
     )
 
 
-def test_check_enum_has_14_total() -> None:
-    """REL-14 + 53-followup: 13 v0.6 launch checks + 1 SBOM-03 diff check = 14."""
+def test_check_enum_has_15_total() -> None:
+    """REL-14 + 53-followup + Phase 76: 14 v0.6/v0.7 checks + 1 v0.8 install-smoke check = 15."""
     values = _check_enum_values()
-    assert len(values) == 14, (
-        f"REL-14 + 53-followup: --check enum must have 14 values "
-        f"(8 v0.4/v0.5 + 5 Phase 57 v0.6 + 1 Phase 53-followup sbom-matches-wheel); "
+    assert len(values) == 15, (
+        f"REL-14 + 53-followup + Phase 76: --check enum must have 15 values "
+        f"(8 v0.4/v0.5 + 5 Phase 57 v0.6 + 1 Phase 53-followup sbom-matches-wheel "
+        f"+ 1 Phase 76 v0-8-install-smoke-ci); "
         f"got {len(values)}"
     )
 

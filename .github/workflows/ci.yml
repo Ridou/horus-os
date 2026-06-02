@@ -321,3 +321,86 @@ jobs:
         run: |
           $env:HORUS_DATA = "$env:USERPROFILE\horus-smoke-data"
           python scripts/install_smoke_plugin.py
+
+  # TEST-38 + REL-18 (v0.8 light extras): install the cross-OS-clean v0.8
+  # extras (local-llm, mcp, web, pdf, vision) and prove every new capability
+  # module imports with NO cloud key set, then run scripts/install_smoke.py so
+  # the v0.8 tool-absence assertions run with the extras present but with no
+  # provider, search, or MCP config (REL-19 zero-config-start coverage rides
+  # along here: no v0.8 tool may auto-register on a bare install).
+  install-smoke-v0-8-extras:
+    name: install-smoke-v0-8-extras / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    needs: lint-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install with light v0.8 extras (no local-memory)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,local-llm,mcp,web,pdf,vision]"
+      - name: Import every v0.8 module with no cloud key set
+        env:
+          ANTHROPIC_API_KEY: ""
+          GEMINI_API_KEY: ""
+          GOOGLE_API_KEY: ""
+        run: |
+          python -c "import horus_os._providers._openai_compat; import horus_os.mcp_client; import horus_os.tools.web_search; import horus_os.tools.vision; import horus_os.research; import horus_os.skills; import pypdf; import readability; print('V0_8_LIGHT_EXTRAS_OK')"
+      - name: Run install smoke (v0.8 tool-absence assertions, zero config)
+        env:
+          ANTHROPIC_API_KEY: ""
+          GEMINI_API_KEY: ""
+          GOOGLE_API_KEY: ""
+        run: python scripts/install_smoke.py
+
+  # TEST-38 (v0.8 local-memory wheels): the sole purpose of this job is to
+  # prove the onnxruntime <1.19.0 pin in the [local-memory] extra resolves a
+  # real wheel on macOS, Ubuntu, and Windows for Python 3.11 and 3.12.
+  # onnxruntime 1.19.0+ dropped the macOS universal2 wheel that covers Intel
+  # x86_64, and 1.26.0+ dropped Intel macOS entirely; the <1.19.0 pin keeps a
+  # universal2 wheel available so Intel macOS users get a binary install with
+  # no build chain. The version-floor assertion fails the gate if a future
+  # resolver drift pulls 1.19.0 or newer.
+  install-smoke-local-memory:
+    name: install-smoke-local-memory / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    needs: lint-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install with [dev,local-memory]
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,local-memory]"
+      - name: Assert local-memory wheels imported on every OS
+        run: |
+          python -c "import onnxruntime, fastembed, sqlite_vec; print('LOCAL_MEMORY_WHEELS_OK', onnxruntime.__version__)"
+      - name: Assert resolved onnxruntime is below 1.19.0 (Intel macOS pin)
+        run: |
+          python -c "import onnxruntime; from packaging.version import Version; v = Version(onnxruntime.__version__); assert v < Version('1.19.0'), f'onnxruntime {v} resolved >= 1.19.0; the Intel-macOS universal2 pin drifted'; print('ONNXRUNTIME_PIN_OK', v)"
