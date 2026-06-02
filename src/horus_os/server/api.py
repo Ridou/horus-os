@@ -30,7 +30,7 @@ from horus_os._providers._stream_types import _StreamUsage
 from horus_os.adapters.base import AdapterContext, AdapterRegistry, discover_adapters
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
-from horus_os.memory import NotesStore
+from horus_os.memory import NotesStore, build_vector_index
 from horus_os.memory.tools import (
     append_note_tool,
     create_note_tool,
@@ -709,7 +709,14 @@ def create_app(
         max_iterations = int(payload.get("max_iterations") or DEFAULT_MAX_ITERATIONS)
 
         db = Database(cfg.db_path)
-        notes_store = NotesStore(cfg.notes_dir, on_write=lambda w: _persist_write(db, w))
+        # Phase 70: attach the optional vector index when vector memory is
+        # enabled and the model is present. The factory returns None offline so
+        # search degrades to keyword-only without blocking the request (MEM-06).
+        notes_store = NotesStore(
+            cfg.notes_dir,
+            on_write=lambda w: _persist_write(db, w),
+            vector_index=build_vector_index(cfg),
+        )
         registry = _build_default_registry(cfg, notes_store)
         tool_log: list[ToolResult] = []
         # Phase 33: pre-generate the trace_id so the same id flows into

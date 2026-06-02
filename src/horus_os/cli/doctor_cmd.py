@@ -121,6 +121,78 @@ def _run_doctor_local(
     return 0
 
 
+def _run_doctor_memory(
+    args: argparse.Namespace,
+    *,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    """Report on-device vector-memory status without ever downloading (EM-1/EM-3).
+
+    Loads Config and reports whether vector memory is enabled, the configured
+    embedding model, whether the model file is present on disk, whether the
+    separate `vectors.sqlite` cache exists, and whether a model/dimension
+    mismatch is pending. Prints actionable next steps (download-model or
+    reindex) when something is missing. Never triggers a download and never
+    embeds; the index is opened read-only-ish (construction touches no network).
+    """
+    from horus_os.config import Config
+    from horus_os.memory.embeddings import ONNXEmbeddingBackend
+    from horus_os.memory.vector import (
+        EmbeddingDimensionMismatch,
+        VectorIndex,
+        VectorIndexUnavailable,
+    )
+
+    data_dir: Path | None = getattr(args, "data_dir", None)
+    config = Config.load(data_dir)
+
+    stdout.write(f"vector_memory_enabled: {config.vector_memory_enabled}\n")
+    stdout.write(f"embedding_model: {config.embedding_model}\n")
+
+    try:
+        backend = ONNXEmbeddingBackend(config.embedding_model, config.models_path())
+    except ValueError as exc:
+        stderr.write(f"embedding model misconfigured: {exc}\n")
+        return 1
+
+    model_present = backend.is_model_present()
+    stdout.write(f"model_present: {model_present}\n")
+    if not model_present:
+        stdout.write("  next step: run `horus-os memory download-model`\n")
+
+    vectors_path = config.vectors_path()
+    index_exists = vectors_path.exists()
+    stdout.write(f"index_exists: {index_exists}\n")
+
+    if not index_exists:
+        if model_present:
+            stdout.write("  next step: run `horus-os memory reindex` to build the index\n")
+        return 0
+
+    # The index file exists: report whether it is ready or a model swap is
+    # pending. Constructing VectorIndex performs no network call and no embed.
+    try:
+        index = VectorIndex(vectors_path, backend)
+    except VectorIndexUnavailable as exc:
+        stderr.write(f"vector index unavailable: {exc}\n")
+        return 1
+    try:
+        if index.mismatch_from is not None:
+            stdout.write(
+                f"model_mismatch: stored {index.mismatch_from!r}, configured "
+                f"{config.embedding_model!r}\n"
+            )
+            stdout.write("  next step: run `horus-os memory reindex`\n")
+        else:
+            stdout.write(f"index_ready: {index.is_ready()}\n")
+    except EmbeddingDimensionMismatch as exc:
+        stdout.write(f"model_mismatch: {exc}\n")
+    finally:
+        index.close()
+    return 0
+
+
 def run_doctor(
     args: argparse.Namespace,
     *,
@@ -143,11 +215,14 @@ def run_doctor(
 
     With --local, validates the configured local provider base URL (rejecting a
     wildcard bind per LP-4) and live-probes the endpoint via `probe` (defaults to
-    a real short-timeout GET). Never prints any secret.
+    a real short-timeout GET). With --memory, reports on-device vector-memory
+    model/index/mismatch status without ever downloading (EM-1/EM-3). Never prints
+    any secret.
     """
     supabase: bool = getattr(args, "supabase", False)
     service: bool = getattr(args, "service", False)
     local: bool = getattr(args, "local", False)
+    memory: bool = getattr(args, "memory", False)
 
     if service:
         return _check_service(stdout, stderr)
@@ -155,15 +230,20 @@ def run_doctor(
     if local:
         return _run_doctor_local(args, stdout=stdout, stderr=stderr, probe=probe)
 
+    if memory:
+        return _run_doctor_memory(args, stdout=stdout, stderr=stderr)
+
     if not supabase:
         stdout.write(
             "Usage: horus-os doctor --supabase\n"
             "       horus-os doctor --service\n"
             "       horus-os doctor --local\n"
+            "       horus-os doctor --memory\n"
             "\n"
             "  --supabase    Report per-table RLS status via Supabase PostgREST RPC.\n"
             "  --service     Report whether the always-on service is registered and running.\n"
             "  --local       Probe the configured local LLM endpoint and validate its base URL.\n"
+            "  --memory      Report on-device vector-memory model and index status.\n"
         )
         return 0
 

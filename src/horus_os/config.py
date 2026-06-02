@@ -56,6 +56,36 @@ class Config:
     local_base_url: str = DEFAULT_LOCAL_BASE_URL
     local_model: str = ""
     local_context_window: int = 4096
+    # Phase 70 (MEM-05/MEM-06): on-device hybrid vector memory. The feature
+    # is OFF by default; a user must opt in (and run `horus-os memory
+    # download-model`) before any embedding happens, so a fresh install
+    # starts and serves notes offline with no model file present.
+    # models_dir is None by default and resolves lazily to <data_dir>/models
+    # via models_path(); callers must never recompute that path themselves.
+    vector_memory_enabled: bool = False
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    models_dir: Path | None = None
+
+    def models_path(self) -> Path:
+        """Return the directory that holds downloaded embedding models.
+
+        Defaults to `<data_dir>/models` when models_dir is unset. This is the
+        single source of truth for the fastembed cache location, so the CLI,
+        the embedding backend, and doctor all agree on where the model lives.
+        """
+        return self.models_dir or (self.data_dir / "models")
+
+    def vectors_path(self) -> Path:
+        """Return the path of the separate vector-index cache file.
+
+        Phase 70 (Option B): the vector index lives in its own
+        `<data_dir>/vectors.sqlite` file managed entirely by VectorIndex, NOT
+        in the authoritative `horus.sqlite`. Keeping it separate avoids any
+        SCHEMA_VERSION bump (the index is a rebuildable cache, not audited
+        storage) and lets the file be deleted and rebuilt with `horus-os
+        memory reindex` without touching the note_writes audit trail.
+        """
+        return self.data_dir / "vectors.sqlite"
 
     @classmethod
     def default_data_dir(cls) -> Path:
@@ -130,6 +160,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     notes = data.get("notes", {}) or {}
     pricing = data.get("pricing", {}) or {}
     local = data.get("local", {}) or {}
+    memory = data.get("memory", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -149,6 +180,12 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["local_model"] = str(local["model"])
     if "context_window" in local:
         overrides["local_context_window"] = int(local["context_window"])
+    if "vector_enabled" in memory:
+        overrides["vector_memory_enabled"] = bool(memory["vector_enabled"])
+    if "embedding_model" in memory:
+        overrides["embedding_model"] = str(memory["embedding_model"])
+    if "models_dir" in memory:
+        overrides["models_dir"] = Path(memory["models_dir"]).expanduser()
     return replace(base, **overrides)
 
 
@@ -180,4 +217,21 @@ def _dump_toml(config: Config) -> str:
             f'model = "{config.local_model}"\n'
             f"context_window = {config.local_context_window}\n"
         )
+    # Phase 70: emit [memory] only when the user opted vector memory in or
+    # diverged from the bundled embedding defaults, mirroring the conditional
+    # [pricing] and [local] emissions above. The default model is
+    # BAAI/bge-small-en-v1.5; an unset models_dir resolves lazily.
+    default_model = Config.__dataclass_fields__["embedding_model"].default
+    if (
+        config.vector_memory_enabled
+        or config.embedding_model != default_model
+        or config.models_dir is not None
+    ):
+        base += (
+            "\n[memory]\n"
+            f"vector_enabled = {str(config.vector_memory_enabled).lower()}\n"
+            f'embedding_model = "{config.embedding_model}"\n'
+        )
+        if config.models_dir is not None:
+            base += f'models_dir = "{config.models_dir.as_posix()}"\n'
     return base

@@ -51,7 +51,19 @@ otel = [
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
 ]
+# Phase 70 (MEM-05/MEM-06): on-device hybrid vector memory. Kept fully
+# optional so a bare install still imports without onnxruntime (Pitfall
+# EM-2). The onnxruntime upper pin preserves universal2 wheels for Intel
+# macOS; revisit when 1.27+ restores Intel macOS support.
+local-memory = [
+    "fastembed>=0.8",
+    "onnxruntime>=1.17.0,<1.19.0",
+    "sqlite-vec>=0.1.9",
+]
 all = [
+    # The local-memory extra (fastembed, onnxruntime, sqlite-vec) is
+    # intentionally NOT aggregated here; its native onnxruntime wheels are
+    # not universally available, so it stays an explicit opt-in (Pitfall EM-2).
     "anthropic>=0.40",
     "google-genai>=0.3",
     "openai>=2.40,<3",

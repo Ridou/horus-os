@@ -10,7 +10,7 @@ from typing import TextIO
 
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
-from horus_os.memory import NotesStore
+from horus_os.memory import NotesStore, build_vector_index
 from horus_os.memory.tools import (
     append_note_tool,
     create_note_tool,
@@ -75,7 +75,14 @@ def run_run(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     record: bool = not getattr(args, "no_record", False)
     no_stream: bool = getattr(args, "no_stream", False)
 
-    notes_store = NotesStore(config.notes_dir, on_write=lambda w: _record_note_write(db, w))
+    # Phase 70: attach the optional vector index when vector memory is enabled
+    # and the model is present. The factory returns None offline so search
+    # degrades to keyword-only without blocking the run (MEM-06).
+    notes_store = NotesStore(
+        config.notes_dir,
+        on_write=lambda w: _record_note_write(db, w),
+        vector_index=build_vector_index(config),
+    )
     registry = _build_default_registry(config, notes_store)
 
     if no_stream:

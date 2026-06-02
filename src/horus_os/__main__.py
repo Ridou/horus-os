@@ -12,6 +12,7 @@ from horus_os.cli import (
     run_agents,
     run_doctor,
     run_init,
+    run_memory,
     run_plugins,
     run_run,
     run_schedule,
@@ -568,12 +569,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="Probe the configured local LLM endpoint and validate its base URL.",
     )
     doctor_p.add_argument(
+        "--memory",
+        action="store_true",
+        help="Report on-device vector-memory model and index status (no download).",
+    )
+    doctor_p.add_argument(
         "--data-dir",
         type=Path,
         default=None,
         help="Override the platform default data directory.",
     )
     doctor_p.set_defaults(func=run_doctor)
+
+    memory_p = sub.add_parser("memory", help="Manage on-device vector memory")
+    memory_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    # A bare `horus-os memory` prints the usage block listing the operations.
+    memory_p.set_defaults(func=run_memory)
+    memory_sub = memory_p.add_subparsers(dest="memory_command", metavar="<operation>")
+
+    mem_download = memory_sub.add_parser(
+        "download-model",
+        help="Download the on-device embedding model (one-time, the only download trigger).",
+    )
+    mem_download.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    mem_download.set_defaults(func=run_memory, memory_command="download-model")
+
+    mem_reindex = memory_sub.add_parser(
+        "reindex",
+        help="Rebuild the vector index from existing notes (reads files only).",
+    )
+    mem_reindex.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    mem_reindex.set_defaults(func=run_memory, memory_command="reindex")
 
     return parser
 

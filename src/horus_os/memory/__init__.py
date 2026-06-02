@@ -1,5 +1,6 @@
 """Memory layer: NotesStore and bound tools."""
 
+from horus_os.memory.factory import build_vector_index
 from horus_os.memory.notes import NotesStore
 from horus_os.memory.tools import (
     append_note_tool,
@@ -12,6 +13,7 @@ from horus_os.memory.tools import (
 __all__ = [
     "NotesStore",
     "append_note_tool",
+    "build_vector_index",
     "create_note_tool",
     "list_notes_tool",
     "read_note_tool",
