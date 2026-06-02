@@ -612,6 +612,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report configured MCP servers (opt-in via mcp.toml).",
     )
     doctor_p.add_argument(
+        "--shell",
+        action="store_true",
+        help="Report gated shell execution state and the safe working directory.",
+    )
+    doctor_p.add_argument(
         "--data-dir",
         type=Path,
         default=None,

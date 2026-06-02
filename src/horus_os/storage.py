@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
-from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
+from horus_os.types import AgentProfile, AgentResult, NoteWrite, ShellInvocation, ToolUse
 
 SCHEMA_VERSION = 13
 
@@ -268,6 +268,25 @@ CREATE TABLE IF NOT EXISTS skills (
     updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name);
+
+-- Phase 75 (SHELL-02): one row per gated shell command execution, written on
+-- every code path (clean run, metacharacter reject, boundary reject, timeout).
+-- Additive within v13 like the skills block above: CREATE TABLE IF NOT EXISTS is
+-- idempotent on both fresh and upgraded databases, so no SCHEMA_VERSION bump and
+-- no ALTER TABLE is needed. exit_code is NULL when the process was killed by the
+-- timeout; command is the joined args kept for display only.
+CREATE TABLE IF NOT EXISTS shell_invocations (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    invocation_id     TEXT NOT NULL UNIQUE,
+    created_at        TEXT NOT NULL,
+    command           TEXT NOT NULL,
+    exit_code         INTEGER,
+    stdout_truncated  TEXT NOT NULL DEFAULT '',
+    working_directory TEXT NOT NULL,
+    trace_id          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shell_invocations_created_at
+    ON shell_invocations(created_at DESC);
 """
 
 
@@ -683,6 +702,53 @@ class Database:
                 (limit, offset),
             )
             return [self._row_to_write(row) for row in cursor.fetchall()]
+
+    def record_shell_invocation(
+        self,
+        command: str,
+        exit_code: int | None,
+        stdout_truncated: str,
+        working_directory: str,
+        *,
+        trace_id: str | None = None,
+    ) -> str:
+        """Write one shell_invocations row. Returns the generated invocation_id (UUID4)."""
+        invocation_id = uuid.uuid4().hex
+        created_at = _now_iso()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO shell_invocations (
+                    invocation_id, created_at, command, exit_code,
+                    stdout_truncated, working_directory, trace_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    invocation_id,
+                    created_at,
+                    command,
+                    exit_code,
+                    stdout_truncated,
+                    working_directory,
+                    trace_id,
+                ),
+            )
+        return invocation_id
+
+    def list_shell_invocations(self, *, limit: int = 50, offset: int = 0) -> list[ShellInvocation]:
+        """Return shell invocations ordered by creation time, newest first."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT invocation_id, created_at, command, exit_code,
+                       stdout_truncated, working_directory, trace_id
+                FROM shell_invocations
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            )
+            return [self._row_to_shell_invocation(row) for row in cursor.fetchall()]
 
     def load_profile(self, name: str) -> AgentProfile | None:
         """Return one agent profile by name, or None if not found."""
@@ -1200,6 +1266,18 @@ class Database:
             bytes_before=row["bytes_before"],
             bytes_after=row["bytes_after"],
             content=row["content"],
+            trace_id=row["trace_id"],
+        )
+
+    @staticmethod
+    def _row_to_shell_invocation(row: sqlite3.Row) -> ShellInvocation:
+        return ShellInvocation(
+            invocation_id=row["invocation_id"],
+            created_at=row["created_at"],
+            command=row["command"],
+            exit_code=row["exit_code"],
+            stdout_truncated=row["stdout_truncated"],
+            working_directory=row["working_directory"],
             trace_id=row["trace_id"],
         )
 

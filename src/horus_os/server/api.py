@@ -78,6 +78,7 @@ from horus_os.skills import SkillStore, register_use_skill
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
 from horus_os.tools.delegation import IterationBudget
+from horus_os.tools.shell import register_shell_if_gated
 from horus_os.tools.vision import _DEFAULT_MAX_BYTES, analyze_file_tool
 from horus_os.tools.web_search import web_search_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -867,6 +868,7 @@ def create_app(
         registry = _build_default_registry(
             cfg,
             notes_store,
+            db=db,
             provider=provider,
             trace_id=_trace_id,
             budget=_budget,
@@ -1221,6 +1223,7 @@ def _build_default_registry(
     cfg: Config,
     notes_store: NotesStore,
     *,
+    db: Database | None = None,
     agent_allowed_tools: list[str] | None = None,
     granted_capabilities: set[str] | None = None,
     provider: str = "anthropic",
@@ -1266,6 +1269,18 @@ def _build_default_registry(
         parent_trace_id=trace_id,
         budget=budget,
     )
+    # Phase 75 (SHELL-01, TEST-36): register shell_exec ONLY when BOTH gates are
+    # open at this single chokepoint: HORUS_OS_SHELL_ENABLED=="true" AND this
+    # profile's allowed_tools explicitly names shell_exec. An unrestricted (None)
+    # profile never gains shell (SE-1). The tool is added to the per-profile
+    # registry, never a shared master, so it cannot leak to other agents.
+    if db is not None:
+        register_shell_if_gated(
+            registry,
+            cfg,
+            db,
+            profile_allowed_tools=agent_allowed_tools,
+        )
     return registry
 
 

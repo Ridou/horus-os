@@ -41,6 +41,15 @@ class Capability(StrEnum):
     # its embedded steps run. Prompt-template skills never need it; only a
     # skill declared kind=code is gated on this capability, default-deny.
     SKILL_EXEC = "skill.exec"
+    # Phase 75 (SHELL-01, SE-1): the grant an agent needs before the shell_exec
+    # tool registers for it. This is the second half of the double gate; the
+    # first half is the shell_enabled config flag plus the HORUS_OS_SHELL_ENABLED
+    # env var. Default-deny: without this grant the tool never reaches the agent.
+    SHELL_EXEC = "shell.exec"
+    # Phase 75 (SHELL-03): the grant a code snippet needs to run through the same
+    # gated subprocess path as shell_exec. Code execution reuses the shell
+    # substrate (structured args, working-directory boundary, timeout, audit row).
+    CODE_EXEC = "code.exec"
 
 
 DESCRIPTIONS: Mapping[Capability, str] = {
@@ -64,6 +73,16 @@ DESCRIPTIONS: Mapping[Capability, str] = {
     Capability.SKILL_EXEC: (
         "Run the embedded steps of a code-bearing skill. Prompt-template "
         "skills never need this; only a skill marked kind=code is gated on it."
+    ),
+    Capability.SHELL_EXEC: (
+        "Run shell commands as a structured argument list inside the "
+        "configured safe working directory. Commands may not use shell "
+        "metacharacters and may not escape the working directory."
+    ),
+    Capability.CODE_EXEC: (
+        "Run code snippets through the same gated subprocess path as shell "
+        "commands, inside the configured safe working directory with the same "
+        "metacharacter and working-directory boundary checks."
     ),
 }
 

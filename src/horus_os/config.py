@@ -89,6 +89,21 @@ class Config:
     # sources, 5 iterations) and round-trip through a [research] section.
     research_max_sources: int = 10
     research_max_iterations: int = 5
+    # Phase 75 (SHELL-01/SHELL-03): the gated shell-execution settings. These
+    # encode default-deny: shell_enabled is False so the shell_exec tool is
+    # ABSENT from the registry until a user opts in. The registry wiring lands
+    # in plan 75-02; this plan only holds the gate state and the safety limits.
+    # NOTE: the HORUS_OS_SHELL_ENABLED env var is the runtime gate read at
+    # registry-build time in 75-02 and is intentionally NOT a Config field, so
+    # toggling the env var never requires rewriting config.toml. shell_working_dir
+    # None means "use data_dir/shell as the safe root". shell_type is one of
+    # bash | powershell | cmd | auto (auto detects at runtime per SE-4).
+    shell_enabled: bool = False
+    shell_working_dir: Path | None = None
+    shell_timeout_seconds: int = 30
+    shell_output_cap_bytes: int = 1_048_576
+    shell_type: str = "auto"
+    shell_confirm: bool = False
 
     def models_path(self) -> Path:
         """Return the directory that holds downloaded embedding models.
@@ -190,6 +205,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     tools = data.get("tools", {}) or {}
     web_search = tools.get("web_search", {}) or {}
     research = data.get("research", {}) or {}
+    shell = data.get("shell", {}) or {}
     overrides: dict[str, Any] = {}
     if "db_path" in storage:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
@@ -225,6 +241,18 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["research_max_sources"] = int(research["max_sources"])
     if "max_iterations" in research:
         overrides["research_max_iterations"] = int(research["max_iterations"])
+    if "enabled" in shell:
+        overrides["shell_enabled"] = bool(shell["enabled"])
+    if "working_dir" in shell:
+        overrides["shell_working_dir"] = Path(shell["working_dir"]).expanduser()
+    if "timeout_seconds" in shell:
+        overrides["shell_timeout_seconds"] = int(shell["timeout_seconds"])
+    if "output_cap_bytes" in shell:
+        overrides["shell_output_cap_bytes"] = int(shell["output_cap_bytes"])
+    if "type" in shell:
+        overrides["shell_type"] = str(shell["type"])
+    if "confirm" in shell:
+        overrides["shell_confirm"] = bool(shell["confirm"])
     return replace(base, **overrides)
 
 
@@ -298,4 +326,19 @@ def _dump_toml(config: Config) -> str:
             f"max_sources = {config.research_max_sources}\n"
             f"max_iterations = {config.research_max_iterations}\n"
         )
+    # Phase 75 (SHELL-01/SHELL-03): emit the [shell] table so the gate state and
+    # the safety limits round-trip. working_dir is written via .as_posix() only
+    # when set; None stays absent so the loader falls back to data_dir/shell. The
+    # HORUS_OS_SHELL_ENABLED env var is NOT written here: it is a runtime-only
+    # gate so flipping it never rewrites config.toml.
+    base += (
+        "\n[shell]\n"
+        f"enabled = {str(config.shell_enabled).lower()}\n"
+        f"timeout_seconds = {config.shell_timeout_seconds}\n"
+        f"output_cap_bytes = {config.shell_output_cap_bytes}\n"
+        f'type = "{config.shell_type}"\n'
+        f"confirm = {str(config.shell_confirm).lower()}\n"
+    )
+    if config.shell_working_dir is not None:
+        base += f'working_dir = "{config.shell_working_dir.as_posix()}"\n'
     return base

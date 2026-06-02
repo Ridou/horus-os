@@ -248,6 +248,47 @@ def _run_doctor_mcp(
     return 0
 
 
+def _run_doctor_shell(
+    args: argparse.Namespace,
+    *,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    """Report the gated shell-execution state (SHELL-01 / SHELL-03 display half).
+
+    Surfaces the live state of the SHELL-01 double gate so a maintainer can
+    confirm whether the shell tool is reachable before running an agent. It
+    reports the runtime env gate (HORUS_OS_SHELL_ENABLED), the config
+    shell_enabled value, the resolved safe working directory, the timeout,
+    output cap, shell type, and confirm mode. The "shell tool reachable" line
+    reflects the env gate only; it always reminds that each agent profile must
+    ALSO list shell_exec in allowed_tools (the second gate is per-profile, so it
+    cannot be reported from config alone). Returns 0. Never spawns a subprocess.
+    """
+    from horus_os.config import Config
+    from horus_os.tools.shell import SHELL_ENABLED_ENV
+
+    data_dir: Path | None = getattr(args, "data_dir", None)
+    config = Config.load(data_dir)
+
+    env_gate_open = os.environ.get(SHELL_ENABLED_ENV) == "true"
+    working_dir = config.shell_working_dir or (config.data_dir / "shell")
+
+    stdout.write(f"shell env gate ({SHELL_ENABLED_ENV}=true): {env_gate_open}\n")
+    stdout.write(f"shell_enabled (config): {config.shell_enabled}\n")
+    stdout.write(f"safe working directory: {working_dir}\n")
+    stdout.write(f"timeout_seconds: {config.shell_timeout_seconds}\n")
+    stdout.write(f"output_cap_bytes: {config.shell_output_cap_bytes}\n")
+    stdout.write(f"shell_type: {config.shell_type}\n")
+    stdout.write(f"confirm: {config.shell_confirm}\n")
+    stdout.write(f"shell tool reachable: {'yes' if env_gate_open else 'no'}\n")
+    stdout.write(
+        "  reminder: each agent profile must also list 'shell_exec' in its "
+        "allowed_tools; the env gate alone does not grant shell to any agent.\n"
+    )
+    return 0
+
+
 def _report_skills(args: argparse.Namespace, *, stdout: TextIO) -> None:
     """Report the resolved skills folder, the skill count, and parse errors.
 
@@ -296,13 +337,16 @@ def run_doctor(
     model/index/mismatch status without ever downloading (EM-1/EM-3). With --mcp,
     reports the opt-in MCP server allowlist from mcp.toml; an unconfigured system
     reports no servers and exits 0 (the opt-in default is never an error,
-    MCP-03). Never prints any secret.
+    MCP-03). With --shell, reports the gated shell-execution state: the runtime
+    env gate, the config shell_enabled value, and the resolved safe working
+    directory (SHELL-03). Never prints any secret.
     """
     supabase: bool = getattr(args, "supabase", False)
     service: bool = getattr(args, "service", False)
     local: bool = getattr(args, "local", False)
     memory: bool = getattr(args, "memory", False)
     mcp: bool = getattr(args, "mcp", False)
+    shell: bool = getattr(args, "shell", False)
 
     if service:
         return _check_service(stdout, stderr)
@@ -316,6 +360,9 @@ def run_doctor(
     if mcp:
         return _run_doctor_mcp(args, stdout=stdout, stderr=stderr)
 
+    if shell:
+        return _run_doctor_shell(args, stdout=stdout, stderr=stderr)
+
     if not supabase:
         stdout.write(
             "Usage: horus-os doctor --supabase\n"
@@ -323,12 +370,14 @@ def run_doctor(
             "       horus-os doctor --local\n"
             "       horus-os doctor --memory\n"
             "       horus-os doctor --mcp\n"
+            "       horus-os doctor --shell\n"
             "\n"
             "  --supabase    Report per-table RLS status via Supabase PostgREST RPC.\n"
             "  --service     Report whether the always-on service is registered and running.\n"
             "  --local       Probe the configured local LLM endpoint and validate its base URL.\n"
             "  --memory      Report on-device vector-memory model and index status.\n"
             "  --mcp         Report configured MCP servers (opt-in via mcp.toml).\n"
+            "  --shell       Report gated shell execution state and the safe working directory.\n"
         )
         _report_skills(args, stdout=stdout)
         return 0
