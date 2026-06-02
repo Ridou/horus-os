@@ -254,6 +254,21 @@ def create_app(
                 _result.error or "",
             )
 
+    # Phase 71 wiring: build the MCP registry from the opt-in mcp.toml
+    # allowlist under the resolved data_dir. This runs AFTER the plugin
+    # pipeline so the builtin + plugin baseline in _app_tool_registry is
+    # complete before any mcp:{server}:{tool} name is checked for a
+    # builtin collision (MC-4). An absent mcp.toml yields an empty server
+    # list, so MCPRegistry registers ZERO tools (the MCP-03 trust gate);
+    # only a [[mcp.servers]] block activates a server. MCPRegistry is
+    # first-party code, so the lifespan drives it on the same trusted
+    # unbounded start/stop path as DiscordAdapter / EmailAdapter, NOT the
+    # bounded plugin wait_for path.
+    from horus_os.mcp_client import MCPRegistry, MCPServerConfig, default_mcp_config_path
+
+    _mcp_servers = MCPServerConfig.load(default_mcp_config_path(_resolved_data_dir))
+    _mcp_registry = MCPRegistry(_mcp_servers, _app_tool_registry)
+
     @asynccontextmanager
     async def _lifespan(_app: Any) -> AsyncGenerator[None, None]:
         # Startup: call `start(context)` on each first-party adapter.
@@ -315,9 +330,27 @@ def create_app(
                         f"{type(exc).__name__}: {exc}",
                     )
 
+        # Phase 71: start the MCP registry on the trusted first-party path
+        # (unbounded, like DiscordAdapter). An empty server list returns
+        # immediately having registered nothing (MCP-03 fast path). A
+        # failing server or a CollisionError is recorded on
+        # _mcp_registry.errors() rather than crashing the lifespan, so one
+        # bad MCP server never denies the user their other tools.
+        await _mcp_registry.start(_adapter_context)
+
         try:
             yield
         finally:
+            # Phase 71: tear the MCP registry down FIRST (reverse of start)
+            # so every stdio subprocess gets the explicit cross-OS
+            # terminate/wait/kill teardown (MCP-04) before the rest of the
+            # adapters unwind. Guarded so a bad teardown cannot block the
+            # remaining shutdown steps.
+            try:
+                await _mcp_registry.stop()
+            except Exception as exc:
+                _registry.mark_error(_mcp_registry.name, f"{type(exc).__name__}: {exc}")
+
             # Shutdown: first-party adapters in reverse, unbounded.
             for _a in reversed(_adapters):
                 _stop = getattr(_a, "stop", None)
@@ -368,6 +401,10 @@ def create_app(
     app.state.adapter_registry = _registry
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
+    # Phase 71: expose the MCP registry so /doctor, the dashboard, and
+    # tests can read per-server connection status, contributed tool
+    # counts, and any recorded registration errors (errors()).
+    app.state.mcp_registry = _mcp_registry
     # Phase 45: the new plugins_api router resolves Config per-request
     # via Config.load(app.state.data_dir). Storing the resolved data_dir
     # here lets the router stay decoupled from the create_app closure

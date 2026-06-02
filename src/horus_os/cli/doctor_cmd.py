@@ -193,6 +193,61 @@ def _run_doctor_memory(
     return 0
 
 
+def _run_doctor_mcp(
+    args: argparse.Namespace,
+    *,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    """Report MCP server configuration status (MCP-03 opt-in default).
+
+    Loads the opt-in `mcp.toml` allowlist from the resolved data dir. With
+    no file (or no `[[mcp.servers]]` block) it reports that no MCP servers
+    are configured and exits 0: the opt-in default is healthy, never an
+    error. With servers configured it prints one line per server (name,
+    transport, and the command or url it points at) plus the total count.
+
+    Reading live connection state and contributed tool counts requires a
+    running app, which is out of scope for the CLI doctor; this surface
+    reports the configured allowlist and a reachability hint for http/sse
+    URLs without spawning a long-lived stdio subprocess. A malformed
+    mcp.toml surfaces as a warning line and a zero-server report, never a
+    crash: `MCPServerConfig.load` already degrades an unreadable file to an
+    empty list, so the trust gate stays closed and doctor never raises.
+    """
+    from horus_os.config import Config
+    from horus_os.mcp_client import MCPServerConfig, default_mcp_config_path
+
+    data_dir: Path | None = getattr(args, "data_dir", None)
+    config = Config.load(data_dir)
+    mcp_path = default_mcp_config_path(config.data_dir)
+
+    try:
+        servers = MCPServerConfig.load(mcp_path)
+    except Exception as exc:  # pragma: no cover - load is contracted not to raise
+        # Belt-and-suspenders: doctor must never crash. A malformed file
+        # is a warning, and the trust gate stays closed (zero servers).
+        stdout.write(f"WARNING: could not read {mcp_path}: {type(exc).__name__}\n")
+        servers = []
+
+    if not servers:
+        stdout.write("MCP: no servers configured (opt-in via mcp.toml)\n")
+        return 0
+
+    stdout.write(f"MCP: {len(servers)} server(s) configured in {mcp_path}\n")
+    for server in servers:
+        if server.transport == "stdio":
+            command = server.command or []
+            target = " ".join(command) if command else "(no command)"
+        else:
+            target = server.url or "(no url)"
+        stdout.write(f"  {server.name}: transport={server.transport} -> {target}\n")
+    stdout.write(
+        "  note: run the server (horus-os serve) to register and trace mcp:{server}:{tool} tools.\n"
+    )
+    return 0
+
+
 def run_doctor(
     args: argparse.Namespace,
     *,
@@ -216,13 +271,16 @@ def run_doctor(
     With --local, validates the configured local provider base URL (rejecting a
     wildcard bind per LP-4) and live-probes the endpoint via `probe` (defaults to
     a real short-timeout GET). With --memory, reports on-device vector-memory
-    model/index/mismatch status without ever downloading (EM-1/EM-3). Never prints
-    any secret.
+    model/index/mismatch status without ever downloading (EM-1/EM-3). With --mcp,
+    reports the opt-in MCP server allowlist from mcp.toml; an unconfigured system
+    reports no servers and exits 0 (the opt-in default is never an error,
+    MCP-03). Never prints any secret.
     """
     supabase: bool = getattr(args, "supabase", False)
     service: bool = getattr(args, "service", False)
     local: bool = getattr(args, "local", False)
     memory: bool = getattr(args, "memory", False)
+    mcp: bool = getattr(args, "mcp", False)
 
     if service:
         return _check_service(stdout, stderr)
@@ -233,17 +291,22 @@ def run_doctor(
     if memory:
         return _run_doctor_memory(args, stdout=stdout, stderr=stderr)
 
+    if mcp:
+        return _run_doctor_mcp(args, stdout=stdout, stderr=stderr)
+
     if not supabase:
         stdout.write(
             "Usage: horus-os doctor --supabase\n"
             "       horus-os doctor --service\n"
             "       horus-os doctor --local\n"
             "       horus-os doctor --memory\n"
+            "       horus-os doctor --mcp\n"
             "\n"
             "  --supabase    Report per-table RLS status via Supabase PostgREST RPC.\n"
             "  --service     Report whether the always-on service is registered and running.\n"
             "  --local       Probe the configured local LLM endpoint and validate its base URL.\n"
             "  --memory      Report on-device vector-memory model and index status.\n"
+            "  --mcp         Report configured MCP servers (opt-in via mcp.toml).\n"
         )
         return 0
 

@@ -574,6 +574,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report on-device vector-memory model and index status (no download).",
     )
     doctor_p.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Report configured MCP servers (opt-in via mcp.toml).",
+    )
+    doctor_p.add_argument(
         "--data-dir",
         type=Path,
         default=None,

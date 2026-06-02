@@ -6,6 +6,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **MCP client (opt-in).** A new optional `[mcp]` extra (`mcp>=1.27`, the
+  official Anthropic Model Context Protocol SDK) lets horus-os connect to
+  explicitly-allowlisted MCP servers over stdio, SSE, and streamable-http
+  transports. Each discovered tool registers into the shared `ToolRegistry`
+  under a `mcp:{server}:{tool}` namespace and is traced through the existing
+  `tool_invocations` path exactly like a builtin, with no schema change.
+  - **Opt-in trust gate.** Servers activate ONLY through `<data_dir>/mcp.toml`;
+    an absent or empty file registers zero MCP tools and triggers no network
+    probe. Adding a `[[mcp.servers]]` block is the single activation surface.
+  - **Namespacing with builtin collision refusal.** The registry refuses any
+    MCP tool name that would shadow a builtin (raising `CollisionError`, never
+    swallowing it) and surfaces the refusal without aborting other servers.
+  - **Tool description sanitization.** Unicode tag characters
+    (U+E0000-U+E007F) and zero-width / format control characters are stripped
+    and descriptions are length-capped before reaching the model, defending
+    against tool poisoning.
+  - **Clean cross-OS subprocess teardown.** stdio servers get an explicit,
+    idempotent `terminate` / `wait` / `kill` teardown independent of the SDK
+    lifespan, proven to leave no zombie process on macOS, Ubuntu, and Windows.
+  - **Registered as a first-party LifecycleAdapter** in the FastAPI lifespan
+    (alongside the Discord and Email adapters) and reported by
+    `horus-os doctor --mcp`. See `docs/MCP.md` for the schema, the three
+    transports, and the Threat model.
+
 ## [0.7.0] - 2026-06-02
 
 The Command Center milestone. v0.7.0 turns horus-os from a single-page

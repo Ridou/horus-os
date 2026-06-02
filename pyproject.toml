@@ -51,6 +51,11 @@ otel = [
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
 ]
+# Phase 71 (MCP-01..MCP-04): the official Anthropic Model Context Protocol
+# SDK. Kept fully optional so a bare install imports the mcp_client package
+# without the SDK present (Pitfall MC-1 opt-in trust gate; the client lazy
+# imports mcp inside start()). Pure-Python and cross-OS.
+mcp = ["mcp>=1.27"]
 # Phase 70 (MEM-05/MEM-06): on-device hybrid vector memory. Kept fully
 # optional so a bare install still imports without onnxruntime (Pitfall
 # EM-2). The onnxruntime upper pin preserves universal2 wheels for Intel
@@ -74,6 +79,7 @@ all = [
     "google-auth-oauthlib>=1.2",
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
+    "mcp>=1.27",
 ]
 dev = [
     "fastapi>=0.110",
