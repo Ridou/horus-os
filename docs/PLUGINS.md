@@ -71,6 +71,7 @@ Every capability a plugin can request is a member of the closed `Capability` enu
 | `filesystem.write` | Create, modify, and delete files at disk paths the plugin declares. Implies read access to the same paths. |
 | `net.outbound` | Open outbound network connections to hosts the plugin declares. Does NOT permit inbound listeners or connections to third-party hosts the manifest did not list. |
 | `secrets.read` | Read secret values (API keys, tokens) the plugin declares by key name. Does NOT permit listing all secrets or writing new ones. |
+| `skill.exec` | Run the embedded steps of a code-bearing skill. Prompt-template skills never need this; only a skill marked kind=code is gated on it. |
 
 Adding a new capability is a coordinated change: add the `Capability` enum member, add the `DESCRIPTIONS` entry (the module-level assert refuses to import otherwise), wire enforcement at the `CapabilityGuard` shim layer, and re-run `python scripts/build_manifest_schema.py` to refresh the JSON-Schema mirror.
 

@@ -25,7 +25,7 @@ from typing import Any, ClassVar
 
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolUse
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -250,6 +250,24 @@ CREATE TABLE IF NOT EXISTS schedules (
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL
 );
+
+-- v13: skills registry table (Phase 74 - SKILL-04).
+-- The filesystem under skills_dir is the source of truth for skill content;
+-- this table is a thin queryable registry the dashboard and CLI read. Keep the
+-- columns minimal and additive. CREATE TABLE IF NOT EXISTS is idempotent on both
+-- fresh and upgraded databases, so no ALTER TABLE is needed on the v12 -> v13 path.
+CREATE TABLE IF NOT EXISTS skills (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_id    TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL DEFAULT 'prompt-template',
+    rel_path    TEXT NOT NULL,
+    tags        TEXT NOT NULL DEFAULT '[]',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name);
 """
 
 
@@ -427,6 +445,12 @@ class Database:
             # CREATE TABLE IF NOT EXISTS in SCHEMA_SQL handles both fresh and upgraded
             # databases, so no ALTER TABLE is needed here.
             if stored_version is not None and stored_version < 12:
+                pass  # No ALTER TABLE needed - new table only (idempotent via SCHEMA_SQL)
+            # v12 -> v13: skills registry table is a new table, not a column add.
+            # CREATE TABLE IF NOT EXISTS in SCHEMA_SQL handles both fresh and upgraded
+            # databases, so no ALTER TABLE is needed here. The filesystem under
+            # skills_dir remains the source of truth; this table is a registry only.
+            if stored_version is not None and stored_version < 13:
                 pass  # No ALTER TABLE needed - new table only (idempotent via SCHEMA_SQL)
             # The parent_trace_id index lives outside SCHEMA_SQL so it only runs
             # after the column is guaranteed to exist (either via fresh CREATE

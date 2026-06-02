@@ -23,6 +23,7 @@ from typing import Any
 
 CONFIG_FILENAME = "config.toml"
 DEFAULT_NOTES_SUBDIR = "notes"
+DEFAULT_SKILLS_SUBDIR = "skills"
 DEFAULT_DB_FILENAME = "horus.sqlite"
 # Phase 69 (LP-4): loopback default for the local provider base_url. Kept
 # here so _dump_toml can compare against it and only emit the [local]
@@ -38,6 +39,12 @@ class Config:
     data_dir: Path
     db_path: Path
     notes_dir: Path
+    # Phase 74 (SKILL-01): the skills folder, the filesystem source of truth
+    # for discoverable skill files. Set in with_defaults to <data_dir>/skills
+    # and overridable via the [skills] dir key in config.toml, mirroring the
+    # [notes] notes_dir branch. Kept after the path fields with a default so
+    # the dataclass stays positional-compatible with existing callers.
+    skills_dir: Path = Path(DEFAULT_SKILLS_SUBDIR)
     default_provider: str = "anthropic"
     anthropic_model: str = "claude-sonnet-4-6"
     gemini_model: str = "gemini-2.5-flash"
@@ -128,6 +135,7 @@ class Config:
             data_dir=resolved,
             db_path=resolved / DEFAULT_DB_FILENAME,
             notes_dir=resolved / DEFAULT_NOTES_SUBDIR,
+            skills_dir=resolved / DEFAULT_SKILLS_SUBDIR,
         )
 
     @classmethod
@@ -175,6 +183,7 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
     providers = data.get("providers", {}) or {}
     storage = data.get("storage", {}) or {}
     notes = data.get("notes", {}) or {}
+    skills = data.get("skills", {}) or {}
     pricing = data.get("pricing", {}) or {}
     local = data.get("local", {}) or {}
     memory = data.get("memory", {}) or {}
@@ -186,6 +195,8 @@ def _apply_toml(base: Config, data: dict[str, Any]) -> Config:
         overrides["db_path"] = Path(storage["db_path"]).expanduser()
     if "notes_dir" in notes:
         overrides["notes_dir"] = Path(notes["notes_dir"]).expanduser()
+    if "dir" in skills:
+        overrides["skills_dir"] = Path(skills["dir"]).expanduser()
     if "default" in providers:
         overrides["default_provider"] = str(providers["default"])
     if "anthropic_model" in providers:
@@ -232,6 +243,9 @@ def _dump_toml(config: Config) -> str:
         "\n"
         "[notes]\n"
         f'notes_dir = "{config.notes_dir.as_posix()}"\n'
+        "\n"
+        "[skills]\n"
+        f'dir = "{config.skills_dir.as_posix()}"\n'
     )
     if config.pricing_path is not None:
         base += f'\n[pricing]\npath = "{config.pricing_path.as_posix()}"\n'

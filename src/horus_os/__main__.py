@@ -18,6 +18,7 @@ from horus_os.cli import (
     run_schedule,
     run_serve,
     run_service,
+    run_skills,
     run_traces,
     run_usage,
 )
@@ -333,6 +334,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     _build_schedule_parser(sub)
     _build_service_parser(sub)
+
+    skills_p = sub.add_parser("skills", help="List and show discoverable skills")
+    skills_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_p.set_defaults(func=run_skills)
+
+    skills_sub = skills_p.add_subparsers(dest="skills_command", metavar="<operation>")
+
+    skills_list_p = skills_sub.add_parser("list", help="List all discoverable skills")
+    skills_list_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_list_p.set_defaults(func=run_skills, skills_command="list")
+
+    skills_show_p = skills_sub.add_parser(
+        "show", help="Show one skill in detail, including its body"
+    )
+    skills_show_p.add_argument("name", help="Skill name")
+    skills_show_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_show_p.set_defaults(func=run_skills, skills_command="show")
 
     plugins_p = sub.add_parser("plugins", help="Manage installed plugins")
     plugins_p.add_argument(

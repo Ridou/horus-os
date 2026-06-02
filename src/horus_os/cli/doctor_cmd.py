@@ -248,6 +248,28 @@ def _run_doctor_mcp(
     return 0
 
 
+def _report_skills(args: argparse.Namespace, *, stdout: TextIO) -> None:
+    """Report the resolved skills folder, the skill count, and parse errors.
+
+    Reads SkillStore against the configured skills folder (the filesystem
+    source of truth). Discovery is crash-safe, so this never raises and never
+    writes to stderr: an absent or empty folder is a healthy, normal state.
+    """
+    from horus_os.config import Config
+    from horus_os.skills import SkillStore
+
+    data_dir: Path | None = getattr(args, "data_dir", None)
+    config = Config.load(data_dir)
+    store = SkillStore(config.skills_dir)
+    skills = store.list_skills()
+    errors = store.list_skill_errors()
+    stdout.write("\n")
+    stdout.write(f"skills folder: {config.skills_dir}\n")
+    stdout.write(f"skills found:  {len(skills)}\n")
+    if errors:
+        stdout.write(f"skills with parse errors: {len(errors)}\n")
+
+
 def run_doctor(
     args: argparse.Namespace,
     *,
@@ -308,6 +330,7 @@ def run_doctor(
             "  --memory      Report on-device vector-memory model and index status.\n"
             "  --mcp         Report configured MCP servers (opt-in via mcp.toml).\n"
         )
+        _report_skills(args, stdout=stdout)
         return 0
 
     url = os.environ.get("SUPABASE_URL")

@@ -18,6 +18,7 @@ from horus_os.cli.run_cmd import run_run
 from horus_os.cli.schedule_cmd import run_schedule
 from horus_os.cli.serve_cmd import run_serve
 from horus_os.cli.service_cmd import run_service
+from horus_os.cli.skills_cmd import run_skills
 from horus_os.cli.traces_cmd import run_traces
 from horus_os.cli.usage_cmd import run_usage
 
@@ -31,6 +32,7 @@ __all__ = [
     "run_schedule",
     "run_serve",
     "run_service",
+    "run_skills",
     "run_traces",
     "run_usage",
 ]

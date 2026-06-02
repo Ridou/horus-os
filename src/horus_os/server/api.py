@@ -74,8 +74,10 @@ from horus_os.research.api import router as research_router
 from horus_os.server.dashboard_api import router as dashboard_router
 from horus_os.server.integrations_write import router as integrations_write_router
 from horus_os.server.plugins_api import router as plugins_router
+from horus_os.skills import SkillStore, register_use_skill
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
+from horus_os.tools.delegation import IterationBudget
 from horus_os.tools.vision import _DEFAULT_MAX_BYTES, analyze_file_tool
 from horus_os.tools.web_search import web_search_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
@@ -851,13 +853,24 @@ def create_app(
             on_write=lambda w: _persist_write(db, w),
             vector_index=build_vector_index(cfg),
         )
-        registry = _build_default_registry(cfg, notes_store)
         tool_log: list[ToolResult] = []
         # Phase 33: pre-generate the trace_id so the same id flows into
         # the LLMCallEvents published inside run_agent_loop, the traces
         # row record_trace writes, and the RunEndEvent that triggers the
         # rollup UPDATE.
         _trace_id = uuid.uuid4().hex
+        # Phase 74: a shared budget plus the run trace_id let a use_skill
+        # sub-loop run under the run-level budget and trace its invocation
+        # under the same trace_id as the run (SKILL-02 "traced"). The MVP grant
+        # set is empty so code-bearing skills are denied by default (SK-1).
+        _budget = IterationBudget(max_iterations)
+        registry = _build_default_registry(
+            cfg,
+            notes_store,
+            provider=provider,
+            trace_id=_trace_id,
+            budget=_budget,
+        )
         start = time.perf_counter()
         try:
             result = run_agent_loop(
@@ -865,7 +878,7 @@ def create_app(
                 registry=registry,
                 provider=provider,
                 model=model,
-                max_iterations=max_iterations,
+                budget=_budget,
                 on_tool_result=tool_log.append,
                 trace_id=_trace_id,
             )
@@ -1204,7 +1217,16 @@ def _model_for(cfg: Config, provider: str) -> str:
     return cfg.gemini_model
 
 
-def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistry:
+def _build_default_registry(
+    cfg: Config,
+    notes_store: NotesStore,
+    *,
+    agent_allowed_tools: list[str] | None = None,
+    granted_capabilities: set[str] | None = None,
+    provider: str = "anthropic",
+    trace_id: str | None = None,
+    budget: IterationBudget | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(read_file_tool(base_dir=cfg.notes_dir))
     registry.register(list_notes_tool(notes_store))
@@ -1231,6 +1253,19 @@ def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistr
                 base_url=cfg.web_search_base_url,
             )
         )
+    # Phase 74 (SKILL-02): register use_skill ONLY when a skill exists, so an
+    # install with no skills produces a registry byte-identical to before. The
+    # MVP grant set is empty so code-bearing skills are denied by default (SK-1);
+    # a skill whose name collides with a builtin/plugin tool is refused (SK-2).
+    register_use_skill(
+        registry,
+        store=SkillStore(cfg.skills_dir),
+        agent_allowed_tools=agent_allowed_tools,
+        granted_capabilities=granted_capabilities if granted_capabilities is not None else set(),
+        provider=provider,
+        parent_trace_id=trace_id,
+        budget=budget,
+    )
     return registry
 
 

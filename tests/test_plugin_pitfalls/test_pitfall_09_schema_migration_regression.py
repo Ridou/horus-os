@@ -19,7 +19,7 @@ documents that as a non-goal.
 Five structural assertions:
 
 1. The pre-migration fixture is at schema_version=5 (sanity check).
-2. After ``Database.init()``, schema_version=10.
+2. After ``Database.init()``, schema_version=12.
 3. Pre-existing ``traces`` rows preserve their original values
    byte-identically (the migration is additive on existing data).
 4. New columns (``plugin_name`` on ``llm_calls`` + ``tool_invocations``)
@@ -27,7 +27,7 @@ Five structural assertions:
 5. New tables (``plugins`` / ``plugin_capabilities`` / ``plugin_status``)
    exist and are empty.
 6. Running ``Database.init()`` a second time on the migrated database is a
-   no-op: no exceptions, schema stays at 10, traces row count unchanged.
+   no-op: no exceptions, schema stays at 12, traces row count unchanged.
 """
 
 from __future__ import annotations

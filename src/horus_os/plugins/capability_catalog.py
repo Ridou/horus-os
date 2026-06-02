@@ -37,6 +37,10 @@ class Capability(StrEnum):
     FILESYSTEM_WRITE = "filesystem.write"
     NET_OUTBOUND = "net.outbound"
     SECRETS_READ = "secrets.read"
+    # Phase 74 (SKILL-03, SK-1): the grant a code-bearing skill needs before
+    # its embedded steps run. Prompt-template skills never need it; only a
+    # skill declared kind=code is gated on this capability, default-deny.
+    SKILL_EXEC = "skill.exec"
 
 
 DESCRIPTIONS: Mapping[Capability, str] = {
@@ -56,6 +60,10 @@ DESCRIPTIONS: Mapping[Capability, str] = {
     Capability.SECRETS_READ: (
         "Read secret values (API keys, tokens) the plugin declares by key "
         "name. Does NOT permit listing all secrets or writing new ones."
+    ),
+    Capability.SKILL_EXEC: (
+        "Run the embedded steps of a code-bearing skill. Prompt-template "
+        "skills never need this; only a skill marked kind=code is gated on it."
     ),
 }
 

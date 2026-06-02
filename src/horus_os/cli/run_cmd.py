@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import time
+import uuid
 from typing import TextIO
 
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
@@ -18,8 +19,10 @@ from horus_os.memory.tools import (
     read_note_tool,
     search_notes_tool,
 )
+from horus_os.skills import SkillStore, register_use_skill
 from horus_os.storage import Database
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
+from horus_os.tools.delegation import IterationBudget
 from horus_os.types import AgentProfile, AgentResult, ToolCallEvent, ToolResult
 
 ENV_KEY_FOR = {
@@ -83,7 +86,22 @@ def run_run(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
         on_write=lambda w: _record_note_write(db, w),
         vector_index=build_vector_index(config),
     )
-    registry = _build_default_registry(config, notes_store)
+    # Phase 74: a shared budget and trace_id let a use_skill sub-loop run under
+    # the run-level budget (so a skill cannot escape it) and trace its
+    # invocation under the same trace_id as the run (SKILL-02 "traced"). The
+    # profile's allowed_tools is the SK-3 security floor for any skill sub-tool
+    # call; the MVP grant set is empty so code skills are denied by default.
+    budget = IterationBudget(max_iterations)
+    trace_id = uuid.uuid4().hex
+    registry = _build_default_registry(
+        config,
+        notes_store,
+        agent_allowed_tools=profile.allowed_tools if profile else None,
+        granted_capabilities=set(),
+        provider=provider,
+        trace_id=trace_id,
+        budget=budget,
+    )
 
     if no_stream:
         return _run_buffered(
@@ -269,7 +287,16 @@ def _model_for(config: Config, provider: str) -> str:
     return config.gemini_model
 
 
-def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegistry:
+def _build_default_registry(
+    config: Config,
+    notes_store: NotesStore,
+    *,
+    agent_allowed_tools: list[str] | None = None,
+    granted_capabilities: set[str] | None = None,
+    provider: str = "anthropic",
+    trace_id: str | None = None,
+    budget: IterationBudget | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(read_file_tool(base_dir=config.notes_dir))
     registry.register(list_notes_tool(notes_store))
@@ -278,6 +305,19 @@ def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegi
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
     registry.register(make_github_read_tool())
+    # Phase 74 (SKILL-02): register use_skill ONLY when a skill exists, so an
+    # install with no skills is byte-identical to before. The MVP grant set is
+    # empty, so code-bearing skills are denied by default (SK-1). SK-2: a skill
+    # whose name collides with a builtin is refused inside register_use_skill.
+    register_use_skill(
+        registry,
+        store=SkillStore(config.skills_dir),
+        agent_allowed_tools=agent_allowed_tools,
+        granted_capabilities=granted_capabilities if granted_capabilities is not None else set(),
+        provider=provider,
+        parent_trace_id=trace_id,
+        budget=budget,
+    )
     return registry
 
 
