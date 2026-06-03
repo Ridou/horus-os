@@ -15,6 +15,11 @@ from pathlib import Path
 
 import pytest
 
+# Reindex builds the sqlite-vec-backed vector index ([local-memory] extra).
+# Skip when absent (the bare [dev] CI install); the install-smoke-local-memory
+# variant exercises this path with the extension present.
+pytest.importorskip("sqlite_vec")
+
 from horus_os.cli import run_doctor, run_memory
 from horus_os.config import Config
 

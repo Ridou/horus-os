@@ -41,7 +41,10 @@ gemini = ["google-genai>=0.3"]
 # base_url override. MIT, pure Python, cross-OS. Kept optional so a bare
 # install pulls no LLM client beyond the configured key provider.
 local-llm = ["openai>=2.40.0"]
-dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30"]
+# python-multipart is required by FastAPI to build any route that accepts
+# file uploads or form data; the dashboard ships POST /api/uploads (Phase 72),
+# so the app cannot be constructed without it.
+dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9"]
 discord = ["discord.py>=2.4"]
 supabase = ["httpx>=0.27"]
 vercel = ["httpx>=0.27"]
@@ -112,6 +115,7 @@ all = [
     "openai>=2.40.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
     "slack-sdk>=3.27",
     "google-api-python-client>=2.110",
     "google-auth-oauthlib>=1.2",
@@ -125,6 +129,7 @@ all = [
 ]
 dev = [
     "fastapi>=0.110",
+    "python-multipart>=0.0.9",
     "httpx>=0.27",
     "pip-audit>=2.10,<3",
     "pytest>=8.0",

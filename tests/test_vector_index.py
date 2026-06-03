@@ -14,6 +14,11 @@ from pathlib import Path
 
 import pytest
 
+# The vector index requires the sqlite-vec extension ([local-memory] extra).
+# Skip when absent (the bare [dev] CI install); the install-smoke-local-memory
+# variant exercises this path with the extension present.
+pytest.importorskip("sqlite_vec")
+
 from horus_os.memory.vector import (
     VECTOR_INDEX_VERSION,
     EmbeddingDimensionMismatch,

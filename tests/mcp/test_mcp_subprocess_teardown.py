@@ -27,6 +27,11 @@ from pathlib import Path
 
 import pytest
 
+# The stub MCP server subprocess imports the official mcp SDK ([mcp] extra).
+# Skip when absent (the bare [dev] CI install); the [all] install-smoke
+# variant installs the SDK.
+pytest.importorskip("mcp")
+
 from horus_os.mcp_client.client import MCPClient
 from horus_os.mcp_client.config import MCPServerConfig
 from horus_os.mcp_client.registry import MCPRegistry

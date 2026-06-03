@@ -15,6 +15,12 @@ from typing import Any, ClassVar
 
 import pytest
 
+# These exercise the real provider SDKs ([anthropic] and [gemini] extras).
+# Skip when absent (the bare [dev] CI install); the [all] install-smoke
+# variant installs both SDKs.
+pytest.importorskip("anthropic")
+pytest.importorskip("google.genai")
+
 from horus_os._providers import _anthropic, _gemini
 
 
