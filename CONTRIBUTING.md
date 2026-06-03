@@ -272,6 +272,31 @@ top-level `LICENSE` covers the whole repository.
 3. Tests go under `tests/cli/`. Use the `CliRunner` fixture pattern
    from existing tests.
 
+## How to edit the documentation site
+
+The official docs at [docs.horus-demo.com](https://docs.horus-demo.com) are
+built from `docs-site/`, a static Next.js app that is separate from the Python
+package and from the bundled dashboard.
+
+1. **Content** lives as markdown in
+   `docs-site/content/docs/<section>/<page>.md`, with `title` and `description`
+   frontmatter. The body starts at an `##` heading; the page title comes from
+   the frontmatter, so do not add a top-level `#` heading.
+2. **Navigation, order, and the sidebar** are defined in
+   `docs-site/lib/nav.ts`. To add a page, create the markdown file and add its
+   slug there.
+3. **Run it locally:**
+   ```
+   cd docs-site
+   npm install
+   npm run dev        # http://localhost:3000
+   ```
+4. **Conventions:** no em-dashes, no personal data, internal links are absolute
+   and end with a slash (for example `/guides/cli/`), and every code fence
+   carries a language tag.
+5. **Deploy:** the site static-exports to `docs-site/out/` and deploys to
+   Vercel as its own project. See `docs-site/DEPLOY.md`.
+
 ## Where to discuss
 
 - **Bugs and concrete proposals:** GitHub issues.
