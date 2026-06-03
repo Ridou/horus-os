@@ -123,7 +123,7 @@ export default function TasksPage() {
           message="Tasks will appear here when your agents receive work."
         />
       ) : (
-        <ul className="space-y-2">
+        <ul data-tour-step="4" className="space-y-2">
           {filtered.map((task) => (
             <li key={task.task_id} className="group">
               <div className="flex items-start gap-3 border border-border-subtle bg-bg-secondary px-4 py-3">

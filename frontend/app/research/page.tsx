@@ -113,7 +113,7 @@ export default function ResearchPage() {
   }
 
   return (
-    <div>
+    <div data-tour-step="5">
       <PageHeader
         title="Research"
         description="Run a deep, multi-source research pass and get a cited report. Review the plan before any work starts."

@@ -107,7 +107,7 @@ describe("TourProvider", () => {
     expect(screen.getByTestId("consumer").dataset.step).toBe("0");
   });
 
-  it("exposes totalSteps equal to 5 (TOUR_STEPS constant)", async () => {
+  it("exposes totalSteps equal to 10 (TOUR_STEPS constant)", async () => {
     render(
       <TourProvider>
         <TourConsumer />
@@ -117,7 +117,7 @@ describe("TourProvider", () => {
     await act(async () => {});
 
     const consumer = screen.getByTestId("consumer");
-    expect(consumer.dataset.total).toBe("5");
+    expect(consumer.dataset.total).toBe("10");
   });
 
   it("useTour throws when called outside TourProvider", () => {

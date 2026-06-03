@@ -130,7 +130,7 @@ export default function ActivityPage() {
           }
         />
       ) : (
-        <ol data-tour-step="4" className={cn("space-y-3")}>
+        <ol data-tour-step="6" className={cn("space-y-3")}>
           {filtered.map((event, i) => (
             <TimelineRow
               key={event.trace_id}

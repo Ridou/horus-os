@@ -147,7 +147,7 @@ export default function AboutPage() {
       <section className="mt-6">
         <button
           type="button"
-          data-tour-step="5"
+          data-tour-step="10"
           onClick={() => startTour()}
           className="border border-border-subtle bg-bg-secondary p-4 flex items-center gap-3 w-full text-left transition-colors hover:border-accent-cyan/40"
         >

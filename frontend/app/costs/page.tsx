@@ -199,7 +199,7 @@ export default function CostsPage() {
       ) : (
         <div className="space-y-6">
           {/* Summary metrics */}
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div data-tour-step="8" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <MetricCard
               title="Total spend"
               value={formatUsd(totalCost)}

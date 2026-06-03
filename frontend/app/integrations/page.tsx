@@ -41,7 +41,7 @@ export default function IntegrationsPage() {
       ) : (
         <>
           <ReadinessSummary integrations={data.integrations} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div data-tour-step="9" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.integrations.map((integration) => (
               <IntegrationCard
                 key={integration.id}
