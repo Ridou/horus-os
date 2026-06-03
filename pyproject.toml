@@ -54,6 +54,13 @@ calendar = [
     "google-api-python-client>=2.110",
     "google-auth-oauthlib>=1.2",
 ]
+# Voice / reservations adapter: outbound calls via the Twilio REST API.
+# twilio is a pure-Python, cross-OS wheel (MIT). Kept optional so a bare
+# install imports the adapter module (the SDK is imported lazily inside
+# bind() and the tool handlers) without pulling the client. The live
+# two-way audio bridge additionally needs a public URL and a realtime
+# voice provider; see docs/adapters/VOICE.md.
+voice = ["twilio>=9.0"]
 otel = [
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
@@ -126,6 +133,7 @@ all = [
     "httpx>=0.27.0",
     "pypdf>=6.12.2",
     "Pillow>=10.0",
+    "twilio>=9.0",
 ]
 dev = [
     "fastapi>=0.110",
@@ -149,6 +157,7 @@ calendar = "horus_os.adapters.calendar_adapter:CalendarAdapter"
 otel = "horus_os.adapters.otel_adapter:OtelAdapter"
 supabase = "horus_os.adapters.supabase_adapter:SupabaseAdapter"
 scheduler = "horus_os.adapters.scheduler_adapter:SchedulerAdapter"
+voice = "horus_os.adapters.voice_adapter:VoiceAdapter"
 
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"

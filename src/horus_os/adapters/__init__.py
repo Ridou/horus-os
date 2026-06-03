@@ -32,6 +32,7 @@ from horus_os.adapters.calendar_adapter import CalendarAdapter
 from horus_os.adapters.discord_adapter import DiscordAdapter
 from horus_os.adapters.email_adapter import EmailAdapter
 from horus_os.adapters.slack_adapter import SlackAdapter
+from horus_os.adapters.voice_adapter import VoiceAdapter
 from horus_os.adapters.webhook import WebhookAdapter
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "EmailAdapter",
     "LifecycleAdapter",
     "SlackAdapter",
+    "VoiceAdapter",
     "WebhookAdapter",
     "discover_adapters",
 ]
