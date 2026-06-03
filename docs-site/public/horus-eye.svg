@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 96" fill="none" role="img" aria-label="horus-os eye mark">
+  <!-- Wedjat (Eye of Horus) mark. Accent cyan #00d4ff. Stroke-only so it reads on any background. -->
+  <g stroke="#00d4ff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- brow -->
+    <path d="M12 30 C 36 12, 78 10, 100 22" />
+    <!-- upper lid -->
+    <path d="M16 44 C 30 28, 72 26, 92 40" />
+    <!-- lower lid -->
+    <path d="M16 44 C 34 58, 72 56, 92 40" />
+    <!-- outer cosmetic tail -->
+    <path d="M92 40 C 104 38, 116 34, 126 26" />
+    <!-- vertical teardrop -->
+    <path d="M40 54 C 40 68, 40 78, 37 86" />
+    <!-- falcon-marking spiral -->
+    <path d="M60 55 C 62 74, 76 86, 88 80 C 96 76, 94 64, 84 66" />
+  </g>
+  <!-- iris / all-seeing focal point -->
+  <circle cx="52" cy="41" r="8" fill="#00d4ff" />
+</svg>

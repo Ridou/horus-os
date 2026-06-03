@@ -15,8 +15,8 @@
 </p>
 
 <p align="center">
-  <b><a href="https://horus-os-demo.vercel.app">Live demo</a></b>
-  &nbsp;&middot;&nbsp; <a href="https://horus-os-demo.vercel.app/get-started">Get started</a>
+  <b><a href="https://horus-os-docs.vercel.app">Documentation</a></b>
+  &nbsp;&middot;&nbsp; <a href="https://horus-os-demo.vercel.app">Live demo</a>
   &nbsp;&middot;&nbsp; <a href="#quickstart">Quickstart</a>
   &nbsp;&middot;&nbsp; <a href="STATUS.md">Status</a>
   &nbsp;&middot;&nbsp; <a href="ROADMAP.md">Roadmap</a>
@@ -153,7 +153,7 @@ The dashboard talks only to your local backend. There is no hosted service behin
 
 - **Two providers, your keys.** Anthropic Claude and Google Gemini through the official SDKs, no abstraction layer.
 - **A real agent team.** Named profiles in SQLite, a `delegate_to_agent` tool, parent and child traces, streaming responses on the CLI and the dashboard.
-- **Tools and memory.** A tool registry plus a markdown notes vault the agents read and write, with every write captured in an audit log.
+- **Tools and memory.** A tool registry plus a markdown notes vault the agents read and write, with every write captured in an audit log. The vault is plain markdown you can edit in any editor, including Obsidian (point an Obsidian vault at your notes folder).
 - **Observability.** Per-run cost, latency, and tool-reliability tracking, a costs dashboard, a `horus-os usage` CLI, and an opt-in OpenTelemetry exporter behind an extra.
 - **A plugin system.** Third-party tools and adapters load from a `horus-plugin.toml` manifest with default-deny capability grants and per-plugin observability.
 - **Adapters.** Optional, opt-in connectors (Discord, Slack, Email, Calendar) so agents can act on the surfaces you choose.

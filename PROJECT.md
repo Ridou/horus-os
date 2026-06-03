@@ -28,7 +28,7 @@ An open-source, self-hosted autonomous AI command center.
 | Agent runtime | Python + Anthropic SDK + Google Gemini SDK | Synchronous and async paths both supported |
 | Persistence | SQLite (WAL mode) | Single file; trivially portable |
 | Vector store | Local Chroma or duckdb-vss | Embedding backend pluggable |
-| Knowledge base | Local markdown files + indexed search | User edits in any editor |
+| Knowledge base | Local markdown files + indexed search | Edit in any markdown editor, including Obsidian |
 | Dashboard | Next.js, served locally | Optional; CLI works without it |
 | Chat surface | CLI first; web chat next; third-party (Discord, Slack) via opt-in adapters | |
 | Process manager | Native OS service file (systemd unit, launchd plist, Windows scheduled task) | One reference recipe per OS |
