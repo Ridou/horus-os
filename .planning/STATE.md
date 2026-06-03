@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.7
-milestone_name: Command Center
+milestone: v0.8
+milestone_name: Local-first & Autonomous Research
 status: complete
-last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02
+last_updated: "2026-06-03T00:00:00.000Z"
+last_activity: 2026-06-03
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 34
-  completed_plans: 34
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 22
+  completed_plans: 22
   percent: 100
 ---
 
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.7 staged and verified; awaiting owner go-ahead to publish the v0.7.0 release.
+**Current focus:** v0.8 shipped. Planning v0.9 (Autonomy and Control). See .planning/PROGRAM-v0.9-v0.14.md and .planning/research/v0.9-gap-analysis.md.
 
 ## Current Position
 
-Phase: 68 (three-os-gate-and-v0-7-0-release) - COMPLETE (verified)
-Plan: 3 of 3 (all plans complete)
-Status: All 10 v0.7 phases (60-68) complete and verified. Code review resolved (5 of 5 findings fixed), full suite green modulo the documented OTEL/release-gate baseline, version 0.7.0, SCHEMA_VERSION 12. The v0.7.0 release is staged locally only: push, tag, gh release create, and merge to main are owner-confirmed actions (D-07, CLAUDE.md hard rule) carried in 68-HUMAN-UAT.md.
-Last activity: 2026-06-02
+Phase: 76 (three-os-gate-and-v0-8-0-release) - COMPLETE (shipped)
+Plan: all plans complete
+Status: v0.8 SHIPPED 2026-06-03 as v0.8.0 (PR #15 squash-merged to main 8576b02, tag pushed, Release published, schema v13). v0.8 planning artifacts (ROADMAP/REQUIREMENTS + phases 69-76) synced from the v0.8 worktree to main on 2026-06-03 so the planning history is complete (the squash merge had dropped them). Open follow-ups: enable repo Dependency-graph (dependency-review CI fails without it), delete superseded v0.8 branches (v0.8-backup-pre-rebase, v0.8-pre-rebase tag), remove the v0.8 worktree once confirmed synced.
+Last activity: 2026-06-03
 
 ## Prior Milestones
 
@@ -36,51 +36,9 @@ Last activity: 2026-06-02
 - **v0.3 Adapter Ecosystem** (Phases 22-31): SHIPPED 2026-05-24 as v0.3.0. 447 tests, 3-OS install-smoke green. Adapter lifecycle hooks, Discord + Slack + Email + Calendar adapters, AdapterRegistry, Dashboard Adapters tab, four per-adapter setup guides, four runnable examples, v0.2-to-v0.3 migration guide.
 - **v0.4 Observability** (Phases 32-39): SHIPPED 2026-05-26 as v0.4.0. ObservationBus + SQLitePersister, llm_calls + tool_invocations child tables, bundled pricing.json with cache-aware cost annotation, /observability dashboard tab + horus-os usage CLI, opt-in OtelAdapter behind [otel] extra with default-deny content capture + bounded shutdown, scripts/release_gate.py with pricing freshness + two-variant install-smoke matrix.
 - **v0.5 Plugin System** (Phases 40-50): SHIPPED 2026-05-27 as v0.5.0. 1011 tests green, 3-OS install-smoke green including the new install-smoke-plugin matrix. TOML manifest contract (pydantic v2), entry-point + filesystem discovery, default-deny capability grants pinned to manifest-hash with re-prompt on upgrade, two-phase `pip install` flow with sdist + `.pth` + runtime-dep-downgrade refusals, bounded `asyncio.wait_for(start, timeout=2.0)` failure isolation, `/plugins` dashboard tab + per-plugin observability attribution, reference plugin (`examples/horus-os-example-plugin/`) demonstrating four scenarios with the two-layer TID251 + source-tree-grep API surface lock, docs trio (`docs/PLUGINS.md` + `docs/PLUGIN-SECURITY.md` + `docs/MIGRATION-v0.4-to-v0.5.md`), `scripts/release_gate.py` extended from 4 to 8 checks. Two new base direct deps: `pydantic>=2.7,<3` + `packaging>=24.0`. v5->v6 schema migration additive only.
-- **v0.6 Contribution Gate** (Phases 51-59): Substantially complete and rehearsal-ready. The single-atomic-commit gate flip (Phase 59) is drafted but not yet landed (carried as a pending todo). No v0.6.0 tag yet.
-
-## v0.7 Command Center - Milestone Plan
-
-**9 phases (60-68)**, all 63 v0.7 requirements covered at 100%. Execution order:
-
-  60 -> (61 || 63) -> 62 -> (64 || 65 || 66) -> 67 -> 68
-
-Phase 60 is a universal prerequisite - Tailwind v4 tokens, Radix Modal/Stepper primitives, and the AppShell sidebar are required by every subsequent page and the Setup-and-Verify UX.
-
-Phase 61 (read-only integrations surface) can run concurrently with Phase 63 (tier-1 pages) after Phase 60 completes - they share only the design system primitives.
-
-Phase 62 (key-write endpoint and security substrate) depends on Phase 61 and is a security-focused gate before any integration backend (Discord, Supabase, cron) relies on the key-write endpoint.
-
-Phases 64, 65, 66 run largely in parallel after Phase 62 - they share only the task API and SQLite, and each is independently opt-in.
-
-Phase 67 (Vercel deploy path, GitHub tool, NEXT_PUBLIC_API_BASE) depends on Phase 65 (Supabase as data source) and requires all prior security work before any docs instruct public API exposure.
-
-Phase 68 (three-OS gate, release) is last and non-negotiable behind the hard gate.
-
-**Eight load-bearing constraints:**
-
-1. REMOTE-01 (starlette >= 1.0.1 pin + loopback guard) lands in Phase 62 BEFORE the key-write endpoint is callable (BLOCKING - Pitfall 1 / CVE-2026-48710).
-2. SUPA-02 (service key never in NEXT_PUBLIC_*) and SUPA-03 (RLS on every table) land in Phase 65 BEFORE SUPA-01 (sync loop) - BLOCKING (Pitfalls 2, 3).
-3. DISC-05 (idempotent non-destructive channel bootstrap) is Phase 64's first design decision before any bootstrap code is written (HIGH - Pitfall 4).
-4. Every integration is optional. horus-os starts locally with zero cloud config (SUPA-05, REMOTE-04/05 escape hatches).
-5. NEXT_PUBLIC_API_BASE abstraction wired from Phase 67's first commit - zero bare fetch("/api/") calls after Phase 67 ships (Pitfall 11 / VERCEL-01).
-6. Key-write response never echoes the value; demo-mode returns 403; chmod 600 on .env write (Pitfalls 12, 13 / KEYS-02, KEYS-03).
-7. CI em-dash grep and private-name grep enforced from Phase 60 (Pitfall 18, CLAUDE.md rule 3).
-8. Three-OS hard gate (macOS, Ubuntu, Windows; Python 3.11 and 3.12) is non-negotiable before Phase 68 (REL-16).
-
-**Phase-by-phase requirement coverage (63/63):**
-
-| Phase | Requirements | Count |
-|-------|--------------|-------|
-| 60 Design system and layout shell | DESIGN-01..05 | 5 |
-| 61 Integrations surface and read-only API | SETUP-01..06, VERIFY-02, VERIFY-04, GH-01 | 9 |
-| 62 Key-write endpoint and verification engine | KEYS-01..04, VERIFY-01, VERIFY-03, REMOTE-01, MIG-06, TEST-27 | 9 |
-| 63 Tier-1 dashboard pages, starter team, and seed content | PAGES-01..08, TEAM-01..03, SEED-01..03 | 14 |
-| 64 Discord control bot extension | DISC-05..10, TEST-28 | 7 |
-| 65 Supabase sync loop and schema migrations | SUPA-01..05, TEST-29 | 6 |
-| 66 Cron scheduler and always-on service | REMOTE-02..05, TEST-30 | 5 |
-| 67 Vercel deploy path, GitHub tool, NEXT_PUBLIC_API_BASE | VERCEL-01..04, GH-02, TEST-31 | 6 |
-| 68 Three-OS gate and v0.7.0 release | REL-16, REL-17 | 2 |
-| **Total** | | **63** |
+- **v0.6 Contribution Gate** (Phases 51-59): Substantially complete and rehearsal-ready. The single-atomic-commit gate flip (Phase 59) is drafted but not yet landed (carried as a pending todo). No v0.6.0 tag yet (v0.7.0 follows v0.5.0 directly in tag history).
+- **v0.7 Command Center** (Phases 60-68): SHIPPED 2026-06-03 as v0.7.0. Next.js command center with Tailwind v4 + Radix design system, Setup-and-Verify integrations surface, Discord control bot, Supabase sync loop, cron scheduler + always-on service, Vercel deploy path, GitHub tool. Schema v12. Four new opt-in extras ([discord], [supabase], [vercel], [github]), all excluded from [all].
+- **v0.8 Local-first & Autonomous Research** (Phases 69-76): SHIPPED 2026-06-03 as v0.8.0. Local LLM provider, on-device ONNX vector memory, MCP client, web access, vision/PDF, Deep Research flagship, skills system, gated shell execution. Schema v13. Per-capability opt-in extras plus a [research] meta-extra; a bare install activates none of it.
 
 ## Decisions
 

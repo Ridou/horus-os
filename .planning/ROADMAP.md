@@ -8,7 +8,8 @@
 - [x] **v0.4 Observability** (Phases 32-39), shipped 2026-05-26 as v0.4.0. Local-first cost, latency, and tool-reliability instrumentation. New `llm_calls` + `tool_invocations` child tables, bundled `pricing.json`, `/observability` dashboard tab, `horus-os usage` CLI subcommand, opt-in OpenTelemetry exporter behind a `[otel]` extra.
 - [x] **v0.5 Plugin System** (Phases 40-50), shipped 2026-05-27 as v0.5.0. Third-party plugin runtime: TOML manifest contract, entry-point + filesystem discovery, default-deny capability grants, two-phase `pip install` flow, in-process loader with bounded lifecycle and failure isolation, `/plugins` dashboard tab, per-plugin observability, reference plugin, additive v5→v6 schema migration.
 - [ ] **v0.6 Contribution Gate** (Phases 51-59), in planning. Trust + supply-chain + contributor-experience substrate that makes "outside PRs welcome" safe: keyless sigstore signing on wheels + sdists + SBOMs + tags, CycloneDX 1.6 SBOMs against installed-from-wheel venvs, pip-audit dual-mode on every PR, Dependabot for pip + github-actions with security-updates explicitly un-grouped, every action `uses:` SHA-pinned, `pull_request_target` forbidden by default, contributor docs and SECURITY.md disclosure-flow refreshed, release-gate extended from 8 to 13 checks, soft launch with invited contributors before the atomic gate flip at v0.6.0 ship.
-- [ ] **v0.7 Command Center** (Phases 60-68), in planning. Polished local-first dashboard plus a full optional integration suite (Discord control bot, Supabase sync, Vercel deploy observer, Tailscale remote access, GitHub, AI providers, existing adapters) connectable through guided in-dashboard walkthroughs with green-light verification and in-app key management. Tailwind v4 design system, Radix headless primitives, eight tier-1 dashboard pages, five starter agents with SOUL.md personas, example vault, demo trace, first-run onboarding tour. Every integration is optional; horus-os runs locally with only an LLM key.
+- [x] **v0.7 Command Center** (Phases 60-68), shipped 2026-06-03 as v0.7.0. Polished local-first dashboard plus a full optional integration suite (Discord control bot, Supabase sync, Vercel deploy observer, Tailscale remote access, GitHub, AI providers, existing adapters) connectable through guided in-dashboard walkthroughs with green-light verification and in-app key management. Tailwind v4 design system, Radix headless primitives, eight tier-1 dashboard pages, five starter agents with SOUL.md personas, example vault, demo trace, first-run onboarding tour. Every integration is optional; horus-os runs locally with only an LLM key.
+- [x] **v0.8 Local-first & Autonomous Research** (Phases 69-76), shipped 2026-06-03 as v0.8.0. Zero-cloud-key local runtime: local LLM provider (Ollama/LM Studio/vLLM via openai SDK base_url), on-device ONNX vector memory (fastembed + sqlite-vec, hybrid RRF), MCP client with explicit trust gate, web search + SSRF-guarded browsing, vision/PDF analysis. Deep Research flagship (plan, search, fetch, synthesize, cited Markdown report). Skills system with additive schema migration. Gated shell execution (default-deny double gate). Every capability is opt-in behind its own extra; a bare install activates none of it.
 
 ## Phases
 
@@ -1209,3 +1210,158 @@ Plans:
 | 66. Cron scheduler and always-on service | v0.7 | 4/4 | Complete    | 2026-06-02 |
 | 67. Vercel deploy path, GitHub tool, NEXT_PUBLIC_API_BASE | v0.7 | 4/4 | Complete    | 2026-06-02 |
 | 68. Three-OS gate and v0.7.0 release | v0.7 | 3/3 | Complete   | 2026-06-02 |
+| 69. Local LLM provider | v0.8 | Complete | Complete | 2026-06-03 |
+| 70. Local-embedding vector memory | v0.8 | Complete | Complete | 2026-06-03 |
+| 71. MCP client | v0.8 | Complete | Complete | 2026-06-03 |
+| 72. Web access and vision/PDF | v0.8 | Complete | Complete | 2026-06-03 |
+| 73. Deep Research flagship | v0.8 | Complete | Complete | 2026-06-03 |
+| 74. Skills system and schema migration | v0.8 | Complete | Complete | 2026-06-03 |
+| 75. Gated shell and code execution | v0.8 | Complete | Complete | 2026-06-03 |
+| 76. Three-OS gate and v0.8.0 release | v0.8 | Complete | Complete | 2026-06-03 |
+
+## v0.8 Local-first & Autonomous Research
+
+**Milestone Goal:** Make horus-os fully usable on local hardware with zero cloud API key, then prove it with an autonomous Deep Research capability built on the existing delegation runtime. Five infrastructure phases deliver a coherent local runtime layer (local LLM, vector memory, MCP client, web access, vision/PDF); three flagship phases deliver Deep Research, skills, and gated shell execution on top of that infrastructure.
+
+**Natural v0.8a / v0.8b split point:** If milestone scope must shrink, the split is clean. v0.8a "Local Runtime" (Phases 69-72) ships the infrastructure layer as a coherent, independently useful set with zero schema changes. v0.8b "Autonomous Research" (Phases 73-75) ships the flagship experiences with one schema change (skills) and depends on v0.8a being merged. Phase 76 (release gate) closes either half.
+
+**Execution Order:** 69 -> 70 -> 71 -> 72 -> 73 -> 74 -> 75 -> 76. The dependency graph is decisive: Deep Research (Phase 73) hard-requires all five infrastructure pieces (Phases 69-72). Skills (Phase 74) are isolated in their own phase due to the SCHEMA_VERSION 11->12 bump and the ~15-file migration sweep. Shell (Phase 75) lands last as the highest-risk feature and the first deferral candidate.
+
+**Five cross-milestone constraints carried from research:**
+
+1. MCP-03 (MCP trust gate) is a BLOCKING security constraint - MCP tools must be namespace-prefixed and user-approved before the Phase 71 MCP client merges. An untrusted server cannot gain tool access unless the user adds it explicitly.
+2. WEB-03 (SSRF blocklist) is a BLOCKING security constraint - web fetch must resolve every URL and reject private IP ranges, localhost, and cloud metadata endpoints before the Phase 72 web access merges.
+3. SHELL-01 (default-deny double gate) is a BLOCKING security constraint - the shell tool must register only when both HORUS_OS_SHELL_ENABLED=true AND the agent profile lists it in allowed_tools before Phase 75 merges.
+4. MEM-06 (no silent ONNX download) is an offline-guarantee constraint - fastembed must never download the model silently; the system must start offline without it; explicit user opt-in via CLI is required.
+5. LLM-03 (Ollama native /api/chat) is a correctness constraint - the OpenAI-compat streaming path on Ollama silently drops tool calls; the local provider must use /api/chat or set stream=False when tools are active.
+
+- [ ] **Phase 69: Local LLM provider** - openai SDK base_url adapter covering Ollama, LM Studio, vLLM; model discovery via GET /v1/models; one-token smoke-test in the init wizard; streaming/tool-call contract resolved (LP-1: /api/chat or stream=False with tools); local (free) cost annotation; TEST-32 mocked-endpoint full agent turn test.
+- [ ] **Phase 70: Local-embedding vector memory** - fastembed + sqlite-vec as [local-memory] optional extra; VectorIndex in separate vectors.sqlite (no SCHEMA_VERSION bump); hybrid RRF keyword+vector search; explicit horus-os memory download-model opt-in; offline start without model file; dimension-change detection (EM-3); TEST-33 no-network and offline-start proofs.
+- [ ] **Phase 71: MCP client** - mcp package as [mcp] optional extra; stdio + streamable-HTTP transports; mcp:{server}:{tool} namespace prefix; explicit config allowlist trust gate (MCP-03 BLOCKING); tool description sanitization (Unicode tag strip, length cap); clean subprocess termination on all three OSes (MC-3); TEST-34 namespacing, trust, and cross-OS teardown.
+- [ ] **Phase 72: Web access and vision/PDF** - web search tool (SearXNG/Brave/Tavily BYO; absent from ToolRegistry unless configured); SSRF blocklist on all fetch paths (WEB-03 BLOCKING); vision tool via base64 provider-native multimodal; PDF text extraction via pypdf; POST /api/uploads endpoint; dashboard file-upload affordance; TEST-35 SSRF blocklist proof.
+- [ ] **Phase 73: Deep Research flagship** - research/ package (orchestrator, report builder, seeded agent profiles); POST /api/research + GET /api/research/{id}/report; live progress panel (plan/searching/reading/synthesizing); session-scoped source registry; citation validation against registry; configurable source and iteration budget hard cap; report stored as audited note; /research dashboard page; TEST-37 budget enforcement and source de-duplication.
+- [ ] **Phase 74: Skills system and schema migration** - skills/ package (store, types, tools, executor); SCHEMA_VERSION 11->12 with skills table; full ~15-file migration sweep (MIG-07); use_skill(name) tool with progressive disclosure; horus-os skills list/show CLI; allowed_tools enforcement via ToolRegistry dispatch (no trusted bypass); code-bearing skills gated behind plugin-level capability grant.
+- [ ] **Phase 75: Gated shell and code execution** - tools/shell.py factory gated on HORUS_OS_SHELL_ENABLED=true AND allowed_tools grant (SHELL-01 BLOCKING); asyncio.create_subprocess_exec shell=False with structured args list; metacharacter denylist; Path.resolve().is_relative_to() working-directory boundary; 1 MB output cap; 30s configurable timeout; ShellInvocation audit row; TEST-36 double-gate absence proof.
+- [ ] **Phase 76: Three-OS gate and v0.8.0 release** - Three-OS hard gate (macOS, Ubuntu, Windows; Python 3.11 and 3.12) with all new optional extras; TEST-38 install-smoke with onnxruntime Intel-macOS pin; tag v0.8.0 with CHANGELOG and migration notes; every integration optional; horus-os starts with zero cloud config.
+
+## Phase Details: v0.8 Local-first & Autonomous Research
+
+### Phase 69: Local LLM provider
+
+**Goal**: Users can run a full agent turn against a local model with zero cloud API key set, and the system correctly handles tool calling and streaming for Ollama-native endpoints.
+**Depends on**: Phase 68 (v0.7 complete)
+**Requirements**: LLM-01, LLM-02, LLM-03, LLM-04, TEST-32
+**Success Criteria** (what must be TRUE):
+
+  1. User sets local_base_url and local_model in config.toml and runs a full agent turn with ANTHROPIC_API_KEY and GOOGLE_API_KEY both unset; the run completes and a trace row is written.
+  2. During horus-os init the wizard detects available models by probing GET /v1/models, lists them, and runs a one-token smoke test against the selected model before saving config.
+  3. A tool-using prompt against a local Ollama endpoint produces a tool trace row (not a prose fallback), confirmed by TEST-32 using a mocked endpoint; LP-1 is addressed by using /api/chat or stream=False with tools.
+  4. Local provider runs appear in /costs with "local (free)" annotation, never as $0.000000 or with a pricing_missing flag; cost_usd is stored as 0.0 and distinguished from NULL.
+  5. horus-os doctor reports a valid or unreachable local endpoint status based on a live URL probe; 0.0.0.0 as a base URL is rejected as invalid.
+
+**Plans**: TBD
+
+### Phase 70: Local-embedding vector memory
+
+**Goal**: Users can enable hybrid vector-plus-keyword search over their notes folder using an on-device ONNX model, with no silent network call on startup and the system remaining fully functional offline without the model.
+**Depends on**: Phase 69
+**Requirements**: MEM-04, MEM-05, MEM-06, MEM-07, TEST-33
+**Success Criteria** (what must be TRUE):
+
+  1. After running horus-os memory download-model the user sees a progress bar and model size estimate; horus-os starts cleanly offline with the model file absent (keyword-only fallback) and prints an actionable message; no ONNX model is downloaded on startup or memory write.
+  2. With the embedding model present, a note search returns results ranked by reciprocal rank fusion of keyword and vector scores; a semantic query surfaces results that a keyword search would miss.
+  3. Embeddings are computed entirely on-device; TEST-33 confirms no network call occurs during a memory write by asserting zero outbound HTTP calls.
+  4. Changing the embedding model is detected at startup via stored (model_name, dimension) in vector_config; the system refuses to embed until the user runs horus-os memory reindex, preventing silent stale-vector serving.
+  5. The reviewable note_writes audit trail in SQLite is unchanged; the vector index lives in a separate vectors.sqlite file and can be rebuilt from scratch by running horus-os memory reindex.
+
+**Plans**: TBD
+
+### Phase 71: MCP client
+
+**Goal**: Users can configure MCP servers (stdio and HTTP) and have their tools registered into the agent tool registry under namespaced identifiers, with a mandatory trust gate and clean cross-OS subprocess teardown.
+**Depends on**: Phase 70
+**Requirements**: MCP-01, MCP-02, MCP-03, MCP-04, TEST-34
+**Success Criteria** (what must be TRUE):
+
+  1. A configured MCP server's tools appear in the agent tool registry as mcp:{server}:{tool_name} and execute with the same trace row as a builtin tool.
+  2. An MCP server NOT listed in the explicit config allowlist cannot register any tools; adding a server to mcp.toml is the only activation path (MCP-03 BLOCKING constraint satisfied).
+  3. A builtin tool name collision (e.g. an MCP server advertising read_file without the mcp: prefix) is refused with a CollisionError before registration; existing builtin tools are never shadowed.
+  4. Tool descriptions from MCP servers have Unicode tag characters stripped and are length-capped before being passed to any model; malformed descriptions do not crash registration.
+  5. On shutdown, all MCP stdio server subprocesses terminate cleanly on macOS, Ubuntu, and Windows; TEST-34 covers all three OS targets and verifies no zombie processes remain.
+
+**Plans**: TBD
+
+### Phase 72: Web access and vision/PDF
+
+**Goal**: Users can give agents web search, web browsing (via Playwright MCP), image analysis, and PDF reading capabilities - with an SSRF blocklist preventing any internal network access on the fetch path.
+**Depends on**: Phase 71
+**Requirements**: WEB-01, WEB-02, WEB-03, VIS-01, VIS-02, VIS-03, TEST-35
+**Success Criteria** (what must be TRUE):
+
+  1. The web search tool is absent from ToolRegistry until a search provider is configured; once configured it returns structured results from the BYO provider (SearXNG, Brave, or Tavily).
+  2. Before any HTTP fetch or redirect, the URL is resolved to an IP and rejected if it falls in 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, or ::1/128; TEST-35 asserts http://localhost/... and http://169.254.169.254/ are both rejected (WEB-03 BLOCKING constraint satisfied).
+  3. User attaches an image file in the dashboard chat and the agent analyzes it via the provider native vision API with no new Python dependencies beyond pathlib and base64.
+  4. User attaches a PDF and the agent extracts text via pypdf with a pre-flight size check; extracted content is wrapped in a provenance block to prevent prompt injection from invisible PDF text.
+  5. POST /api/uploads endpoint accepts images and PDFs; the dashboard chat input renders a file-upload button that attaches files to the agent message.
+
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 73: Deep Research flagship
+
+**Goal**: Users can start a Deep Research run from a single question and receive a structured cited Markdown report, with a live progress panel, bounded source and iteration budgets, and the full run stored as a reviewable note.
+**Depends on**: Phase 72
+**Requirements**: RESEARCH-01, RESEARCH-02, RESEARCH-03, RESEARCH-04, RESEARCH-05, TEST-37
+**Success Criteria** (what must be TRUE):
+
+  1. User submits a research question; the orchestrator displays a plan before execution; user can cancel at the plan stage; a live progress panel shows plan / searching / reading / synthesizing phases as they run.
+  2. The final report contains inline numeric citations (e.g. [1]) and a reference list; every citation URL was actually fetched during the run (validated against the session-scoped source registry); no hallucinated citations are possible.
+  3. Sources from multiple search queries are de-duplicated by URL before inclusion in the reference list; TEST-37 asserts the de-duplication logic.
+  4. The coordinator enforces a hard cap on sources (default: research_max_sources=10) and iterations (default: research_max_iterations=5); TEST-37 asserts the coordinator stops before the cap and never exceeds it; Deep Research sub-agent profiles do NOT include delegate_to_agent in allowed_tools.
+  5. The completed report is stored as a reviewable note in the existing audit trail; its generating trace is inspectable in /traces; the status is visible in /tasks.
+
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 74: Skills system and schema migration
+
+**Goal**: Users can define reusable skills as TOML/Markdown files; agents discover and invoke them with progressive disclosure; the single unavoidable SCHEMA_VERSION bump (v11 to v12) and the full ~15-file migration sweep are completed in this isolated phase.
+**Depends on**: Phase 73
+**Requirements**: SKILL-01, SKILL-02, SKILL-03, SKILL-04, MIG-07
+**Success Criteria** (what must be TRUE):
+
+  1. A user creates a skill file in the skills folder; horus-os discover it on startup and the agent receives skill names and descriptions in its system prompt without loading the full body.
+  2. When an agent calls use_skill(name) the full skill body is loaded; the invocation is traced; the sub-tool calls go through the standard ToolRegistry + allowed_tools filter with no trusted bypass.
+  3. Prompt-template skills are available to all agents; code-bearing skills require an explicit plugin-style capability grant in the agent profile before they can execute.
+  4. SCHEMA_VERSION bumps from 11 to 12; the skills table is added additively; every file in the ~15-file migration tripwire set is updated atomically; the v11 fixture loads cleanly under the v12 migration (MIG-07).
+  5. horus-os skills list and horus-os skills show {name} work from the CLI; horus-os doctor reports the skills folder path and count.
+
+**Plans**: TBD
+
+### Phase 75: Gated shell and code execution
+
+**Goal**: Users who explicitly opt in can give agents a shell execution tool with a double safety gate, working-directory boundary, and output caps - with the tool completely absent from the registry for all other users by default.
+**Depends on**: Phase 74
+**Requirements**: SHELL-01, SHELL-02, SHELL-03, TEST-36
+**Success Criteria** (what must be TRUE):
+
+  1. After a fresh horus-os init and horus-os serve, zero agents have the shell tool in their allowed_tools; TEST-36 asserts the tool is absent from ToolRegistry with default config (SHELL-01 BLOCKING constraint satisfied).
+  2. The shell tool registers only when HORUS_OS_SHELL_ENABLED=true is set AND the invoking agent profile lists shell_exec in allowed_tools; removing either gate removes the tool.
+  3. Every shell invocation uses asyncio.create_subprocess_exec with shell=False and a structured args list; a metacharacter denylist rejects any arg containing shell metacharacters; shell=True never appears in the implementation.
+  4. Execution is pinned to a configured safe working directory; Path.resolve().is_relative_to() checks prevent escape; absolute paths outside the safe directory are rejected; output is capped at 1 MB and the process is killed after a configurable timeout (default 30s).
+  5. Every command execution writes a ShellInvocation audit row with command, exit_code, truncated stdout, and working_directory; the trace is inspectable in /traces.
+
+**Plans**: TBD
+
+### Phase 76: Three-OS gate and v0.8.0 release
+
+**Goal**: v0.8.0 ships behind the three-OS hard gate with all new optional extras installed, cross-OS wheels verified, and CHANGELOG plus migration notes published - with every integration still optional and horus-os starting with zero cloud config.
+**Depends on**: Phase 75 and all v0.8 phases complete
+**Requirements**: TEST-38, REL-18, REL-19
+**Success Criteria** (what must be TRUE):
+
+  1. CI is green on macOS, Ubuntu, and Windows for both Python 3.11 and 3.12 with all new optional extras installed; onnxruntime uses the Intel-macOS pin (<1.19.0) so the [local-memory] extra installs cleanly on Intel macs.
+  2. horus-os start completes with zero cloud API keys set and zero optional extras configured; no feature activates silently on install.
+  3. Tag v0.8.0 is published with a GitHub Release containing a CHANGELOG section and migration notes documenting the new optional extras ([local-llm], [local-memory], [mcp], [web], [pdf], [vision], [research] convenience meta-extra), the SCHEMA_VERSION 11->12 bump, and upgrade instructions for v0.7 users.
+
+**Plans**: 1 plan (completed)

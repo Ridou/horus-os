@@ -845,3 +845,371 @@ Single-phase mapping for every v0.7 requirement (Phases 60-68). Source-of-truth:
 | REL-17 | 68 | Complete |
 
 **Coverage:** 63 v0.7 requirements, 63 mapped, 0 orphans, 0 duplicates. VERIFY-01 and VERIFY-03 (server-side probes, key-hash detection) land in Phase 62 with the key-write security substrate; VERIFY-02 and VERIFY-04 (UI status indicators, readiness summary) land in Phase 61 with the read-only integrations surface. REMOTE-01 (starlette pin + loopback guard) lands in Phase 62 as a BLOCKING security prerequisite; REMOTE-02..05 (docs, service install, cron) land in Phase 66. GH-01 (integrations card + verify probe) lands in Phase 61; GH-02 (GitHub tool behind extra) lands in Phase 67. TEST-27..31 each land in the phase that owns the code they exercise.
+
+## v0.8 Local-first & Autonomous Research
+
+Make horus-os fully usable on local hardware with zero cloud key, then prove it with an autonomous Deep Research capability built on the existing delegation runtime. Derived from the eight v0.8 seeds and `.planning/research/` (STACK, FEATURES, ARCHITECTURE, PITFALLS, SUMMARY). Three blocking security constraints: MCP-03, WEB-03, SHELL-01. Phase column is TBD until the roadmap maps each requirement.
+
+### Local LLM provider (LLM)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| LLM-01 | User configures a local OpenAI-compatible endpoint (base URL plus model) and runs a full agent turn with zero cloud API key | active | 69 |
+| LLM-02 | User can discover and select available local models during setup (probe GET /v1/models, one-token smoke test) | active | 69 |
+| LLM-03 | Local provider handles tool-calling and streaming correctly, using Ollama native /api/chat where the OpenAI-compat streaming-plus-tools path is broken | active | 69 |
+| LLM-04 | Local provider runs are traced and cost-annotated with local zero-cost pricing, not cloud pricing | active | 69 |
+
+### Local-embedding vector memory (MEM, continued from v0.1)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MEM-04 | User enables hybrid vector-plus-keyword search over the notes folder, results merged by reciprocal rank fusion | active | 70 |
+| MEM-05 | Embeddings are computed on-device (ONNX); no network call occurs on a memory write | active | 70 |
+| MEM-06 | User explicitly downloads the embedding model via a CLI pre-step (horus-os memory download-model); no silent download; the system still starts offline without it | active | 70 |
+| MEM-07 | The reviewable note_writes audit trail is preserved; the vector index is a rebuildable cache in a separate store, needing no SCHEMA_VERSION bump | active | 70 |
+
+### MCP client (MCP)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MCP-01 | User configures MCP servers (stdio, SSE, HTTP); horus-os registers their tools into the agent tool registry, traced like any builtin tool | active | 71 |
+| MCP-02 | MCP-discovered tools are namespaced (mcp:server:tool) to prevent collisions with builtin tools | active | 71 |
+| MCP-03 | MCP servers are opt-in only (explicit config, no auto-discovery); an untrusted server cannot gain tool access unless the user adds it. BLOCKING security constraint | active | 71 |
+| MCP-04 | MCP server subprocesses terminate cleanly on shutdown across macOS, Ubuntu, and Windows (no Windows zombies) | active | 71 |
+
+### Agent web access (WEB)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| WEB-01 | User gives the agent a web search tool backed by a BYO or self-hosted provider (SearXNG default; Brave or Tavily optional); the tool is absent unless configured | active | 72 |
+| WEB-02 | User gives the agent web browsing and screenshots via the Playwright MCP server, consumed through MCP | active | 72 |
+| WEB-03 | Web fetch and browse enforce an SSRF blocklist (private IP ranges, localhost, cloud metadata 169.254.169.254) before any request. BLOCKING security constraint | active | 72 |
+
+### Vision and PDF analysis (VIS)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| VIS-01 | User attaches an image and the agent analyzes it via the provider native vision, no new heavy deps | active | 72 |
+| VIS-02 | User attaches a PDF and the agent reads it (native provider PDF where available, else pypdf text extraction), with a pre-flight size check | active | 72 |
+| VIS-03 | The dashboard chat input exposes a file-upload affordance for images and PDFs | active | 72 |
+
+### Deep Research flagship (RESEARCH)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| RESEARCH-01 | User starts a Deep Research run from a single question; the agent plans, searches, fetches, reads, and synthesizes a structured report | active | 73 |
+| RESEARCH-02 | The plan is shown before execution and the user can cancel; a live progress panel shows the run | active | 73 |
+| RESEARCH-03 | The report includes inline numeric citations and a reference list; sources are de-duplicated | active | 73 |
+| RESEARCH-04 | The run is bounded by a hard source and iteration budget enforced by the coordinator, with no runaway cost or recursion | active | 73 |
+| RESEARCH-05 | The report is stored as a reviewable note (audited) and its trace is inspectable | active | 73 |
+
+### Skills system (SKILL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SKILL-01 | User defines a skill as a file (name, description, tags, body); skills are discovered from a skills folder | active | 74 |
+| SKILL-02 | Skill names and descriptions are injected at turn start (progressive disclosure); the full body loads on use_skill(name) | active | 74 |
+| SKILL-03 | Prompt-template skills are distinguished from code-bearing skills, which require an explicit plugin-style capability grant | active | 74 |
+| SKILL-04 | The skills table migration (v11 to v12) updates every SCHEMA_VERSION expectation file in the tripwire set | active | 74 |
+
+### Gated shell and code execution (SHELL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SHELL-01 | Shell and code execution are OFF by default; the tool only registers when both a config flag and a capability grant are present (default-deny double gate). BLOCKING security constraint | active | 75 |
+| SHELL-02 | Every command is traced (command, exit code, truncated stdout, working directory) | active | 75 |
+| SHELL-03 | Execution is pinned to a safe working directory with escape blocked; an optional human-confirm mode is available | active | 75 |
+
+### Migration (continued from v0.7)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MIG-07 | The v11 to v12 SQLite migration adding the skills table is additive and idempotent; the vector index lives in a separate store needing no schema bump | active | 74 |
+
+### Test and CI (continued from v0.7)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-32 | A test proves a full agent turn completes against a mocked local OpenAI-compatible endpoint with no cloud key set | active | 69 |
+| TEST-33 | A test proves no network call occurs on a memory write and the system starts offline without the embedding model | active | 70 |
+| TEST-34 | Tests cover MCP tool namespacing, opt-in trust, and clean subprocess termination on all three OSes | active | 71 |
+| TEST-35 | A test proves the web SSRF blocklist refuses localhost, private ranges, and cloud-metadata addresses | active | 72 |
+| TEST-36 | A test proves the shell tool is absent from the registry unless both gates are set | active | 75 |
+| TEST-37 | A test proves Deep Research enforces its source and iteration budget and de-duplicates sources | active | 73 |
+| TEST-38 | Three-OS install-smoke stays green with the new optional extras and the onnxruntime Intel-macOS pin | active | 76 |
+
+### Release (continued from v0.7)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-18 | v0.8.0 ships behind the three-OS hard gate (macOS, Ubuntu, Windows; Python 3.11 and 3.12), all new deps with cross-OS wheels | active | 76 |
+| REL-19 | v0.8.0 is tagged with CHANGELOG and migration notes; every integration is optional and horus-os still starts with zero cloud config | active | 76 |
+
+### Out of scope (v0.8 context)
+
+Explicitly rejected as off-thesis or PROJECT.md anti-goals: image editor, documents editor (markdown, HTML, CSV authoring), blind model comparison UI, mobile clients or PWA, multi-tenant or hosted SaaS, and email AI triage as a core feature (build it as a skill or example on the existing EmailAdapter). Deferred riders: agent-initiated skill evolution, OS-level syscall sandboxing and container or microVM execution for shell, research-session vector GC policy, CalDAV broadening, Cookbook-lite model picker, and notification fan-out.
+
+## Coverage summary
+
+| Category | Total | Active | Validated |
+|----------|-------|--------|-----------|
+| CORE | 5 | 5 | 5 |
+| AGENT | 3 | 3 | 3 |
+| TOOL | 3 | 3 | 3 |
+| MEM | 3 | 3 | 3 |
+| DASH | 3 | 3 | 3 |
+| WIZARD | 4 | 4 | 4 |
+| TEST | 21 | 21 | 15 |
+| REL | 12 | 12 | 9 |
+| MA | 4 | 4 | 4 |
+| STREAM | 3 | 3 | 3 |
+| ADAPT | 3 | 3 | 3 |
+| MIG | 5 | 5 | 4 |
+| ART | 3 | 3 | 3 |
+| DISC | 3 | 3 | 3 |
+| SLAK | 3 | 3 | 3 |
+| MAIL | 3 | 3 | 3 |
+| CAL | 2 | 2 | 2 |
+| DASH-3 | 2 | 2 | 2 |
+| METRIC | 5 | 5 | 5 |
+| STORE | 5 | 5 | 5 |
+| PRICE | 5 | 5 | 5 |
+| DASH-4 | 5 | 5 | 5 |
+| USAGE | 4 | 4 | 4 |
+| OTEL | 7 | 7 | 7 |
+| BASELINE | 2 | 2 | 1 |
+| MANIFEST | 5 | 5 | 0 |
+| DISCOVERY | 2 | 2 | 0 |
+| INSTALL | 6 | 6 | 0 |
+| PERMISSION | 4 | 4 | 4 |
+| ISOLATE | 4 | 4 | 4 |
+| DASH-5 | 3 | 3 | 0 |
+| OBSERVE | 2 | 2 | 0 |
+| REFERENCE | 2 | 2 | 0 |
+| **Total** | **141** | **141** | **114** |
+
+"Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
+
+## Traceability - v0.5 Plugin System
+
+Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth: the Phase column in each category table above. Where a requirement's Phase column lists two numbers (ISOLATE-01 "42, 43" and TEST-19 "42, 43"), the owning phase is the one carrying the bulk of the work; the other phase consumes its substrate.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| BASELINE-02 | 40 | Complete |
+| MANIFEST-01 | 41 | Complete |
+| MANIFEST-02 | 41 | Complete |
+| MANIFEST-03 | 41 | Complete |
+| MANIFEST-04 | 41 | Complete |
+| MANIFEST-05 | 41 | Complete |
+| OBSERVE-01 | 41 | Complete |
+| MIG-05 | 41 | Complete |
+| DISCOVERY-01 | 42 | Complete |
+| DISCOVERY-02 | 42 | Complete |
+| ISOLATE-04 | 42 | Complete |
+| TEST-18 | 42 | Complete |
+| TEST-19 | 42 | Complete |
+| PERMISSION-01 | 43 | Complete |
+| PERMISSION-02 | 43 | Complete |
+| PERMISSION-03 | 43 | Complete |
+| PERMISSION-04 | 43 | Complete |
+| ISOLATE-01 | 43 | Complete |
+| ISOLATE-02 | 43 | Complete |
+| ISOLATE-03 | 43 | Complete |
+| INSTALL-01 | 44 | Complete (2026-05-26) |
+| INSTALL-02 | 44 | Complete (2026-05-26) |
+| INSTALL-03 | 44 | Complete (2026-05-26) |
+| INSTALL-04 | 44 | Complete (2026-05-26) |
+| INSTALL-05 | 44 | Complete (2026-05-26) |
+| INSTALL-06 | 44 | Complete (2026-05-26) |
+| DASH-5-01 | 45 | Complete (2026-05-26) |
+| DASH-5-02 | 45 | Complete (2026-05-26) |
+| DASH-5-03 | 45 | Complete (2026-05-26) |
+| OBSERVE-02 | 45 | Complete (2026-05-26) |
+| TEST-16 | 46 | Complete (2026-05-26) |
+| TEST-17 | 46 | Complete (2026-05-26) |
+| REFERENCE-02 | 47 | Complete (2026-05-26) |
+| REL-12 | 47 | Complete (2026-05-26) |
+| REFERENCE-01 | 48 | Complete (2026-05-26) |
+| TEST-21 | 48 | Complete (2026-05-26) |
+| TEST-20 | 49 | Complete (2026-05-26) |
+| REL-11 | 49 | Complete (2026-05-26) |
+| REL-10 | 50 | Complete (2026-05-26) |
+
+**Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.
+
+## Traceability - v0.6 Contribution Gate
+
+Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth: the Phase column in each category table above. Mirrors v0.5 traceability shape.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CIHARD-01 | 51 | Pending |
+| CIHARD-02 | 51 | Pending |
+| CIHARD-03 | 51 | Pending |
+| CIHARD-04 | 51 | Pending |
+| CIHARD-05 | 51 | Pending |
+| TEST-23 | 51 | Pending |
+| SIGN-01 | 52 | Complete |
+| SIGN-02 | 52 | Complete |
+| SIGN-03 | 52 | Complete |
+| SIGN-04 | 52 | Complete |
+| SIGN-05 | 52 | Complete |
+| SBOM-01 | 53 | Pending |
+| SBOM-02 | 53 | Pending |
+| SBOM-03 | 53 | Pending |
+| SUPPLY-01 | 53 | Pending |
+| SUPPLY-02 | 53 | Pending |
+| SUPPLY-03 | 53 | Pending |
+| SUPPLY-04 | 53 | Pending |
+| DEPBOT-01 | 54 | Pending |
+| DEPBOT-02 | 54 | Pending |
+| DEPBOT-03 | 54 | Pending |
+| CONTRIB-01 | 55 | Pending |
+| CONTRIB-02 | 55 | Pending |
+| CONTRIB-03 | 55 | Pending |
+| CONTRIB-04 | 55 | Pending |
+| CONTRIB-05 | 55 | Pending |
+| CONTRIB-06 | 55 | Pending |
+| CONTRIB-07 | 55 | Pending |
+| SECDISC-01 | 56 | Pending |
+| SECDISC-02 | 56 | Pending |
+| SECDISC-03 | 56 | Pending |
+| SECDISC-04 | 56 | Pending |
+| RUNBOOK-01 | 56 | Pending |
+| RUNBOOK-02 | 56 | Pending |
+| DISCGH-01 | 56 | Pending |
+| REL-14 | 57 | Pending |
+| REL-15 | 57 | Pending |
+| TEST-22 | 58 | Pending |
+| TEST-24 | 58 | Pending |
+| TEST-25 | 58 | Pending |
+| TEST-26 | 58 | Pending |
+| FLIP-02 | 58 | Pending |
+| FLIP-01 | 59 | Pending |
+| FLIP-03 | 59 | Pending |
+| DISCGH-02 | 59 | Pending |
+| REL-13 | 59 | Pending |
+
+**Coverage:** 46 v0.6 requirements, 46 mapped, 0 orphans, 0 duplicates. Phase 52 (fork-PR CI split) consolidated into Phase 51 per research SUMMARY recommendation (v0.5 tests use recorded provider responses; no live-secret fork-CI path needed in v0.6). Result: 9-phase shape (51-59) instead of 10.
+
+## Traceability - v0.7 Command Center
+
+Single-phase mapping for every v0.7 requirement (Phases 60-68). Source-of-truth: the Phase column in each category table above.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DESIGN-01 | 60 | Complete |
+| DESIGN-02 | 60 | Complete |
+| DESIGN-03 | 60 | Complete |
+| DESIGN-04 | 60 | Complete |
+| DESIGN-05 | 60 | Complete |
+| SETUP-01 | 61 | Complete |
+| SETUP-02 | 61 | Complete |
+| SETUP-03 | 61 | Complete |
+| SETUP-04 | 61 | Complete |
+| SETUP-05 | 61 | Complete |
+| SETUP-06 | 61 | Complete |
+| VERIFY-02 | 61 | Complete |
+| VERIFY-04 | 61 | Complete |
+| GH-01 | 61 | Complete |
+| KEYS-01 | 62 | Complete |
+| KEYS-02 | 62 | Complete |
+| KEYS-03 | 62 | Complete |
+| KEYS-04 | 62 | Complete |
+| VERIFY-01 | 62 | Complete |
+| VERIFY-03 | 62 | Complete |
+| REMOTE-01 | 62 | Complete |
+| MIG-06 | 62 | Complete |
+| TEST-27 | 62 | Complete |
+| PAGES-01 | 63 | Complete |
+| PAGES-02 | 63 | Complete |
+| PAGES-03 | 63 | Complete |
+| PAGES-04 | 63 | Complete |
+| PAGES-05 | 63 | Complete |
+| PAGES-06 | 63 | Complete |
+| PAGES-07 | 63 | Complete |
+| PAGES-08 | 63 | Complete |
+| TEAM-01 | 63 | Complete |
+| TEAM-02 | 63 | Complete |
+| TEAM-03 | 63 | Complete |
+| SEED-01 | 63 | Complete |
+| SEED-02 | 63 | Complete |
+| SEED-03 | 63 | Complete |
+| DISC-05 | 64 | Complete |
+| DISC-06 | 64 | Complete |
+| DISC-07 | 64 | Complete |
+| DISC-08 | 64 | Complete |
+| DISC-09 | 64 | Complete |
+| DISC-10 | 64 | Complete |
+| TEST-28 | 64 | Complete |
+| SUPA-01 | 65 | Complete |
+| SUPA-02 | 65 | Complete |
+| SUPA-03 | 65 | Complete |
+| SUPA-04 | 65 | Complete |
+| SUPA-05 | 65 | Complete |
+| TEST-29 | 65 | Complete |
+| REMOTE-02 | 66 | Pending |
+| REMOTE-03 | 66 | Pending |
+| REMOTE-04 | 66 | Pending |
+| REMOTE-05 | 66 | Pending |
+| TEST-30 | 66 | Pending |
+| VERCEL-01 | 67 | Pending |
+| VERCEL-02 | 67 | Pending |
+| VERCEL-03 | 67 | Pending |
+| VERCEL-04 | 67 | Pending |
+| GH-02 | 67 | Pending |
+| TEST-31 | 67 | Pending |
+| REL-16 | 68 | Pending |
+| REL-17 | 68 | Pending |
+
+**Coverage:** 63 v0.7 requirements, 63 mapped, 0 orphans, 0 duplicates. VERIFY-01 and VERIFY-03 (server-side probes, key-hash detection) land in Phase 62 with the key-write security substrate; VERIFY-02 and VERIFY-04 (UI status indicators, readiness summary) land in Phase 61 with the read-only integrations surface. REMOTE-01 (starlette pin + loopback guard) lands in Phase 62 as a BLOCKING security prerequisite; REMOTE-02..05 (docs, service install, cron) land in Phase 66. GH-01 (integrations card + verify probe) lands in Phase 61; GH-02 (GitHub tool behind extra) lands in Phase 67. TEST-27..31 each land in the phase that owns the code they exercise.
+
+## Traceability - v0.8 Local-first & Autonomous Research
+
+Single-phase mapping for every v0.8 requirement (Phases 69-76). Source-of-truth: the Phase column in each category table above.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| LLM-01 | 69 | Pending |
+| LLM-02 | 69 | Pending |
+| LLM-03 | 69 | Pending |
+| LLM-04 | 69 | Pending |
+| TEST-32 | 69 | Pending |
+| MEM-04 | 70 | Pending |
+| MEM-05 | 70 | Pending |
+| MEM-06 | 70 | Pending |
+| MEM-07 | 70 | Pending |
+| TEST-33 | 70 | Pending |
+| MCP-01 | 71 | Pending |
+| MCP-02 | 71 | Pending |
+| MCP-03 | 71 | Pending |
+| MCP-04 | 71 | Pending |
+| TEST-34 | 71 | Pending |
+| WEB-01 | 72 | Pending |
+| WEB-02 | 72 | Pending |
+| WEB-03 | 72 | Pending |
+| VIS-01 | 72 | Pending |
+| VIS-02 | 72 | Pending |
+| VIS-03 | 72 | Pending |
+| TEST-35 | 72 | Pending |
+| RESEARCH-01 | 73 | Pending |
+| RESEARCH-02 | 73 | Pending |
+| RESEARCH-03 | 73 | Pending |
+| RESEARCH-04 | 73 | Pending |
+| RESEARCH-05 | 73 | Pending |
+| TEST-37 | 73 | Pending |
+| SKILL-01 | 74 | Pending |
+| SKILL-02 | 74 | Pending |
+| SKILL-03 | 74 | Pending |
+| SKILL-04 | 74 | Pending |
+| MIG-07 | 74 | Pending |
+| SHELL-01 | 75 | Pending |
+| SHELL-02 | 75 | Pending |
+| SHELL-03 | 75 | Pending |
+| TEST-36 | 75 | Pending |
+| TEST-38 | 76 | Pending |
+| REL-18 | 76 | Pending |
+| REL-19 | 76 | Pending |
+
+**Coverage:** 40 v0.8 requirements, 40 mapped, 0 orphans, 0 duplicates. WEB-02 (Playwright browsing) lands in Phase 72 with the other web/vision work because Playwright is consumed through MCP (Phase 71 is its prerequisite), not as a separate tool implementation. MIG-07 (v11->v12 migration) lands in Phase 74 with SKILL-01..04 because the skills table is the sole cause of the schema bump; the vector index (MEM-04..07) uses a separate vectors.sqlite file requiring no SCHEMA_VERSION change. TEST-36 (shell-tool-absent proof) lands in Phase 75 with SHELL-01..03 as the security gate test for that phase.
