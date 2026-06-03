@@ -91,7 +91,7 @@ A plugin's adapter contributions may implement an async `start(ctx)` and/or `sto
 
 ### Bounded lifecycle (`asyncio.wait_for(timeout=2.0)`)
 
-Both hooks are wrapped in `asyncio.wait_for(..., timeout=2.0)` per ISOLATE-02. A hung `start(ctx)` becomes a load-time `PluginLoadError`, never a 60-second startup stall — the same shape the v0.4 `OtelAdapter` uses for its bounded shutdown. Plugins that need a long-running task should fire-and-forget it (`asyncio.create_task(...)`) inside `start`, not block the hook.
+Both hooks are wrapped in `asyncio.wait_for(..., timeout=2.0)` per ISOLATE-02. A hung `start(ctx)` becomes a load-time `PluginLoadError`, never a 60-second startup stall - the same shape the v0.4 `OtelAdapter` uses for its bounded shutdown. Plugins that need a long-running task should fire-and-forget it (`asyncio.create_task(...)`) inside `start`, not block the hook.
 
 ## Testing your plugin
 
@@ -103,7 +103,7 @@ In-process plugin synthesis. Returns a `PluginSpec` with the requested capabilit
 
 ### Tier 2: `fake_plugin_entry_points`
 
-Discovery-walk monkeypatch. Patches `importlib.metadata.entry_points` so `discover_plugins()` walks a fabricated entry-point set without a real `pip install`. Use this tier for tests of the discovery + loader pipeline, registry-status transitions, and adapter lifecycle hooks. Still fast — no subprocess — but exercises the entry-point seam end-to-end.
+Discovery-walk monkeypatch. Patches `importlib.metadata.entry_points` so `discover_plugins()` walks a fabricated entry-point set without a real `pip install`. Use this tier for tests of the discovery + loader pipeline, registry-status transitions, and adapter lifecycle hooks. Still fast - no subprocess - but exercises the entry-point seam end-to-end.
 
 ### Tier 3: `clean_venv` (gated)
 
@@ -153,6 +153,6 @@ The two-phase installer runs: `pip download --no-deps` into a tmpdir; manifest v
 
 ### Local filesystem (in-tree plugins)
 
-Drop a `horus-plugin.toml` plus the Python module under `~/.horus-os/plugins/<plugin_name>/`. Restart `horus-os` to pick up the new filesystem plugin — `v0.5` does not ship a hot-reload command; the `enable`/`disable` subcommands toggle a discovered plugin between active and inactive without removing it.
+Drop a `horus-plugin.toml` plus the Python module under `~/.horus-os/plugins/<plugin_name>/`. Restart `horus-os` to pick up the new filesystem plugin - `v0.5` does not ship a hot-reload command; the `enable`/`disable` subcommands toggle a discovered plugin between active and inactive without removing it.
 
 The dashboard `/plugins` tab and the `horus-os plugins list` CLI surface both pip-installed and filesystem plugins in the same view.
