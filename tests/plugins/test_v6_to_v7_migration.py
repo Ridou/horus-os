@@ -44,7 +44,7 @@ def _build_v6_db(path: Path) -> None:
 
 
 def test_schema_version_constant_is_eight() -> None:
-    assert SCHEMA_VERSION == 12
+    assert SCHEMA_VERSION == 13
 
 
 def test_v6_database_upgrades_to_v7(tmp_path: Path) -> None:
@@ -55,7 +55,7 @@ def test_v6_database_upgrades_to_v7(tmp_path: Path) -> None:
 
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 12
+        assert version == 13
 
 
 def test_new_columns_exist_after_upgrade(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_fresh_database_initializes_at_v7(tmp_path: Path) -> None:
 
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 12
+        assert version == 13
         cols = {row[1] for row in conn.execute("PRAGMA table_info(agent_profiles)")}
     for col in NEW_COLUMNS:
         assert col in cols
@@ -112,7 +112,7 @@ def test_idempotent_replay(tmp_path: Path) -> None:
 
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 12
+        assert version == 13
         count = conn.execute(
             "SELECT COUNT(*) FROM agent_profiles WHERE name = 'legacy'"
         ).fetchone()[0]

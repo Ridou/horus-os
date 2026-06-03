@@ -1,8 +1,9 @@
 """Tests for the shell_invocations audit table (Phase 75, SHELL-02).
 
-The table is additive within schema v12: it is created by CREATE TABLE IF NOT
-EXISTS on a fresh init and on a v11 fixture upgrade, with no SCHEMA_VERSION
-change. record_shell_invocation / list_shell_invocations mirror the
+The table is additive within schema v13: it is created by CREATE TABLE IF NOT
+EXISTS on a fresh init and on an older fixture upgrade, with no extra
+SCHEMA_VERSION change beyond the v12 -> v13 bump that introduced it.
+record_shell_invocation / list_shell_invocations mirror the
 record_note_write / list_note_writes pair exactly.
 """
 
@@ -35,7 +36,7 @@ def test_fresh_init_creates_shell_invocations_table(tmp_path: Path) -> None:
 def test_shell_invocations_table_added_on_v11_upgrade_without_schema_bump(
     tmp_path: Path,
 ) -> None:
-    """A v11 fixture gains shell_invocations on init() with SCHEMA_VERSION unchanged."""
+    """A v11 fixture gains shell_invocations on init() and lands at the current schema (13)."""
     db_path = str(tmp_path / "v11.db")
     db = Database(db_path)
     db.init()
@@ -52,11 +53,11 @@ def test_shell_invocations_table_added_on_v11_upgrade_without_schema_bump(
     db.init()
 
     assert _table_exists(db_path, "shell_invocations")
-    # The table is additive within v12; the version lands at the current pin.
+    # The table is additive within v13; the version lands at the current pin.
     conn = sqlite3.connect(db_path)
     version = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()[0]
     conn.close()
-    assert version == SCHEMA_VERSION == 12
+    assert version == SCHEMA_VERSION == 13
 
 
 def test_record_and_list_round_trip(tmp_path: Path) -> None:

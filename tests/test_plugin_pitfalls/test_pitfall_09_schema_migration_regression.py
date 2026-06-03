@@ -19,7 +19,7 @@ documents that as a non-goal.
 Five structural assertions:
 
 1. The pre-migration fixture is at schema_version=5 (sanity check).
-2. After ``Database.init()``, schema_version=12.
+2. After ``Database.init()``, schema_version=13.
 3. Pre-existing ``traces`` rows preserve their original values
    byte-identically (the migration is additive on existing data).
 4. New columns (``plugin_name`` on ``llm_calls`` + ``tool_invocations``)
@@ -80,7 +80,7 @@ def test_v5_to_v6_migration_is_additive_and_non_destructive(tmp_path: Path) -> N
 
     # 1. schema_version advanced to 12.
     post_version = _raw_select(db_path, "SELECT version FROM schema_version LIMIT 1")
-    assert post_version[0]["version"] == 12
+    assert post_version[0]["version"] == 13
 
     # 2. traces row count unchanged.
     post_traces = _raw_select(
@@ -122,12 +122,12 @@ def test_second_init_call_is_noop(tmp_path: Path) -> None:
 
     pre_traces_cnt = _raw_select(db_path, "SELECT COUNT(*) AS cnt FROM traces")[0]["cnt"]
     pre_version = _raw_select(db_path, "SELECT version FROM schema_version LIMIT 1")[0]["version"]
-    assert pre_version == 12
+    assert pre_version == 13
 
     # Second init should not raise and should not mutate row counts.
     db.init()
 
     post_traces_cnt = _raw_select(db_path, "SELECT COUNT(*) AS cnt FROM traces")[0]["cnt"]
     post_version = _raw_select(db_path, "SELECT version FROM schema_version LIMIT 1")[0]["version"]
-    assert post_version == 12
+    assert post_version == 13
     assert post_traces_cnt == pre_traces_cnt

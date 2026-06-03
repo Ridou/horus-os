@@ -1,11 +1,13 @@
-"""Regression test: v11 -> v12 additive + idempotent migration.
+"""Regression test: the v11 schedules step under the additive migration ladder.
 
 Verifies that:
-- A database stamped schema_version=11 upgrades to 12 on Database.init().
+- A database stamped schema_version=11 upgrades to the current schema on
+  Database.init() (the current pin is 13 after the v0.8 skills/shell tables).
 - The schedules table is created and is empty after upgrade.
 - Pre-existing trace rows survive the upgrade (additive, not destructive).
-- Calling init() a second time on a v12 database is a no-op (idempotent).
-- A fresh Database.init() also produces schema_version=12 with a schedules table.
+- Calling init() a second time is a no-op (idempotent).
+- A fresh Database.init() also produces the current schema_version with a
+  schedules table.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ class TestV11ToV12Migration:
     """Additive + idempotent migration from schema version 11 to 12."""
 
     def test_v11_upgrades_to_v12(self, tmp_path):
-        """A v11 database gains the schedules table and version bumps to 12."""
+        """A v11 database gains the schedules table and version bumps to the current pin (13)."""
         db_path = str(tmp_path / "v11.db")
 
         # Bootstrap a minimal v11 database by running init() and then forcing
@@ -74,7 +76,7 @@ class TestV11ToV12Migration:
         # Run migration.
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "schedules"), "schedules table must exist after upgrade"
         assert _row_count(db_path, "schedules") == 0, "schedules table must be empty after upgrade"
 
@@ -87,25 +89,25 @@ class TestV11ToV12Migration:
         assert row is not None, "pre-existing trace row must survive the v11->v12 migration"
 
     def test_v12_init_is_idempotent(self, tmp_path):
-        """Calling init() twice on a v12 database raises nothing and keeps version at 12."""
+        """Calling init() twice raises nothing and keeps version at the current pin (13)."""
         db_path = str(tmp_path / "v12_idempotent.db")
         db = Database(db_path)
 
         db.init()
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
 
         # Second call must not raise.
         db.init()
-        assert _get_version(db_path) == 12, "version must stay at 12 after second init()"
+        assert _get_version(db_path) == 13, "version must stay at 13 after second init()"
         assert _table_exists(db_path, "schedules"), "schedules table must still exist"
 
     def test_fresh_init_creates_schedules_table(self, tmp_path):
-        """A brand-new Database.init() creates the schedules table at schema_version 12."""
+        """A brand-new Database.init() creates the schedules table at the current schema_version (13)."""
         db_path = str(tmp_path / "fresh.db")
         db = Database(db_path)
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "schedules"), "schedules table must exist on fresh init"
         assert _row_count(db_path, "schedules") == 0
 

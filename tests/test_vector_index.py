@@ -105,7 +105,7 @@ def test_horus_sqlite_and_schema_version_untouched(tmp_path: Path) -> None:
         idx.close()
     from horus_os import storage
 
-    assert storage.SCHEMA_VERSION == 12
+    assert storage.SCHEMA_VERSION == 13
 
 
 def test_upsert_then_search_round_trips(tmp_path: Path) -> None:

@@ -74,7 +74,7 @@ class TestV9ToV10Migration:
         # Run migration.
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "discord_feedback"), (
             "discord_feedback table must exist after upgrade"
         )
@@ -96,11 +96,11 @@ class TestV9ToV10Migration:
         db = Database(db_path)
 
         db.init()
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
 
         # Second call must not raise.
         db.init()
-        assert _get_version(db_path) == 12, "version must stay at 12 after second init()"
+        assert _get_version(db_path) == 13, "version must stay at 13 after second init()"
         assert _table_exists(db_path, "discord_feedback"), "discord_feedback table must still exist"
 
     def test_fresh_init_creates_discord_feedback_table(self, tmp_path):
@@ -109,7 +109,7 @@ class TestV9ToV10Migration:
         db = Database(db_path)
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "discord_feedback"), (
             "discord_feedback table must exist on fresh init"
         )

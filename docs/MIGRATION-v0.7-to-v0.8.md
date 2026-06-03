@@ -14,9 +14,9 @@ optional extra or a config flag. A bare `pip install --upgrade
 horus-os` changes nothing about how the system runs: it still starts
 with only an LLM key and activates none of the new features. You turn
 each capability on by installing its extra and setting its config or
-env flag. The one schema change, an additive SCHEMA_VERSION 11 to 12
-migration for the new skills table, runs automatically on first start
-and needs no action from you.
+env flag. The one schema change, an additive SCHEMA_VERSION 12 to 13
+migration for the new skills and shell_invocations tables, runs
+automatically on first start and needs no action from you.
 
 ## What is new
 
@@ -138,19 +138,22 @@ universally available, so `[all]` stays cross-OS clean and
 install-smoke variant. The light v0.8 extras (`local-llm`, `mcp`,
 `web`, `pdf`, `vision`) ARE part of `[all]`.
 
-## Schema migration v11 to v12
+## Schema migration v12 to v13
 
-The skills system adds one new table, so SCHEMA_VERSION moves from 11
-to 12. The migration is additive and idempotent: it adds the skills
-table and changes nothing about existing rows. It runs automatically
-on the first `horus-os` start after the upgrade. v0.7 (v11) databases
-load cleanly under v12 and read back byte-identical, the same property
-proven by the Phase 74 v11-fixture sweep (MIG-07). No user action is
-required, and there is nothing to back up beyond your normal habits.
+The skills system and the gated-shell audit log each add one new table
+(`skills` and `shell_invocations`), so SCHEMA_VERSION moves from 12 (the
+version v0.7 shipped, with its `schedules` cron table) to 13. The
+migration is additive and idempotent: it adds the two new tables and
+changes nothing about existing rows, including the v0.7 `schedules`
+table. It runs automatically on the first `horus-os` start after the
+upgrade. v0.7 (v12) databases load cleanly under v13 and read back
+byte-identical, the same property proven by the v12-to-v13 migration
+test (MIG-07). No user action is required, and there is nothing to back
+up beyond your normal habits.
 
-There is no downgrade path back to v0.7 once the v11 to v12 migration
-has run. The new table remains in the database forever; v0.7 code does
-not read it, so the file grows slightly but reads stay identical. If
+There is no downgrade path back to v0.7 once the v12 to v13 migration
+has run. The new tables remain in the database forever; v0.7 code does
+not read them, so the file grows slightly but reads stay identical. If
 you must stay on v0.7, do not run a v0.8 binary against a v0.7
 database; keep a separate data directory for the upgrade.
 
@@ -162,7 +165,7 @@ database; keep a separate data directory for the upgrade.
    pip install --upgrade horus-os
    ```
 
-2. Start horus-os once. The v11 to v12 schema migration runs
+2. Start horus-os once. The v12 to v13 schema migration runs
    automatically on first start. No flags, no manual SQL.
 
    ```
