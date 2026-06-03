@@ -14,7 +14,12 @@ For release contents, read `CHANGELOG.md`.
 
 - horus-os is in **solo development mode**. v0.1 through v0.8 have
   shipped. v0.6 (Contribution Gate) was never tagged; v0.7 and v0.8
-  shipped on 2026-06-02. See `CHANGELOG.md` for what is in each release.
+  shipped on 2026-06-03. See `CHANGELOG.md` for what is in each release.
+- Since the v0.8.0 tag, three product surfaces (a streaming dashboard
+  chat, an agent store, and an opt-in Twilio voice adapter) have landed
+  on `main` and sit unreleased in the changelog `[Unreleased]` section.
+  They ship in the next tagged cut. The next planned milestone is
+  **v0.9, Autonomy and Control** (planned, not yet committed to phases).
 - Outside pull requests are **not being merged yet**. Issue claim
   comments ("on it", "claim this", "assign to me") are **not honored
   yet**.
@@ -36,17 +41,20 @@ For release contents, read `CHANGELOG.md`.
 | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
 | v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPED** | `v0.5.0` | 2026-05-27 |
 | v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, release-gate extended to 13 checks. The readiness gate for opening outside contributions. | **SHIPPED** | never tagged (skipped; v0.7.0 follows v0.5.0) | 2026-06-02 |
-| v0.7 Command Center | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, a unified marketing and demo site, a Discord control bot, a Supabase sync loop, a cron scheduler with an always-on service, and a Vercel deploy path. | **SHIPPED** | `v0.7.0` | 2026-06-02 |
-| v0.8 Local-first and Autonomous Research | Local LLM provider, on-device vector memory via `sqlite-vec`, MCP client, web access and search, vision and PDF analysis, a Deep Research flagship workflow, a skills system, gated shell execution, the `[research]` meta-extra, plus a streaming dashboard chat surface, an agent store, and an opt-in Twilio voice adapter. | **SHIPPED** | `v0.8.0` | 2026-06-02 |
+| v0.7 Command Center | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, a unified marketing and demo site, a Discord control bot, a Supabase sync loop, a cron scheduler with an always-on service, and a Vercel deploy path. | **SHIPPED** | `v0.7.0` | 2026-06-03 |
+| v0.8 Local-first and Autonomous Research | Local LLM provider, on-device vector memory via `sqlite-vec`, MCP client, web access and search, vision and PDF analysis, a Deep Research flagship workflow, a skills system, gated shell execution, the `[research]` meta-extra. (A streaming dashboard chat, an agent store, and an opt-in Twilio voice adapter landed on `main` after the tag and are unreleased.) | **SHIPPED** | `v0.8.0` | 2026-06-03 |
+| v0.9 Autonomy and Control | Event and lifecycle-hook substrate, monetary budgets that pause on breach, risk-tiered approvals, secrets redaction, priority execution lanes, watch rules, controlled overnight autonomy, and a minimal supervision surface (approvals queue, unified inbox, run-liveness watchdog). | **PLANNED** | (none) | program drafted 2026-06-03 |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
 **IN DEVELOPMENT** means the roadmap is committed and phases are
-executing, but it is not tagged yet. **NOT PLANNED** means scope is
-sketched with no commitment and no schedule.
+executing, but it is not tagged yet. **PLANNED** means a program-level
+roadmap exists but the milestone is not yet broken into committed
+phases. **NOT PLANNED** means scope is sketched with no commitment and
+no schedule.
 
 ## Recently shipped
 
-**v0.8 Local-first and Autonomous Research (shipped 2026-06-02)**
+**v0.8 Local-first and Autonomous Research (shipped 2026-06-03)**
 introduces a full local-first capability layer plus a flagship Deep
 Research workflow. All pieces are opt-in: a bare `pip install horus-os`
 still starts with only an LLM key and activates none of the new
@@ -73,18 +81,20 @@ features. Each capability lives behind its own optional extra.
   lists it in `allowed_tools`.
 - `[research]` meta-extra: installs the full local-first stack at once.
 
-The latest cut also adds three product surfaces on top of the v0.8
-core: a streaming chat surface in the dashboard that streams tokens
-live as the team works; an agent store with featured bundles (Atlas,
-Vitriol, Sol) and a custom-agent builder; and an optional Twilio
-voice and reservations adapter behind the `[voice]` extra.
+Three product surfaces on top of the v0.8 core landed on `main` after
+the v0.8.0 tag and currently sit in the changelog `[Unreleased]`
+section, so they are not part of v0.8.0 itself and ship in the next
+tagged cut: a streaming chat surface in the dashboard that streams
+tokens live as the team works; an agent store with featured bundles
+(Atlas, Vitriol, Sol) and a custom-agent builder; and an optional
+Twilio voice and reservations adapter behind the `[voice]` extra.
 
 The SQLite schema advanced from v12 to v13 (additive and idempotent):
 two new tables (`skills`, `shell_invocations`). v0.7 databases load
 cleanly under v13. See `docs/MIGRATION-v0.7-to-v0.8.md` for upgrade
 notes.
 
-**v0.7 Command Center (shipped 2026-06-02)** turned horus-os from a
+**v0.7 Command Center (shipped 2026-06-03)** turned horus-os from a
 single-page vanilla-JS dashboard into a polished Next.js command
 center with a design system, a Setup-and-Verify integrations surface,
 an opt-in Discord control bot, an opt-in Supabase sync loop, a cron
@@ -97,6 +107,27 @@ never tagged, so v0.7.0 follows v0.5.0 directly in the tag history.
 For the live phase pointer, read `.planning/STATE.md`. For the
 phase breakdown, read `.planning/ROADMAP.md`. For the requirement
 list, read `.planning/REQUIREMENTS.md`.
+
+## Next up: v0.9 Autonomy and Control
+
+The next planned milestone is **v0.9, Autonomy and Control**. v0.8
+shipped raw power (autonomous research, gated shell, metered but
+unbounded spend); v0.9 lands the rails that make it safe to turn
+agents loose: an event and lifecycle-hook substrate, monetary budgets
+that pause on breach, risk-tiered approvals, secrets redaction,
+priority execution lanes so background work never starves user work,
+watch rules, and controlled overnight or idle autonomy that rides
+behind every gate, with a minimal supervision surface (approvals
+queue, unified inbox, run-liveness watchdog).
+
+v0.9 is the first of a six-milestone program, v0.9 through v0.14, that
+absorbs the full v0.9 gap analysis: v0.10 Memory and Learning, v0.11
+Work Legibility, v0.12 Workspace and Models, v0.13 Interop and
+Distribution, and v0.14 Interaction Modality. This is a program-level
+map, not a committed milestone plan; each milestone is finalized
+through the normal planning flow before any phase work begins. The
+map lives in `.planning/PROGRAM-v0.9-v0.14.md` and the underlying
+analysis in `.planning/research/v0.9-gap-analysis.md`.
 
 ## How to follow along
 

@@ -15,7 +15,15 @@ The changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) a
 > [!NOTE]
 > Every schema bump in horus-os history has been additive and idempotent, and runs automatically on first startup after upgrade. The current database schema version is 13. See [Migrations](/reference/migrations/) for details.
 
-## v0.8.0 (2026-06-02) Local-first and Autonomous Research
+## Unreleased
+
+Landed on `main` after the v0.8.0 tag, shipping in the next tagged cut:
+
+- **Streaming dashboard chat.** A first-class chat surface that streams tokens live as the team works, over the existing `POST /api/chat/stream` SSE path, with tool-call and done frames surfaced inline.
+- **Agent store and custom-agent builder.** Browse and install featured agent bundles (Atlas, Vitriol, Sol) or build your own with no code. Installs are additive and never overwrite an existing profile.
+- **Voice and reservations adapter** (`[voice]` extra). An opt-in Twilio `VoiceAdapter` for outbound calls and phone reservations, with the SDK imported lazily so a bare install never pulls it. See [the voice adapter](/integrations/voice/).
+
+## v0.8.0 (2026-06-03) Local-first and Autonomous Research
 
 The eighth alpha adds a full local-first capability layer plus a flagship Deep Research workflow, and every piece is opt-in. A bare `pip install horus-os` still starts with only an LLM key and activates none of the new features; each capability lives behind its own optional extra, so you install exactly what you turn on.
 
@@ -32,7 +40,7 @@ Highlights:
 - **`[research]` convenience meta-extra.** Installs the full v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`) in one command.
 - **Schema 12 to 13.** Two additive tables (`skills`, `shell_invocations`).
 
-## v0.7.0 (2026-06-02) Command Center
+## v0.7.0 (2026-06-03) Command Center
 
 The Command Center milestone turns horus-os from a single-page vanilla-JS dashboard into a polished Next.js command center. (v0.6 was never tagged, so 0.7.0 follows 0.5.0 in the tag history.) Every v0.5 surface keeps working, a no-extras install still runs the full local runtime, and the schema upgrade is additive.
 

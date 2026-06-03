@@ -178,18 +178,20 @@ v0.8, "Local-first and Autonomous Research," adds a full local-first capability 
 - **Gated shell execution.** A `shell_exec` tool gated by a double lock: it registers only when `HORUS_OS_SHELL_ENABLED=true` AND the agent profile's `allowed_tools` explicitly list it.
 - **`[research]` meta-extra.** A single `pip install 'horus-os[research]'` installs the full v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`).
 
-The latest cut also brings three product surfaces on top of the v0.8 core:
+Three more product surfaces have since landed on `main`, on top of the v0.8 core. They sit in the `[Unreleased]` section of the [changelog](CHANGELOG.md) and ship in the next tagged cut, they are not part of the v0.8.0 tag:
 
 - **Streaming chat in the dashboard.** A first-class chat surface in the Next.js dashboard that streams tokens live as the team works, not just a buffered final answer.
 - **An agent store.** Browse and install featured agent bundles (Atlas, Vitriol, Sol) or build your own with a custom-agent builder, no code required.
 - **Voice and reservations (opt-in).** An optional Twilio voice adapter behind the `[voice]` extra for outbound calls and phone reservations.
+
+The next planned milestone is **v0.9, Autonomy and Control**: monetary budgets that pause on breach, risk-tiered approvals, secrets redaction, an event and lifecycle-hook substrate, priority execution lanes, and controlled overnight autonomy that rides behind every gate. It is the first of a six-milestone program (v0.9 through v0.14). See [ROADMAP.md](ROADMAP.md).
 
 <p align="center">
   <img src="assets/screenshots/landing.png" alt="horus-os unified marketing and demo site" width="90%">
   <br><sub>One front door: the marketing landing and the live demo, in a single site.</sub>
 </p>
 
-v0.7 (shipped 2026-06-02) shipped the Command Center: a polished Next.js dashboard, a seeded five-agent starter team, an opt-in Discord control bot, an opt-in Supabase sync loop, and a cron scheduler with an always-on service. v0.6 (Contribution Gate) was never tagged, so v0.7.0 follows v0.5.0 directly in the tag history.
+v0.7 (shipped 2026-06-03) shipped the Command Center: a polished Next.js dashboard, a seeded five-agent starter team, an opt-in Discord control bot, an opt-in Supabase sync loop, and a cron scheduler with an always-on service. v0.6 (Contribution Gate) was never tagged, so v0.7.0 follows v0.5.0 directly in the tag history.
 
 Earlier milestones shipped the foundation: the agent runtime and two providers (v0.1), multi-agent delegation and streaming (v0.2), the adapter ecosystem (v0.3), observability (v0.4), and the plugin system (v0.5). See [CHANGELOG.md](CHANGELOG.md) and [ROADMAP.md](ROADMAP.md).
 
@@ -215,7 +217,7 @@ None of this gives up the core promise. It all runs on your machine, against you
 
 ## Status and how to get involved
 
-**horus-os is in solo development mode.** It was open-sourced out of a working private command center that runs against real data on a real machine. v0.8 is the latest shipped release. The contribution flow opens only once an internal supply-chain readiness gate is met; until then, outside pull requests are acknowledged and closed unreviewed, and issue-claim comments are not honored. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
+**horus-os is in solo development mode.** It was open-sourced out of a working private command center that runs against real data on a real machine. v0.8 is the latest shipped release; since the tag, three more product surfaces (streaming chat, an agent store, and an opt-in voice adapter) have landed on `main` ahead of the next cut, and v0.9 (Autonomy and Control) is in planning. The contribution flow opens only once an internal supply-chain readiness gate is met; until then, outside pull requests are acknowledged and closed unreviewed, and issue-claim comments are not honored. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
 
 You can still help right now, and this feedback is the single most valuable contribution today:
 

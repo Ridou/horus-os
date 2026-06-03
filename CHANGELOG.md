@@ -30,7 +30,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   needs a public URL and a realtime voice provider; see
   `docs/adapters/VOICE.md`.
 
-## [0.8.0] - 2026-06-02
+## [0.8.0] - 2026-06-03
 
 Eighth alpha, "Local-first and Autonomous Research." horus-os gains a
 full local-first capability layer plus a flagship Deep Research
@@ -152,7 +152,7 @@ See `docs/MIGRATION-v0.7-to-v0.8.md` for upgrade notes from v0.7.
   greps `ci.yml` for the new job names so they cannot silently disappear
   before a tag.
 
-## [0.7.0] - 2026-06-02
+## [0.7.0] - 2026-06-03
 
 The Command Center milestone. v0.7.0 turns horus-os from a single-page
 vanilla-JS dashboard into a polished Next.js command center with a

@@ -12,19 +12,36 @@ Planning detail lives under `.planning/`. Start with
 | v0.3 Adapter Ecosystem | 22-31 | shipped 2026-05-24 | `v0.3.0` |
 | v0.4 Observability | 32-39 | shipped 2026-05-26 | `v0.4.0` |
 | v0.5 Plugin System | 40-50 | shipped 2026-05-27 | `v0.5.0` |
-| v0.6 (contribution gate) | TBD | not planned | |
+| v0.6 Contribution Gate | 51-59 | folded in, never tagged | (none) |
+| v0.7 Command Center | 60-68 | shipped 2026-06-03 | `v0.7.0` |
+| v0.8 Local-first + Autonomous Research | 69-76 | shipped 2026-06-03 | `v0.8.0` |
+| v0.9 Autonomy and Control | TBD | planned | |
 
 For the live phase pointer read `.planning/STATE.md`. For the public status page read `STATUS.md`. For release contents read `CHANGELOG.md`.
 
-## Next milestone: v0.6 (scope to be decided)
+## Where we are now
 
-`v0.6` is the earliest possible window for opening outside contributions (see `STATUS.md`). Scope is not yet committed. Candidates floated but not promised:
+v0.8 is the latest tagged release (`v0.8.0`, 2026-06-03, SQLite schema v13). v0.1 through v0.8 have all shipped. v0.6 (Contribution Gate) was folded into the contribution-readiness work and never tagged on its own, so `v0.7.0` follows `v0.5.0` directly in the tag history.
 
-- Sandboxed plugin execution via OS-level isolation (subprocess/container). Deferred from v0.5; would only land if real-world abuse warrants the engineering cost.
-- Hardening + readiness work toward the contribution gate (CI signing, supply-chain checks, contributor docs, issue templates).
-- Continued feature work (additional adapters, agents, tooling).
+Since the v0.8.0 tag, three product surfaces have landed on `main` and currently sit unreleased in the changelog `[Unreleased]` section. They ship in the next tagged cut:
 
-The next milestone is opened by the maintainer; v0.6 phases are not yet drafted.
+- A streaming chat surface in the dashboard.
+- An agent store with featured bundles and a no-code custom-agent builder.
+- An optional Twilio voice and reservations adapter behind the `[voice]` extra.
+
+## Next milestone: v0.9 Autonomy and Control
+
+v0.8 shipped raw power: autonomous research, gated shell, and metered but unbounded spend. v0.9 lands the rails that make turning agents loose safe. Planned scope:
+
+- An event and lifecycle-hook substrate plus priority execution lanes, the seam the rest registers onto.
+- Monetary budget enforcement that pauses on breach, a daily pre-flight ceiling, and a stale-run reaper.
+- Risk-tiered approvals, a destructive-action gate, and a verification gate.
+- Safety hardening: secrets redaction, a subprocess resource guard, a skill threat scanner, and a loop detector.
+- Watch rules and triggers on the event bus, with daily caps and dedup.
+- Controlled autonomy: a spontaneous/idle loop and an overnight batch runner, behind every gate above.
+- A minimal supervision surface: an approvals queue, a unified inbox, and a run-liveness watchdog.
+
+v0.9 is planned, not yet committed to phases. It is the first of a six-milestone program (v0.9 through v0.14) that absorbs the full v0.9 gap analysis: v0.10 Memory and Learning, v0.11 Work Legibility, v0.12 Workspace and Models, v0.13 Interop and Distribution, and v0.14 Interaction Modality. The program-level map lives in `.planning/PROGRAM-v0.9-v0.14.md` and the underlying analysis in `.planning/research/v0.9-gap-analysis.md`; each milestone is finalized through the normal planning flow before any phase work begins.
 
 ## Shipped: v0.2 Multi-Agent + Streaming
 
@@ -88,7 +105,7 @@ The next milestone is opened by the maintainer; v0.6 phases are not yet drafted.
 
 ## Shipped milestone summaries
 
-For the deep per-phase breakdown of v0.3, v0.4, and v0.5, read `.planning/ROADMAP.md`. For the public-facing shipped highlights, read `STATUS.md`. Shape of v0.6+ is decided in flight; open an issue or discussion to push on it.
+For the deep per-phase breakdown of every shipped milestone (v0.1 through v0.8), read `.planning/ROADMAP.md`. For the public-facing shipped highlights, read `STATUS.md`. For what comes after v0.8, read the v0.9 section above and `.planning/PROGRAM-v0.9-v0.14.md`.
 
 ## Anti-goals
 

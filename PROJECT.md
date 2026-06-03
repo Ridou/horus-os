@@ -48,4 +48,4 @@ The goal is a personal command center for one person, running locally, with full
 
 ## Status
 
-Alpha, v0.8.0 (2026-06-02), "Local-first and Autonomous Research." See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases) for the full history.
+Alpha, v0.8.0 (2026-06-03), "Local-first and Autonomous Research." See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases) for the full history. Since the tag, a streaming dashboard chat, an agent store, and an opt-in Twilio voice adapter have landed on `main` unreleased; the next planned milestone is v0.9, Autonomy and Control. See `ROADMAP.md`.

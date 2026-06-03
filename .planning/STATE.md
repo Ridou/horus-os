@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md and .planning/README.md.
 
 **Core value:** Run a personal team of AI agents on your laptop, with full transparency over every action.
-**Current focus:** v0.8 shipped. Planning v0.9 (Autonomy and Control). See .planning/PROGRAM-v0.9-v0.14.md and .planning/research/v0.9-gap-analysis.md.
+**Current focus:** v0.8 shipped. Planning v0.9 (Autonomy and Control). See .planning/PROGRAM-v0.9-v0.14.md and .planning/research/v0.9-gap-analysis.md. Three post-v0.8 product surfaces (streaming dashboard chat, agent store, opt-in Twilio voice adapter) are on main, unreleased, in CHANGELOG [Unreleased].
 
 ## Current Position
 

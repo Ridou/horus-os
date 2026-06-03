@@ -6,9 +6,14 @@ description: "Where horus-os is right now, what has shipped from v0.1 to v0.8, a
 ## Current status
 
 The latest shipped release is **v0.8.0** ("Local-first and Autonomous
-Research"), tagged on 2026-06-02. The runtime is Python 3.11+, the
+Research"), tagged on 2026-06-03. The runtime is Python 3.11+, the
 dashboard is a static-exported Next.js app bundled into the wheel, and
 persistence is a single SQLite file at database **schema version 13**.
+
+Since the v0.8.0 tag, three product surfaces have landed on `main` and
+sit unreleased in the changelog `[Unreleased]` section, shipping in the
+next tagged cut: a streaming dashboard chat surface, an agent store
+with a custom-agent builder, and an opt-in Twilio voice adapter.
 
 horus-os is in active solo development. Outside pull requests are not
 being merged yet, and issue claim comments are not honored yet. The
@@ -39,8 +44,9 @@ Releases page.
 | v0.4 Observability | Cost, latency, and tool-reliability tracking, observability dashboard tab, opt-in OpenTelemetry exporter, `horus-os usage` | Shipped | `v0.4.0` | 2026-05-26 |
 | v0.5 Plugin System | Third-party tools and adapters from a `horus-plugin.toml` manifest, default-deny capability grants, two-phase installer | Shipped | `v0.5.0` | 2026-05-27 |
 | v0.6 Contribution Gate | Supply-chain hardening and contributor readiness work. Folded into the contribution gate, never tagged as its own release. | Folded in | (none) | n/a |
-| v0.7 Command Center | Bundled Next.js dashboard, Setup-and-Verify integrations surface, Discord control bot, Supabase sync, cron scheduler, opt-in Vercel deploy | Shipped | `v0.7.0` | 2026-06-02 |
-| v0.8 Local-first + Autonomous Research | Local LLM provider, on-device vector memory, MCP client, web access, vision and PDF, Deep Research, skills, gated shell, all opt-in | Shipped | `v0.8.0` | 2026-06-02 |
+| v0.7 Command Center | Bundled Next.js dashboard, Setup-and-Verify integrations surface, Discord control bot, Supabase sync, cron scheduler, opt-in Vercel deploy | Shipped | `v0.7.0` | 2026-06-03 |
+| v0.8 Local-first + Autonomous Research | Local LLM provider, on-device vector memory, MCP client, web access, vision and PDF, Deep Research, skills, gated shell, all opt-in | Shipped | `v0.8.0` | 2026-06-03 |
+| v0.9 Autonomy and Control | Event and hook substrate, budgets that pause on breach, risk-tiered approvals, secrets redaction, priority lanes, watches, controlled overnight autonomy, supervision surface | Planned | (none) | (planning) |
 
 > [!NOTE]
 > v0.6 (Contribution Gate) was never published as its own tag. Its
@@ -135,10 +141,25 @@ local dashboard, gated behind a three-OS install check.
 
 ## What comes next
 
-Milestone scope beyond v0.8 is not yet committed. The project opens for
-outside contributions once an internal supply-chain readiness gate is
-met. Until then, the highest-value contribution is real-use feedback in
-GitHub Discussions, which shapes the roadmap.
+The next planned milestone is **v0.9, Autonomy and Control**: the rails
+that make autonomy safe to turn on. v0.8 shipped raw power (autonomous
+research, gated shell, metered but unbounded spend); v0.9 adds monetary
+budgets that pause on breach, risk-tiered approvals, secrets redaction,
+an event and hook substrate, priority lanes, watch rules, and
+controlled overnight autonomy behind every gate. It is the first of a
+six-milestone program (v0.9 through v0.14) covering memory and learning,
+work legibility, workspace and models, interop and distribution, and
+interaction modality.
+
+This is a program-level map, not a committed milestone plan; scope is
+finalized through the normal planning flow before any phase work
+begins. The detail lives in the repository's `.planning/` directory
+(`PROGRAM-v0.9-v0.14.md`).
+
+The project opens for outside contributions once an internal
+supply-chain readiness gate is met. Until then, the highest-value
+contribution is real-use feedback in GitHub Discussions, which shapes
+the roadmap.
 
 ## Anti-goals
 
