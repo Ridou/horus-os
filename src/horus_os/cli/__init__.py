@@ -10,19 +10,25 @@ and assert on captured text.
 """
 
 from horus_os.cli.agents_cmd import run_agents
+from horus_os.cli.doctor_cmd import run_doctor
 from horus_os.cli.init_cmd import run_init
 from horus_os.cli.plugins_cmd import run_plugins
 from horus_os.cli.run_cmd import run_run
+from horus_os.cli.schedule_cmd import run_schedule
 from horus_os.cli.serve_cmd import run_serve
+from horus_os.cli.service_cmd import run_service
 from horus_os.cli.traces_cmd import run_traces
 from horus_os.cli.usage_cmd import run_usage
 
 __all__ = [
     "run_agents",
+    "run_doctor",
     "run_init",
     "run_plugins",
     "run_run",
+    "run_schedule",
     "run_serve",
+    "run_service",
     "run_traces",
     "run_usage",
 ]

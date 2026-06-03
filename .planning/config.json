@@ -13,7 +13,7 @@
     "mvp_mode": false,
     "nyquist_validation": true,
     "use_worktrees": true,
-    "_auto_chain_active": false,
+    "_auto_chain_active": true,
     "skip_discuss": true
   }
 }

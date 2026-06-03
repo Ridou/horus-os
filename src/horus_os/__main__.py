@@ -10,13 +10,120 @@ from typing import TextIO
 from horus_os import __version__
 from horus_os.cli import (
     run_agents,
+    run_doctor,
     run_init,
     run_plugins,
     run_run,
+    run_schedule,
     run_serve,
+    run_service,
     run_traces,
     run_usage,
 )
+
+
+def _add_data_dir(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+
+
+def _build_schedule_parser(sub: argparse._SubParsersAction) -> None:
+    """Register the `schedule` parent subparser and its six leaves (D-07)."""
+    schedule_p = sub.add_parser("schedule", help="Manage recurring agent schedules")
+    _add_data_dir(schedule_p)
+    schedule_p.set_defaults(func=run_schedule)
+
+    schedule_sub = schedule_p.add_subparsers(dest="schedule_command", metavar="<operation>")
+
+    create_p = schedule_sub.add_parser("create", help="Create a recurring schedule")
+    create_p.add_argument("name", help="Schedule name")
+    create_p.add_argument(
+        "--cron",
+        required=True,
+        help="Cron expression, an @-alias like @daily, or sugar like 'every 30m'.",
+    )
+    create_p.add_argument("--profile", required=True, help="Agent profile name to fire")
+    create_p.add_argument("--prompt", required=True, help="Prompt sent on each run")
+    create_p.add_argument(
+        "--catch-up",
+        dest="catch_up",
+        default="coalesce",
+        choices=["coalesce", "skip", "all"],
+        help="How to handle runs missed while the process was down (default: coalesce).",
+    )
+    _add_data_dir(create_p)
+    create_p.set_defaults(func=run_schedule, schedule_command="create")
+
+    list_p = schedule_sub.add_parser("list", help="List all schedules")
+    _add_data_dir(list_p)
+    list_p.set_defaults(func=run_schedule, schedule_command="list")
+
+    edit_p = schedule_sub.add_parser("edit", help="Edit an existing schedule")
+    edit_p.add_argument("name", help="Schedule name to edit")
+    edit_p.add_argument("--cron", default=None)
+    edit_p.add_argument("--profile", default=None)
+    edit_p.add_argument("--prompt", default=None)
+    edit_p.add_argument(
+        "--catch-up",
+        dest="catch_up",
+        default=None,
+        choices=["coalesce", "skip", "all"],
+    )
+    _add_data_dir(edit_p)
+    edit_p.set_defaults(func=run_schedule, schedule_command="edit")
+
+    delete_p = schedule_sub.add_parser("delete", help="Delete a schedule")
+    delete_p.add_argument("name", help="Schedule name to delete")
+    _add_data_dir(delete_p)
+    delete_p.set_defaults(func=run_schedule, schedule_command="delete")
+
+    enable_p = schedule_sub.add_parser("enable", help="Enable a schedule")
+    enable_p.add_argument("name", help="Schedule name to enable")
+    _add_data_dir(enable_p)
+    enable_p.set_defaults(func=run_schedule, schedule_command="enable")
+
+    disable_p = schedule_sub.add_parser("disable", help="Disable a schedule")
+    disable_p.add_argument("name", help="Schedule name to disable")
+    _add_data_dir(disable_p)
+    disable_p.set_defaults(func=run_schedule, schedule_command="disable")
+
+
+def _build_service_parser(sub: argparse._SubParsersAction) -> None:
+    """Register the `service` parent subparser and its five leaves (D-09)."""
+    service_p = sub.add_parser("service", help="Install/manage the always-on service")
+    _add_data_dir(service_p)
+    service_p.set_defaults(func=run_service)
+
+    service_sub = service_p.add_subparsers(dest="service_command", metavar="<operation>")
+
+    install_p = service_sub.add_parser("install", help="Register the platform-native service")
+    install_p.add_argument(
+        "--print",
+        action="store_true",
+        help="Print the generated service definition without installing (dry run).",
+    )
+    _add_data_dir(install_p)
+    install_p.set_defaults(func=run_service, service_command="install")
+
+    uninstall_p = service_sub.add_parser("uninstall", help="Remove the registered service")
+    _add_data_dir(uninstall_p)
+    uninstall_p.set_defaults(func=run_service, service_command="uninstall")
+
+    start_p = service_sub.add_parser("start", help="Start the registered service")
+    _add_data_dir(start_p)
+    start_p.set_defaults(func=run_service, service_command="start")
+
+    stop_p = service_sub.add_parser("stop", help="Stop the running service")
+    _add_data_dir(stop_p)
+    stop_p.set_defaults(func=run_service, service_command="stop")
+
+    status_p = service_sub.add_parser("status", help="Report whether the service is running")
+    _add_data_dir(status_p)
+    status_p.set_defaults(func=run_service, service_command="status")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -223,6 +330,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     delete_p.set_defaults(func=run_agents, agents_command="delete")
 
+    _build_schedule_parser(sub)
+    _build_service_parser(sub)
+
     plugins_p = sub.add_parser("plugins", help="Manage installed plugins")
     plugins_p.add_argument(
         "--data-dir",
@@ -376,7 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ``--all`` flag are mutually exclusive AND one is required. ``--all``
     # reads the manifest's declared capability set from the plugins table
     # (the user-approved set at install time) and grants every one in a
-    # single call — the CI install-smoke-plugin matrix uses it to flip
+    # single call - the CI install-smoke-plugin matrix uses it to flip
     # the reference plugin from pending -> loaded without naming each
     # capability. ``nargs='?'`` on the positional lets argparse treat the
     # mutex required=True contract as the authoritative "exactly one"
@@ -440,6 +550,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Slice the report. Default agent.",
     )
     usage_p.set_defaults(func=run_usage)
+
+    doctor_p = sub.add_parser("doctor", help="Check integration health and configuration")
+    doctor_p.add_argument(
+        "--supabase",
+        action="store_true",
+        help="Report per-table RLS status via Supabase PostgREST RPC.",
+    )
+    doctor_p.add_argument(
+        "--service",
+        action="store_true",
+        help="Report whether the always-on service is registered and running.",
+    )
+    doctor_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    doctor_p.set_defaults(func=run_doctor)
 
     return parser
 

@@ -1,0 +1,157 @@
+{
+  "cost": {
+    "agents": [
+      {
+        "agent": "Coordinator",
+        "total_cost_usd": 4.812044,
+        "total_input_tokens": 1840220,
+        "total_output_tokens": 312880,
+        "total_cache_read_input_tokens": 920100,
+        "total_cache_creation_input_tokens": 41200,
+        "run_count": 412,
+        "uncosted_runs": 6
+      },
+      {
+        "agent": "Engineer",
+        "total_cost_usd": 3.204911,
+        "total_input_tokens": 1210400,
+        "total_output_tokens": 268900,
+        "total_cache_read_input_tokens": 610300,
+        "total_cache_creation_input_tokens": 28800,
+        "run_count": 287,
+        "uncosted_runs": 3
+      },
+      {
+        "agent": "Researcher",
+        "total_cost_usd": 2.118702,
+        "total_input_tokens": 988000,
+        "total_output_tokens": 142300,
+        "total_cache_read_input_tokens": 410200,
+        "total_cache_creation_input_tokens": 19400,
+        "run_count": 156,
+        "uncosted_runs": 11
+      },
+      {
+        "agent": "Writer",
+        "total_cost_usd": 0.984310,
+        "total_input_tokens": 420800,
+        "total_output_tokens": 98600,
+        "total_cache_read_input_tokens": 180400,
+        "total_cache_creation_input_tokens": 8200,
+        "run_count": 98,
+        "uncosted_runs": 0
+      },
+      {
+        "agent": "Operator",
+        "total_cost_usd": 0.412005,
+        "total_input_tokens": 188200,
+        "total_output_tokens": 31400,
+        "total_cache_read_input_tokens": 64100,
+        "total_cache_creation_input_tokens": 3100,
+        "run_count": 64,
+        "uncosted_runs": 14
+      }
+    ]
+  },
+  "costByModel": {
+    "models": [
+      {
+        "model": "claude-sonnet",
+        "provider": "anthropic",
+        "total_cost_usd": 8.017266,
+        "total_input_tokens": 3050620,
+        "total_output_tokens": 581780,
+        "total_cache_read_input_tokens": 1530400,
+        "total_cache_creation_input_tokens": 70000,
+        "call_count": 797,
+        "uncosted_calls": 9
+      },
+      {
+        "model": "gemini-pro",
+        "provider": "gemini",
+        "total_cost_usd": 2.901703,
+        "total_input_tokens": 1320600,
+        "total_output_tokens": 198900,
+        "total_cache_read_input_tokens": 540200,
+        "total_cache_creation_input_tokens": 24800,
+        "call_count": 218,
+        "uncosted_calls": 11
+      },
+      {
+        "model": "gemini-flash",
+        "provider": "gemini",
+        "total_cost_usd": 0.413003,
+        "total_input_tokens": 276600,
+        "total_output_tokens": 73000,
+        "total_cache_read_input_tokens": 124400,
+        "total_cache_creation_input_tokens": 5200,
+        "call_count": 142,
+        "uncosted_calls": 14
+      }
+    ]
+  },
+  "latency": {
+    "p50_ms": 3180,
+    "p95_ms": 9120,
+    "sample_count": 1017
+  },
+  "tools": {
+    "tools": [
+      {
+        "tool_name": "read_note",
+        "call_count": 612,
+        "success_count": 608,
+        "error_count": 4,
+        "retry_then_success_count": 9,
+        "expected_no_result_count": 21,
+        "success_rate": 0.9935,
+        "last_error_type": "FileNotFoundError",
+        "last_error_at": "2026-05-30T12:14:00Z"
+      },
+      {
+        "tool_name": "write_note",
+        "call_count": 388,
+        "success_count": 380,
+        "error_count": 8,
+        "retry_then_success_count": 5,
+        "expected_no_result_count": 0,
+        "success_rate": 0.9794,
+        "last_error_type": "PermissionError",
+        "last_error_at": "2026-05-30T20:02:00Z"
+      },
+      {
+        "tool_name": "run_command",
+        "call_count": 241,
+        "success_count": 219,
+        "error_count": 22,
+        "retry_then_success_count": 18,
+        "expected_no_result_count": 3,
+        "success_rate": 0.9087,
+        "last_error_type": "ExportVerificationError",
+        "last_error_at": "2026-05-30T21:55:00Z"
+      },
+      {
+        "tool_name": "web_search",
+        "call_count": 134,
+        "success_count": 131,
+        "error_count": 3,
+        "retry_then_success_count": 2,
+        "expected_no_result_count": 7,
+        "success_rate": 0.9776,
+        "last_error_type": "TimeoutError",
+        "last_error_at": "2026-05-29T18:41:00Z"
+      },
+      {
+        "tool_name": "list_notes",
+        "call_count": 96,
+        "success_count": 96,
+        "error_count": 0,
+        "retry_then_success_count": 0,
+        "expected_no_result_count": 4,
+        "success_rate": 1.0,
+        "last_error_type": null,
+        "last_error_at": null
+      }
+    ]
+  }
+}

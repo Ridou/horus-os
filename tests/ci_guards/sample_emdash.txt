@@ -1,0 +1,1 @@
+This line contains a deliberate em-dash for CI guard detection: — end of test fixture.

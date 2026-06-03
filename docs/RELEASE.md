@@ -139,8 +139,14 @@ The full sequence:
    `chore(release): bump to N.M.P`.
 6. Push to `main`. Wait for CI green on the full 3-OS x 2-Python
    matrix (`gh run list --branch main --limit 1`).
+6.5. Confirm `gitsign` is configured. Run
+     `git config --get gitsign.connectorID` and confirm the
+     output is non-empty (typically
+     `https://github.com/login/oauth`). If empty, follow the
+     one-time gitsign setup in `docs/MAINTAINER-RUNBOOK.md`.
+     Do not proceed to step 7 until configured.
 7. Create the annotated tag:
-   `git tag -a vN.M.P -m "vN.M.P - <milestone-name>"`.
+   `git tag -s vN.M.P -m "vN.M.P - <milestone-name>"`.
    Push: `git push origin vN.M.P`.
 8. Publish the GitHub Release. Extract the new CHANGELOG section
    into a tmp file and hand it to `gh release create`:
@@ -156,6 +162,36 @@ The full sequence:
 9. Confirm the release is visible at
    `https://github.com/Ridou/horus-os/releases/tag/vN.M.P`.
 
+### v0.7.0 cut (staged, awaiting owner go-ahead)
+
+The v0.7.0 release is STAGED and validated locally; the remote
+actions are not performed by the planner or executor and await
+explicit owner confirmation. The staging is complete:
+
+- Step 3 (version bump to `0.7.0` in `pyproject.toml` and
+  `src/horus_os/__init__.py`) is done.
+- Step 4 (CHANGELOG `[Unreleased]` promoted to
+  `[0.7.0] - 2026-06-02`, fresh empty `[Unreleased]` stub left on
+  top) is done.
+- A migration note lives at `docs/MIGRATION-v0.5-to-v0.7.md`
+  (the upgrade is v0.5 to v0.7 because v0.6 was never tagged).
+- A DRAFTED GitHub Release body lives at
+  `docs/RELEASE-NOTES-v0.7.0.md`. It carries the CHANGELOG
+  summary, a link to the migration note, and the optional-extras
+  documentation. Hand it to step 8 with
+  `gh release create v0.7.0 --title "v0.7.0 - Command Center"
+  --notes-file docs/RELEASE-NOTES-v0.7.0.md`.
+
+STOP-BEFORE-TAG boundary (owner-confirmed only): the following are
+NOT run autonomously by the planner or executor and require the
+owner's explicit go-ahead, in order: `git push` of the release
+commits, the `gitsign` confirmation (step 6.5), the annotated tag
+and its push (step 7, `git push origin v0.7.0`), the GitHub Release
+publish (step 8), and any merge to `main`. The three-OS hard gate
+green is a post-push CI result the owner triggers by pushing; it
+cannot be produced before the push. CLAUDE.md is explicit: do not
+push to any remote without explicit confirmation.
+
 ## Post-release
 
 - Update `.planning/STATE.md`:
@@ -165,6 +201,78 @@ The full sequence:
     the just-shipped milestone.
 - Open a tracking issue or note for the next milestone's planning
   phase.
+
+## One-time repo settings checklist (v0.6 contribution-gate setup)
+
+The v0.6 contribution-gate flip (Phase 59) assumes the following repo settings are enabled. They are one-time toggles; the maintainer runs through this list ONCE at v0.6 setup time and then never again. Each item includes a `gh api` verification command so the state can be re-confirmed if a downstream consumer asks.
+
+### Private vulnerability reporting (GHSA)
+
+Enable via Settings > Code security > Private vulnerability reporting > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os \
+  --field security_and_analysis.private_vulnerability_reporting.status=enabled
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.security_and_analysis.private_vulnerability_reporting.status'
+```
+
+Expect `enabled`. This is the substrate the SECURITY.md reporting flow assumes.
+
+### Dependabot alerts
+
+Enable via Settings > Code security > Dependabot alerts > Enable. There is no documented `gh api` toggle for this scope; the UI is the source of truth. Verify by visiting the Security tab > Dependabot alerts; if the link is live (not "enable"), the feature is on.
+
+### Dependabot security updates
+
+Enable via Settings > Code security > Dependabot security updates > Enable. This is what causes Dependabot to auto-open PRs for advisories. Combined with the Phase 54 `.github/dependabot.yml` config (DEPBOT-02 hard rule: no `applies-to: security-updates` grouping), every advisory gets its own PR labelled `security-update`.
+
+### Secret scanning + push protection
+
+Enable via Settings > Code security > Secret scanning > Enable, then Push protection > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os \
+  --field security_and_analysis.secret_scanning.status=enabled \
+  --field security_and_analysis.secret_scanning_push_protection.status=enabled
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.security_and_analysis.secret_scanning.status, .security_and_analysis.secret_scanning_push_protection.status'
+```
+
+Expect both `enabled`.
+
+### GitHub Discussions
+
+Enable via Settings > General > Features > Discussions > Enable. Or:
+
+```
+gh api -X PATCH /repos/Ridou/horus-os --field has_discussions=true
+```
+
+Verify:
+
+```
+gh api /repos/Ridou/horus-os --jq '.has_discussions'
+```
+
+Expect `true`. Then create the four categories via the Discussions Settings UI (no `gh api` mutation path for categories):
+
+- **General**: catch-all conversation.
+- **Q&A**: question-with-marked-answer format.
+- **Show and Tell**: user-built things on top of horus-os.
+- **Ideas**: future-direction proposals (not concrete enough for an issue).
+
+See `docs/MAINTAINER-RUNBOOK.md` Part 4 for the rationale per category.
+
+The pinned "Project Status" Discussion post is created at v0.6.0 ship time as Phase 59 work.
 
 ## Why the release gate exists
 

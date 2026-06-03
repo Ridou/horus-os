@@ -1,0 +1,54 @@
+{
+  "agents": [
+    {
+      "name": "Coordinator",
+      "color": "#00d4ff",
+      "description": "Routes incoming goals, delegates to specialists, and tracks progress across the team.",
+      "default_model": "claude-sonnet",
+      "soul_path": "souls/coordinator.md",
+      "status": "active",
+      "trace_count": 412,
+      "last_active_at": "2026-05-30T22:18:00Z"
+    },
+    {
+      "name": "Engineer",
+      "color": "#22c55e",
+      "description": "Writes, refactors, and reviews code. Runs tests and proposes fixes.",
+      "default_model": "claude-sonnet",
+      "soul_path": "souls/engineer.md",
+      "status": "running",
+      "trace_count": 287,
+      "last_active_at": "2026-05-30T22:41:00Z"
+    },
+    {
+      "name": "Researcher",
+      "color": "#ec4899",
+      "description": "Gathers sources, summarizes findings, and verifies claims against evidence.",
+      "default_model": "gemini-pro",
+      "soul_path": "souls/researcher.md",
+      "status": "idle",
+      "trace_count": 156,
+      "last_active_at": "2026-05-30T19:02:00Z"
+    },
+    {
+      "name": "Writer",
+      "color": "#f59e0b",
+      "description": "Drafts and edits prose, documentation, and release notes in the project voice.",
+      "default_model": "claude-sonnet",
+      "soul_path": "souls/writer.md",
+      "status": "paused",
+      "trace_count": 98,
+      "last_active_at": "2026-05-29T14:30:00Z"
+    },
+    {
+      "name": "Operator",
+      "color": "#a78bfa",
+      "description": "Handles deployments, schedules, and routine system maintenance tasks.",
+      "default_model": "gemini-flash",
+      "soul_path": "souls/operator.md",
+      "status": "error",
+      "trace_count": 64,
+      "last_active_at": "2026-05-30T21:55:00Z"
+    }
+  ]
+}

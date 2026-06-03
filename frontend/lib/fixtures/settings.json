@@ -1,0 +1,15 @@
+{
+  "data_dir": "~/.local/share/horus-os",
+  "notes_dir": "~/.local/share/horus-os/notes",
+  "db_path": "~/.local/share/horus-os/horus.db",
+  "default_provider": "anthropic",
+  "anthropic_model": "claude-sonnet",
+  "gemini_model": "gemini-pro",
+  "schema_version": 7,
+  "version": "0.7.0",
+  "counts": {
+    "agents": 5,
+    "notes": 3,
+    "traces": 1017
+  }
+}

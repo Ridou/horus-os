@@ -1,11 +1,12 @@
 name: Feature request
 description: Propose a new feature or capability.
 title: "[feat] "
-labels: ["enhancement"]
+labels: ["type:feature"]
 body:
   - type: markdown
     attributes:
       value: |
+        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
         ### Heads-up: this repo is not accepting outside PRs yet
 
         Filing this feature request does **not** reserve the work

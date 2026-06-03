@@ -1,0 +1,38 @@
+name: Security report (redirect)
+description: Do NOT file security issues in the public tracker. This template redirects you to private vulnerability reporting.
+title: "[security] DO NOT FILE PUBLICLY"
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <!-- PHASE-59-FLIP: when contributions open, no banner change needed; the redirect stays -->
+        ## Do NOT file security issues here
+
+        This is a public issue tracker. Security issues filed here
+        would be visible to everyone, which is the opposite of
+        what responsible disclosure looks like.
+
+        Please report security issues via GitHub Security Advisories
+        private vulnerability reporting:
+
+        **https://github.com/Ridou/horus-os/security/advisories/new**
+
+        Or, if you cannot use GitHub Security Advisories, see
+        `SECURITY.md` for the alternative private contact path and
+        the severity-tier SLOs (acknowledged within 7 days; fix
+        target by severity).
+
+        If this is NOT a security issue and you reached this template
+        by mistake, please close this issue and refile under
+        [Bug report](https://github.com/Ridou/horus-os/issues/new?template=bug.yml)
+        or
+        [Feature request](https://github.com/Ridou/horus-os/issues/new?template=feature.yml).
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Acknowledgement
+      options:
+        - label: I will close this issue and use private vulnerability reporting instead.
+          required: true

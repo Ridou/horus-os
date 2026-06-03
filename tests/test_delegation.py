@@ -366,3 +366,96 @@ def test_module_reexports_make_delegate_tool() -> None:
     """make_delegate_tool is accessible from the delegation module surface."""
     assert hasattr(delegation_module, "make_delegate_tool")
     assert callable(delegation_module.make_delegate_tool)
+
+
+# ---------------------------------------------------------------------------
+# TEAM-03: Coordinator can delegate to each of the four specialist agents
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def starter_team_db(tmp_path: Path) -> Database:
+    """Database seeded with the full five-agent starter team (TEAM-03)."""
+    db = Database(tmp_path / "team.db")
+    db.init()
+    specialists = [
+        AgentProfile(
+            name="Engineer",
+            system_prompt="You are the Engineer.",
+            default_model=None,
+            allowed_tools=None,
+        ),
+        AgentProfile(
+            name="Researcher",
+            system_prompt="You are the Researcher.",
+            default_model=None,
+            allowed_tools=None,
+        ),
+        AgentProfile(
+            name="Writer",
+            system_prompt="You are the Writer.",
+            default_model=None,
+            allowed_tools=None,
+        ),
+        AgentProfile(
+            name="Operator",
+            system_prompt="You are the Operator.",
+            default_model=None,
+            allowed_tools=None,
+        ),
+    ]
+    for profile in specialists:
+        db.save_profile(profile)
+    return db
+
+
+@pytest.mark.parametrize(
+    "specialist",
+    ["Engineer", "Researcher", "Writer", "Operator"],
+)
+def test_coordinator_delegates_to_specialist(
+    specialist: str,
+    starter_team_db: Database,
+    minimal_registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEAM-03: The Coordinator can delegate to each specialist via make_delegate_tool.
+
+    Asserts that the delegate tool invokes the sub-agent with the correct
+    system prompt and that the child trace is linked to the parent.
+    """
+    captured: dict[str, Any] = {}
+
+    def fake_run_agent_loop(prompt: str, **kwargs: Any) -> AgentResult:
+        captured["prompt"] = prompt
+        captured["system_prompt"] = kwargs.get("system_prompt", "")
+        captured["provider"] = kwargs.get("provider", "")
+        return _agent_result(f"{specialist}-done")
+
+    monkeypatch.setattr("horus_os.agent.run_agent_loop", fake_run_agent_loop)
+
+    parent_id = starter_team_db.record_trace(
+        "coordinate task",
+        _agent_result("coordinator-result"),
+        agent_profile_name="Coordinator",
+    )
+
+    tool = make_delegate_tool(
+        db=starter_team_db,
+        master_registry=minimal_registry,
+        parent_trace_id=parent_id,
+        budget=IterationBudget(5),
+        provider="anthropic",
+    )
+    assert tool.handler is not None
+
+    result = tool.handler(agent_name=specialist, task=f"do {specialist} work")
+    assert result == f"{specialist}-done"
+    assert f"You are the {specialist}" in captured["system_prompt"]
+
+    # The child trace is linked back to the parent.
+    children = starter_team_db.list_child_traces(parent_id)
+    assert len(children) == 1
+    assert children[0].parent_trace_id == parent_id
+    assert children[0].agent_profile_name == specialist
+    assert children[0].prompt == f"do {specialist} work"

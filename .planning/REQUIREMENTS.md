@@ -220,9 +220,9 @@
 |----|-------------|--------|-------|
 | DASH-4-01 | New `/observability` tab with three panels: cost-by-agent, latency p50/p95, tool reliability | active | 36 |
 | DASH-4-02 | Window selector (24h / 7d / 30d, default 7d) drives all panels | active | 36 |
-| DASH-4-03 | Percentile cells with n < 10 samples render as "—", not as a number | active | 36 |
+| DASH-4-03 | Percentile cells with n < 10 samples render as "-", not as a number | active | 36 |
 | DASH-4-04 | Existing `/agents` tab gains cost + latency columns from rollups | active | 35 |
-| DASH-4-05 | Pre-v0.4 trace rows render "—" for new columns with hover "no cost data captured before v0.4" | active | 36 |
+| DASH-4-05 | Pre-v0.4 trace rows render "-" for new columns with hover "no cost data captured before v0.4" | active | 36 |
 
 ### Usage CLI (USAGE)
 
@@ -281,11 +281,11 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| MANIFEST-01 | `horus-plugin.toml` declares `manifest_version: int` (required from day one), `name`, `version`, `description`, `author`, `license`, `homepage`, `issue_tracker` | active | 41 |
-| MANIFEST-02 | `horus_os_compat` declares supported horus-os range as a PEP 440 specifier string (e.g. `">=0.5,<0.6"`) parsed via `packaging.SpecifierSet`; mismatch yields validation error before load | active | 41 |
-| MANIFEST-03 | `[contributions]` table declares plugin's tool entry points and adapter entry points by reference (dotted path); duplicates against built-ins refused by loader | active | 41 |
-| MANIFEST-04 | `[capabilities]` array lists requested capabilities by string; every entry must be a member of `capability_catalog.py` closed enum or validation fails | active | 41 |
-| MANIFEST-05 | Pydantic v2 schema validation runs at install time and at every server boot; errors surface line-numbered, plain-English messages via `format_validation_error()` | active | 41 |
+| MANIFEST-01 | `horus-plugin.toml` declares `manifest_version: int` (required from day one), `name`, `version`, `description`, `author`, `license`, `homepage`, `issue_tracker` | complete | 41 |
+| MANIFEST-02 | `horus_os_compat` declares supported horus-os range as a PEP 440 specifier string (e.g. `">=0.5,<0.6"`) parsed via `packaging.SpecifierSet`; mismatch yields validation error before load | complete | 41 |
+| MANIFEST-03 | `[contributions]` table declares plugin's tool entry points and adapter entry points by reference (dotted path); duplicates against built-ins refused by loader | complete | 41 |
+| MANIFEST-04 | `[capabilities]` array lists requested capabilities by string; every entry must be a member of `capability_catalog.py` closed enum or validation fails | complete | 41 |
+| MANIFEST-05 | Pydantic v2 schema validation runs at install time and at every server boot; errors surface line-numbered, plain-English messages via `format_validation_error()` | complete | 41 |
 
 ### Discovery (DISCOVERY)
 
@@ -335,7 +335,7 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| OBSERVE-01 | `plugin_name TEXT NULL` column added to `llm_calls` and `tool_invocations`; NULL = "horus-os core" (pre-v0.5 rows roll up under that); index `idx_tool_invocations_plugin(plugin_name, created_at)` for rollup query speed | active | 41 |
+| OBSERVE-01 | `plugin_name TEXT NULL` column added to `llm_calls` and `tool_invocations`; NULL = "horus-os core" (pre-v0.5 rows roll up under that); index `idx_tool_invocations_plugin(plugin_name, created_at)` for rollup query speed | complete | 41 |
 | OBSERVE-02 | `/api/observability/plugins` route returns per-plugin error rate (last 7d, 30d window) + p50/p95 latency; `/observability` dashboard tab gains a "by plugin" rollup tile alongside existing "by agent" and "by tool" tiles | complete | 45 |
 
 ### Reference plugin (REFERENCE)
@@ -349,13 +349,13 @@
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| MIG-05 | v0.4 SQLite databases upgrade to v0.5 (v6) schema idempotently; additive only (three new tables + two NULLABLE columns + one index); v0.4 fixture (`tests/fixtures/v0_4_database.sqlite3`) loads cleanly; multiple runs of the migration are a no-op after the first | active | 41 |
+| MIG-05 | v0.4 SQLite databases upgrade to v0.5 (v6) schema idempotently; additive only (three new tables + two NULLABLE columns + one index); v0.4 fixture (`tests/fixtures/v0_4_database.sqlite3`) loads cleanly; multiple runs of the migration are a no-op after the first | complete | 41 |
 
 ### Baseline measurement (continued from v0.4)
 
 | ID | Requirement | Status | Phase |
 |----|-------------|--------|-------|
-| BASELINE-02 | A `tests/perf/v0_4_baseline.json` artifact captures v0.4 cold-start time + discovery overhead with zero plugins; committed before Phase 42 discovery lands; cold-start regression test asserts against it | active | 40 |
+| BASELINE-02 | A `tests/perf/v0_4_baseline.json` artifact captures v0.4 cold-start time + discovery overhead with zero plugins; committed before Phase 42 discovery lands; cold-start regression test asserts against it | complete | 40 |
 
 ### Test and CI (continued from v0.4)
 
@@ -364,7 +364,7 @@
 | TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | complete | 46 |
 | TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | complete | 46 |
 | TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
-| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete (42); start variants pending 43 | 42, 43 |
+| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter - each must surface as `status="error"` without crashing the host | complete | 42, 43 |
 | TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | complete | 49 |
 | TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff `flake8-tidy-imports.banned-api` (layer 1) + pytest source-tree backstop at `tests/plugins/test_reference_plugin_public_api_only.py` (layer 2) | complete | 48 |
 
@@ -375,6 +375,260 @@
 | REL-10 | Tag v0.5.0 with CHANGELOG and GitHub Release; `docs/MIGRATION-v0.4-to-v0.5.md` documents v5→v6 schema migration + the two new direct deps (`pydantic>=2.7,<3`, `packaging>=24.0`) | complete | 50 |
 | REL-11 | `scripts/release_gate.py` extended with: (a) docs-drift check between `MANIFEST_V1_SCHEMA` runtime constant and `docs/manifest-v1.schema.json`; (b) plugin install-smoke on each OS from TEST-20; (c) reference plugin manifest validates against the runtime schema; (d) v0.4 fixture round-trip survives the v5→v6 migration | complete | 49 |
 | REL-12 | `docs/PLUGIN-SECURITY.md` includes a "Threat model" section with the literal sentence "plugins execute in the horus-os Python process" and enumerates the capability-grant trust contract; linked from the install-prompt screen | complete | 47 |
+
+## v0.6 Contribution Gate
+
+### CI hardening (CIHARD)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| CIHARD-01 | `pull_request_target` is FORBIDDEN by default across every workflow; release-gate lint rejects any new occurrence unless guarded by a `# SECURITY:` comment AND a `safe-to-test` label gate; v0.6 ships ZERO `pull_request_target` triggers (v0.5 tests use recorded provider responses) | active | 51 |
+| CIHARD-02 | Top-level `permissions: read-all` set on `.github/workflows/ci.yml`, `audit.yml`, `release.yml`; per-job opt-in for any write scope; lint asserts no workflow inherits the legacy GITHUB_TOKEN default scope | active | 51 |
+| CIHARD-03 | Every `actions/checkout` step sets `persist-credentials: false` unless explicitly required for push; no `${{ github.event.pull_request.* }}` interpolation appears in any `run:` shell line | active | 51 |
+| CIHARD-04 | Every third-party `uses:` is pinned to a 40-character commit SHA (`@<sha>` exact match); release-gate `actions-pinned-by-sha` check rejects any `@v<N>`, `@main`, `@master`, or short-SHA pin; `pinact` is documented as the local maintainer refresh tool | active | 51 |
+| CIHARD-05 | `actionlint` runs on every PR via a new workflow lint job; failures block merge; covers untrusted-input interpolation, expired action references, missing `permissions:` | active | 51 |
+
+### Signing substrate (SIGN)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SIGN-01 | NEW `.github/workflows/release.yml` triggered on `release: types: [published]`; signs wheel + sdist + SBOM JSON via `sigstore/gh-action-sigstore-python@<sha>` (sigstore-python >=4.2,<5); produces `.sigstore` bundle (NOT detached `.sig`); sign step runs within 5 minutes of `id-token: write` OIDC mint | active | 52 |
+| SIGN-02 | `actions/attest-build-provenance@<sha>` generates SLSA Build L2 provenance attestations bound to the GitHub workflow identity; verifiable via `gh attestation verify`; runs for every signed artifact | active | 52 |
+| SIGN-03 | Tag signing via `gitsign` (Sigstore keyless, OIDC); no long-lived GPG keypair required; `docs/RELEASE.md` STOP-BEFORE-TAG block documents the gitsign-configured `git tag` invocation; tag verification uses workflow-scoped identity | active | 52 |
+| SIGN-04 | `scripts/verify_release.py` (NEW) is a 5-check user-facing trust-chain verifier with workflow-scoped EXACT-match `EXPECTED_IDENTITY = "https://github.com/Ridou/horus-os/.github/workflows/release.yml@refs/tags/{version}"` (no wildcards, no regex); mandatory `--cert-oidc-issuer` flag; negative test rejects wrong-identity fixture | active | 52 |
+| SIGN-05 | PyPI Trusted Publishing (PEP 807) is OUT OF SCOPE for v0.6 (horus-os does not currently publish to PyPI); deferral documented in `.planning/decisions/no-pypi-in-v0.6.md`; v0.7+ may revisit | active | 52 |
+
+### Supply-chain SBOM (SBOM)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SBOM-01 | Release-time SBOM generated via `cyclonedx-bom` (`cyclonedx-py environment`) against a FRESH `pip install <wheel>` venv (NOT `pip freeze` of the dev venv); CycloneDX 1.6 JSON format locked; signed via sigstore in the same `release.yml` job | active | 53 |
+| SBOM-02 | Two SBOMs ship per release: clean install (`pip install <wheel>`) AND extras install (`pip install <wheel>[dev,otel]`); both attached to the GitHub Release alongside their `.sigstore` bundles; matches existing two-variant install-smoke convention | active | 53 |
+| SBOM-03 | `actions/attest-sbom@<sha>` generates SBOM attestations bound to the artifact each SBOM describes; release-gate diffs SBOM contents against the published wheel's actual installed dependency tree | active | 53 |
+
+### Supply-chain scanning (SUPPLY)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SUPPLY-01 | NEW `.github/workflows/audit.yml` runs `pypa/gh-action-pip-audit@<sha>` (pip-audit >=2.10,<3) on every PR in dual-mode (`-s osv` AND `-s pypi`); failures block merge; `pip-audit` added to `[dev]` extras for local use | active | 53 |
+| SUPPLY-02 | `actions/dependency-review-action@<sha>` runs on every PR with explicit license allowlist (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, PSF-2.0); rejects new deps under unlisted licenses | active | 53 |
+| SUPPLY-03 | `.github/pip-audit-ignore.txt` is the ignore-list with mandatory dated-comment discipline (every entry includes `# YYYY-MM-DD: <reason>`); release-gate rejects undated entries; `.github/pip-audit-tracking/` directory carries fix-tracking docs for unfixable transitives | active | 53 |
+| SUPPLY-04 | `pip-audit` runs on BOTH `[dev]` AND `[dev,otel]` install variants to match the existing two-variant install-smoke pattern; matches the Phase 39 OTel-variant precedent | active | 53 |
+
+### Dependabot + zizmor (DEPBOT)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DEPBOT-01 | `.github/dependabot.yml` v2 with `package-ecosystem: pip` (groups: `ai-sdks` for anthropic + google-genai, `otel`, `web-stack`, `dev-tools`; cooldown 3 days default, 14 days majors; `applies-to: version-updates`) AND `package-ecosystem: github-actions` (SHA-pin refresh, weekly cadence) | active | 54 |
+| DEPBOT-02 | Security updates are explicitly UN-grouped (no `applies-to: security-updates` matcher); one PR per CVE; PRs gain a distinct `security-update` label; CVE PRs never hide inside a weekly grouped bump | active | 54 |
+| DEPBOT-03 | `zizmor` workflow runs on every PR + on `.github/workflows/**` edits; static-analysis findings block merge; complements actionlint by covering known-bad expression interpolation patterns | active | 54 |
+
+### Contributor docs + templates (CONTRIB)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| CONTRIB-01 | `CONTRIBUTING.md` rewritten: claim flow ("comment to claim, maintainer assigns"), branch policy, commit format (conventional commits, present tense, no em-dashes per CLAUDE.md), test/doc/changelog expectations; honest solo-maintainer language ("aim to acknowledge within 7 days"); NO 24-hour SLA, NO CLA, Discord optional | active | 55 |
+| CONTRIB-02 | `.github/PULL_REQUEST_TEMPLATE.md` NOTICE block removed at gate-flip; gains a checklist (tests added/updated, docs updated if user-visible, CHANGELOG `[Unreleased]` entry added if user-visible, license header on new files), and a reference to CONTRIBUTING.md + CODE_OF_CONDUCT.md | active | 55 |
+| CONTRIB-03 | `.github/ISSUE_TEMPLATE/` carries three forms: `bug.yml`, `feature.yml`, `security.yml` (security form redirects to GHSA private-vulnerability-reporting); banners flipped at gate-flip to drop "not accepting contributions" | active | 55 |
+| CONTRIB-04 | `.github/CODEOWNERS` NEW with PATH-SCOPED ownership (workflows, scripts/release_gate.py, scripts/verify_release.py, SECURITY.md, .planning/), NOT `* @Ridou` blanket assignment; reviewers auto-assigned by directory | active | 55 |
+| CONTRIB-05 | `docs/TRIAGE.md` NEW: label taxonomy with ≤15 hard cap (type:bug, type:feature, area:adapters, area:dashboard, area:cli, good-first-issue, help-wanted, security-update, breaking, blocked, needs-info, waiting-for-author, accepted, claimed, wontfix); `good-first-issue` rubric; weekly Sunday triage cadence; "may go silent up to 2 weeks" disclaimer; NO `actions/stale` auto-close | active | 55 |
+| CONTRIB-06 | `docs/LABEL-TAXONOMY.md` documents the label set + when each applies + saved-reply text for common scenarios (claim accepted, claim conflict, missing repro, stale-but-real bug) | active | 55 |
+| CONTRIB-07 | `.planning/decisions/` directory carries one-page rationale files: `no-cla.md`, `no-stale-bot.md`, `sigstore-keyless.md`, `sbom-cyclonedx.md`, `no-pypi-in-v0.6.md`; referenced from CONTRIBUTING.md and PROJECT.md key-decisions table | active | 55 |
+
+### SECURITY disclosure refresh (SECDISC)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SECDISC-01 | `SECURITY.md` "(not active yet)" / staged-pipeline section deleted at gate-flip; replaced with active vulnerability-disclosure flow pointing at GitHub Security Advisories private reporting | active | 56 |
+| SECDISC-02 | Severity-tier SLOs replace any blanket SLO: "aim to acknowledge within 7 days"; fix targets critical 14d / high 30d / medium 90d / low no commitment; coordinated disclosure 90-day default; over-capacity acknowledgement language explicit ("if we go silent, file a public issue tagged `security-update-followup`") | active | 56 |
+| SECDISC-03 | Supported-versions table refreshed to cover v0.5.x and v0.6.x; clear retirement policy (only the most recent minor receives security fixes); test-advisory ritual ("we publish at least one rehearsal GHSA before any real CVE") documented | active | 56 |
+| SECDISC-04 | One-time GitHub repo settings checklist appended to `docs/RELEASE.md`: enable private vulnerability reporting, enable Dependabot alerts + security updates, enable secret scanning + push protection; checklist items each include a verification command (`gh api`) the maintainer runs once | active | 56 |
+
+### Runbook (RUNBOOK)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| RUNBOOK-01 | NEW single `docs/MAINTAINER-RUNBOOK.md` covers BOTH the v0.6.0 release procedure (mirror of v0.5's STOP-BEFORE-TAG block) AND the post-flip operational playbook (freeze triggers, throttle triggers, burnout triggers, decision matrix for "is this PR worth my time?"); supersedes the candidate `docs/POSTFLIP-PLAYBOOK.md` name (one doc, not two) | active | 56 |
+| RUNBOOK-02 | `.planning/rollback/flip-gate-revert.md` carries the one-commit revert template that restores the pre-flip prose; tested by running `git apply` against a stale working tree in a Phase 59 rehearsal | active | 56 |
+
+### Discussions + status channel (DISCGH)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DISCGH-01 | GitHub Discussions enabled with categories (General, Q&A, Show and Tell, Ideas); enabling is a one-time repo settings step documented in `docs/MAINTAINER-RUNBOOK.md` repo-settings checklist | active | 56 |
+| DISCGH-02 | Pinned "Project Status" Discussion post created at v0.6.0 ship; text mirrors STATUS.md `## TL;DR` plus a "follow this post" CTA; updated at each release | active | 59 |
+
+### Gate flip (FLIP)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| FLIP-01 | All gate-flip prose changes land in ONE atomic commit at v0.6.0 ship: STATUS.md TL;DR rewritten to "contributions OPEN" + milestone row marked SHIPPED; README "Project status" section + CTAs updated + badge bumped to v0.6.0; CONTRIBUTING.md NOTICE blocks deleted; PR template NOTICE block deleted; SECURITY.md "(not active yet)" section deleted; `.github/workflows/issue-claim-watcher.yml` deleted; saved replies updated; CHANGELOG `[0.6.0]` promoted | active | 59 |
+| FLIP-02 | First-time-contributor approval gate enabled in branch protection settings: every fork-PR from a user without prior merged PRs requires explicit "Approve and run" before CI runs; documented in `docs/MAINTAINER-RUNBOOK.md` | active | 58 |
+| FLIP-03 | `accepted-for-review` throttle active for first 30 days post-flip: PRs without that label do not block the queue; documented in `docs/MAINTAINER-RUNBOOK.md` as the burnout-prevention valve; removed after first 30 days unless retained based on volume | active | 59 |
+
+### Test and CI (continued from v0.5)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-22 | `tests/test_contribution_gate_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers (mirrors v0.5 TEST-17 pattern) | active | 58 |
+| TEST-23 | Workflow-lint regression test enforces CIHARD-01..05: scans every `.github/workflows/*.yml` for forbidden patterns (`pull_request_target` unguarded, missing top-level `permissions:`, non-SHA action pin, `${{ github.event.* }}` in shell, missing `persist-credentials: false`) | active | 51 |
+| TEST-24 | Sigstore identity negative-test: fixture signature signed by a different workflow identity MUST fail `scripts/verify_release.py`; positive fixture signed by the canonical identity passes; both fixtures committed under `tests/fixtures/sigstore/` | active | 58 |
+| TEST-25 | Three-OS install-smoke matrix (macOS + Ubuntu + Windows × Python 3.11 + 3.12) remains green; new `verify_release.py` test runs on every OS to catch platform-specific sigstore-python regressions; existing install-smoke + install-smoke-plugin jobs byte-identical (no rename) | active | 58 |
+| TEST-26 | Pre-flip soft-launch rehearsal (Phase 59): 3-5 invited contributors land sample PRs end-to-end through the new audit + sign + verify pipeline; friction findings tracked in `.planning/phases/59-*/REHEARSAL.md`; rehearsal PRs credited in CHANGELOG | active | 58 |
+
+### Release (continued from v0.5)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-13 | Tag v0.6.0 with CHANGELOG and GitHub Release; gitsign-signed tag; `docs/MIGRATION-v0.5-to-v0.6.md` documents: no schema migration, no new base dependencies (signing/SBOM/audit are CI-time), one new `[dev]` addition (`pip-audit`), the gate flip's external-facing changes | active | 59 |
+| REL-14 | `scripts/release_gate.py` extended from 8 to 13 checks (5 new): `release-workflow-signing-present` (grep for sigstore-python + attest-build-provenance literals), `release-workflow-sbom-present` (grep for cyclonedx-py + attest-sbom), `audit-workflow-present` (grep for pip-audit + dependency-review-action), `local-pip-audit-clean` (`pip-audit -s osv` exits 0), `actions-pinned-by-sha` (regex asserts every `uses:` is `@<40-hex>`); `--check` enum APPENDED, existing 8 values byte-identical | active | 57 |
+| REL-15 | Two-tier release-gate execution: tier 1 (pre-merge, local, <10s) covers the grep-only checks + lint; tier 2 (pre-release, network, ~60s) adds `pip-audit` network call + sigstore-verify on the built wheel; tier choice via `--tier {local,release}` CLI flag (default `release`); offline mode short-circuits tier-2 with explicit `--allow-offline` flag plus warning | active | 57 |
+
+## v0.7 Command Center
+
+Polished local-first dashboard plus a full OPTIONAL integration suite (Discord, Supabase, Vercel, Tailscale, GitHub, AI providers, existing adapters) connectable through guided in-dashboard walkthroughs with green-light verification and in-app key management. Every integration is optional; horus-os runs fully locally with only an LLM key. Phase column is TBD until the roadmap maps each requirement.
+
+### Design system and layout shell (DESIGN)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DESIGN-01 | Dashboard renders against a single Tailwind v4 design-token theme (background, text, accent, border, and semantic tokens) defined in one place | active | 60 |
+| DESIGN-02 | A reusable Modal primitive (portal-mounted, backdrop, Escape to close, focus trap) is available to every page | active | 60 |
+| DESIGN-03 | A reusable multi-step Stepper primitive (numbered progress, back/continue/done, per-step validation) is available | active | 60 |
+| DESIGN-04 | The dashboard uses a persistent sidebar navigation shell listing all pages, with a dark default theme | active | 60 |
+| DESIGN-05 | A shared UI kit (empty state, loading skeleton, status dot/badge, metric card, markdown renderer) is used consistently across pages | active | 60 |
+
+### Tier-1 dashboard pages (PAGES)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| PAGES-01 | User can view the agent roster at /team with status filter tabs, live counts, and a list vs org-chart view toggle | active | 63 |
+| PAGES-02 | User can open a single agent at /team/[agent] and see its persona, color, domain, model, and recent session activity | active | 63 |
+| PAGES-03 | User can browse the markdown vault at /memory with a folder tree, content viewer, debounced search, and time-ago timestamps | active | 63 |
+| PAGES-04 | User can view the task queue at /tasks (pending, running, completed) and retry or cancel a task | active | 63 |
+| PAGES-05 | User can watch a live timeline of agent actions at /activity | active | 63 |
+| PAGES-06 | The existing /traces view is redesigned against the new design system | active | 63 |
+| PAGES-07 | The existing observability view is redesigned as /costs with Recharts-based charts | active | 63 |
+| PAGES-08 | User can read /about explaining what horus-os is, the running version, and where to get help | active | 63 |
+
+### Starter agent team (TEAM)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEAM-01 | `horus-os init` auto-creates five generic starter agents (Coordinator, Engineer, Researcher, Writer, Operator), each with a name, color, domain, and default model | active | 63 |
+| TEAM-02 | Each starter agent ships a SOUL.md persona (YAML frontmatter plus Identity, Principles, Voice, Boundaries, Workflow sections) with a user-name template placeholder | active | 63 |
+| TEAM-03 | The Coordinator can delegate work to the other starter agents via the existing delegate_to_agent tool | active | 63 |
+
+### Seed content and first-run (SEED)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SEED-01 | First run seeds an example vault of generic sample notes so /memory is not empty, clearly labeled as example data | active | 63 |
+| SEED-02 | A demo trace is seeded on init so /traces and /activity are not empty, with an example-data banner and a way to clear it | active | 63 |
+| SEED-03 | A first-run onboarding tour overlay highlights the core pages in turn and can be dismissed and replayed | active | 63 |
+
+### Integrations surface and guided setup (SETUP)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SETUP-01 | An Integrations page lists every connector (Anthropic, Gemini, Discord, Slack, Email, Calendar, GitHub, Supabase, Vercel, Tailscale) as a card with a status indicator | active | 61 |
+| SETUP-02 | GET /api/integrations returns each integration's metadata and live configured/verified status without returning any secret value | active | 61 |
+| SETUP-03 | Each integration card opens a guided multi-step popup walkthrough explaining what it unlocks, where to get the credential (with a portal deep-link), and the exact env var or command | active | 61 |
+| SETUP-04 | Walkthrough steps can display an optional screenshot or image asset bundled with the dashboard | active | 61 |
+| SETUP-05 | The get-started page launches the same guided setup, replacing the reserved placeholder | active | 61 |
+| SETUP-06 | In demo mode the walkthroughs degrade to instructional-only with no writes | active | 61 |
+
+### Verification and green-light readiness (VERIFY)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| VERIFY-01 | Each integration exposes a server-side verification probe that tests the configured credential and returns pass or fail without echoing the secret | active | 62 |
+| VERIFY-02 | The Integrations surface shows a per-integration readiness state (verified, configured-but-unverified, missing, error) as a green-light indicator | active | 61 |
+| VERIFY-03 | Changing or rotating a credential invalidates a previously verified state via key-hash change detection | active | 62 |
+| VERIFY-04 | A readiness summary tells the user which integrations are ready, and never blocks local-only operation on any optional integration | active | 61 |
+
+### In-app key management (KEYS)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| KEYS-01 | A real /settings page lets the user see which credentials are set (masked) and adjust or replace them per integration | active | 62 |
+| KEYS-02 | A secret-aware key-write endpoint persists an allowlisted credential to the local data_dir .env at chmod 600 and to the running process, and never echoes the value back | active | 62 |
+| KEYS-03 | The key-write endpoint refuses non-loopback clients and returns an error in demo mode | active | 62 |
+| KEYS-04 | After a credential change the UI tells the user whether a restart is needed and surfaces the new verification state | active | 62 |
+
+### Discord control bot (DISC, continued from v0.3)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DISC-05 | An opt-in setup creates the bot's channel and category layout idempotently and never deletes channels it does not own | active | 64 |
+| DISC-06 | Typing in the control channel opens a thread, submits the message to the orchestrator, and posts the result back in that thread | active | 64 |
+| DISC-07 | Guild-scoped slash commands are registered for the core actions, with stale global-command cleanup | active | 64 |
+| DISC-08 | Task progress is posted as status cards and reactions provide approve and feedback signals | active | 64 |
+| DISC-09 | Privileged-command authorization uses a configurable admin role rather than a hardcoded name, and the Message Content privileged-intent requirement is documented | active | 64 |
+| DISC-10 | The Discord setup guide and the in-dashboard walkthrough cover full-admin bot creation, intents, and the invite URL | active | 64 |
+
+### Always-live mission control: Supabase (SUPA)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SUPA-01 | An opt-in background loop incrementally syncs local SQLite rows to Supabase using an updated-at cursor and push-only upserts | active | 65 |
+| SUPA-02 | Supabase writes use a server-side service key only; the service key never reaches the browser or the static bundle | active | 65 |
+| SUPA-03 | Versioned Supabase schema migrations create the mirrored tables with row-level security enabled | active | 65 |
+| SUPA-04 | When configured, the dashboard can read from Supabase directly with the anon key so a deployed dashboard stays current without redeploys | active | 65 |
+| SUPA-05 | The runtime starts and runs fully with zero Supabase configuration; Supabase lives behind an optional [supabase] extra | active | 65 |
+
+### Deploy your own dashboard: Vercel (VERCEL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| VERCEL-01 | The dashboard build honors a configurable API base URL so a Vercel-hosted copy can target a reachable backend, defaulting to same-origin locally | active | 67 |
+| VERCEL-02 | A walkthrough documents deploying your own dashboard to Vercel (root directory, environment variables, build) | active | 67 |
+| VERCEL-03 | An observe-only Vercel client reports deploy status using a user-supplied token, behind an optional [vercel] extra | active | 67 |
+| VERCEL-04 | Any guidance that exposes the dashboard beyond localhost carries a prominent warning that /api has no authentication layer | active | 67 |
+
+### Remote access and 24/7 operation (REMOTE)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REMOTE-01 | Mutating endpoints (including the key-write endpoint) are guarded to loopback by default, and starlette is pinned to a version without the host-header bypass | active | 62 |
+| REMOTE-02 | `horus-os serve --host` is documented alongside the localhost default and its security implications | active | 66 |
+| REMOTE-03 | A remote-access guide covers reaching the dashboard over Tailscale (serve or Funnel), gated on adding an authentication layer first | active | 66 |
+| REMOTE-04 | `horus-os service install` registers an always-on service cross-platform (systemd, launchd, Windows) with restart-on-failure | active | 66 |
+| REMOTE-05 | An in-process cron scheduler runs recurring agent routines from a schedules table so routines fire 24/7, with a catch-up policy for missed runs | active | 66 |
+
+### GitHub integration (GH)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| GH-01 | GitHub appears in the Integrations surface with a token-based connect walkthrough and a verification probe | active | 61 |
+| GH-02 | An optional GitHub tool lets an agent read repository data (issues, pull requests, files) using the configured token, behind an opt-in extra | active | 67 |
+
+### Migration (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MIG-06 | The SQLite schema migration that adds v0.7 tables (schedules, integration verification state, sync cursors) is additive and idempotent | active | 62 |
+
+### Test and CI (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-27 | Regression tests cover the new endpoints (integrations list, verification probe, key-write) including the loopback guard and demo-mode refusal | active | 62 |
+| TEST-28 | A test asserts the Discord channel bootstrap is idempotent and never deletes channels outside its managed set | active | 64 |
+| TEST-29 | A test asserts the Supabase service key never appears in any browser-exposed value or the static bundle | active | 65 |
+| TEST-30 | Cross-OS tests cover the always-on service install path on macOS, Ubuntu, and Windows | active | 66 |
+| TEST-31 | Three-OS install-smoke remains green with the new optional extras | active | 67 |
+
+### Release (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-16 | v0.7.0 ships behind the three-OS hard gate (macOS, Ubuntu, Windows; Python 3.11 and 3.12) | active | 68 |
+| REL-17 | The new optional extras ([supabase], [vercel]) are excluded from [all] and documented | active | 68 |
+
+### Deferred to a later milestone (v0.7 context)
+
+These are intentionally out of v0.7 scope: Tier-2 dashboard pages (/inbox, /approvals, /goals, /schedules UI, /health, /terminal), the memory intelligence pipeline (fact extraction, consolidation, vault drift, working vs long-term split, likely a v0.8 milestone), voice features via a paid SDK, OAuth-based connect flows (token or API key is sufficient for v0.7), and any personal-data domains.
 
 ## Coverage summary
 
@@ -417,7 +671,7 @@
 
 "Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
 
-## Traceability — v0.5 Plugin System
+## Traceability - v0.5 Plugin System
 
 Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth: the Phase column in each category table above. Where a requirement's Phase column lists two numbers (ISOLATE-01 "42, 43" and TEST-19 "42, 43"), the owning phase is the one carrying the bulk of the work; the other phase consumes its substrate.
 
@@ -464,3 +718,130 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 | REL-10 | 50 | Complete (2026-05-26) |
 
 **Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.
+
+## Traceability - v0.6 Contribution Gate
+
+Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth: the Phase column in each category table above. Mirrors v0.5 traceability shape.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CIHARD-01 | 51 | Pending |
+| CIHARD-02 | 51 | Pending |
+| CIHARD-03 | 51 | Pending |
+| CIHARD-04 | 51 | Pending |
+| CIHARD-05 | 51 | Pending |
+| TEST-23 | 51 | Pending |
+| SIGN-01 | 52 | Complete |
+| SIGN-02 | 52 | Complete |
+| SIGN-03 | 52 | Complete |
+| SIGN-04 | 52 | Complete |
+| SIGN-05 | 52 | Complete |
+| SBOM-01 | 53 | Pending |
+| SBOM-02 | 53 | Pending |
+| SBOM-03 | 53 | Pending |
+| SUPPLY-01 | 53 | Pending |
+| SUPPLY-02 | 53 | Pending |
+| SUPPLY-03 | 53 | Pending |
+| SUPPLY-04 | 53 | Pending |
+| DEPBOT-01 | 54 | Pending |
+| DEPBOT-02 | 54 | Pending |
+| DEPBOT-03 | 54 | Pending |
+| CONTRIB-01 | 55 | Pending |
+| CONTRIB-02 | 55 | Pending |
+| CONTRIB-03 | 55 | Pending |
+| CONTRIB-04 | 55 | Pending |
+| CONTRIB-05 | 55 | Pending |
+| CONTRIB-06 | 55 | Pending |
+| CONTRIB-07 | 55 | Pending |
+| SECDISC-01 | 56 | Pending |
+| SECDISC-02 | 56 | Pending |
+| SECDISC-03 | 56 | Pending |
+| SECDISC-04 | 56 | Pending |
+| RUNBOOK-01 | 56 | Pending |
+| RUNBOOK-02 | 56 | Pending |
+| DISCGH-01 | 56 | Pending |
+| REL-14 | 57 | Pending |
+| REL-15 | 57 | Pending |
+| TEST-22 | 58 | Pending |
+| TEST-24 | 58 | Pending |
+| TEST-25 | 58 | Pending |
+| TEST-26 | 58 | Pending |
+| FLIP-02 | 58 | Pending |
+| FLIP-01 | 59 | Pending |
+| FLIP-03 | 59 | Pending |
+| DISCGH-02 | 59 | Pending |
+| REL-13 | 59 | Pending |
+
+**Coverage:** 46 v0.6 requirements, 46 mapped, 0 orphans, 0 duplicates. Phase 52 (fork-PR CI split) consolidated into Phase 51 per research SUMMARY recommendation (v0.5 tests use recorded provider responses; no live-secret fork-CI path needed in v0.6). Result: 9-phase shape (51-59) instead of 10.
+
+## Traceability - v0.7 Command Center
+
+Single-phase mapping for every v0.7 requirement (Phases 60-68). Source-of-truth: the Phase column in each category table above.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DESIGN-01 | 60 | Complete |
+| DESIGN-02 | 60 | Complete |
+| DESIGN-03 | 60 | Complete |
+| DESIGN-04 | 60 | Complete |
+| DESIGN-05 | 60 | Complete |
+| SETUP-01 | 61 | Complete |
+| SETUP-02 | 61 | Complete |
+| SETUP-03 | 61 | Complete |
+| SETUP-04 | 61 | Complete |
+| SETUP-05 | 61 | Complete |
+| SETUP-06 | 61 | Complete |
+| VERIFY-02 | 61 | Complete |
+| VERIFY-04 | 61 | Complete |
+| GH-01 | 61 | Complete |
+| KEYS-01 | 62 | Complete |
+| KEYS-02 | 62 | Complete |
+| KEYS-03 | 62 | Complete |
+| KEYS-04 | 62 | Complete |
+| VERIFY-01 | 62 | Complete |
+| VERIFY-03 | 62 | Complete |
+| REMOTE-01 | 62 | Complete |
+| MIG-06 | 62 | Complete |
+| TEST-27 | 62 | Complete |
+| PAGES-01 | 63 | Complete |
+| PAGES-02 | 63 | Complete |
+| PAGES-03 | 63 | Complete |
+| PAGES-04 | 63 | Complete |
+| PAGES-05 | 63 | Complete |
+| PAGES-06 | 63 | Complete |
+| PAGES-07 | 63 | Complete |
+| PAGES-08 | 63 | Complete |
+| TEAM-01 | 63 | Complete |
+| TEAM-02 | 63 | Complete |
+| TEAM-03 | 63 | Complete |
+| SEED-01 | 63 | Complete |
+| SEED-02 | 63 | Complete |
+| SEED-03 | 63 | Complete |
+| DISC-05 | 64 | Complete |
+| DISC-06 | 64 | Complete |
+| DISC-07 | 64 | Complete |
+| DISC-08 | 64 | Complete |
+| DISC-09 | 64 | Complete |
+| DISC-10 | 64 | Complete |
+| TEST-28 | 64 | Complete |
+| SUPA-01 | 65 | Complete |
+| SUPA-02 | 65 | Complete |
+| SUPA-03 | 65 | Complete |
+| SUPA-04 | 65 | Complete |
+| SUPA-05 | 65 | Complete |
+| TEST-29 | 65 | Complete |
+| REMOTE-02 | 66 | Complete |
+| REMOTE-03 | 66 | Complete |
+| REMOTE-04 | 66 | Complete |
+| REMOTE-05 | 66 | Complete |
+| TEST-30 | 66 | Complete |
+| VERCEL-01 | 67 | Complete |
+| VERCEL-02 | 67 | Complete |
+| VERCEL-03 | 67 | Complete |
+| VERCEL-04 | 67 | Complete |
+| GH-02 | 67 | Complete |
+| TEST-31 | 67 | Complete |
+| REL-16 | 68 | Complete |
+| REL-17 | 68 | Complete |
+
+**Coverage:** 63 v0.7 requirements, 63 mapped, 0 orphans, 0 duplicates. VERIFY-01 and VERIFY-03 (server-side probes, key-hash detection) land in Phase 62 with the key-write security substrate; VERIFY-02 and VERIFY-04 (UI status indicators, readiness summary) land in Phase 61 with the read-only integrations surface. REMOTE-01 (starlette pin + loopback guard) lands in Phase 62 as a BLOCKING security prerequisite; REMOTE-02..05 (docs, service install, cron) land in Phase 66. GH-01 (integrations card + verify probe) lands in Phase 61; GH-02 (GitHub tool behind extra) lands in Phase 67. TEST-27..31 each land in the phase that owns the code they exercise.

@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [main]
 
+permissions: read-all
+
 jobs:
   lint-and-test:
     name: lint+test / ${{ matrix.os }} / Python ${{ matrix.python-version }}
@@ -18,10 +20,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -37,6 +41,14 @@ jobs:
 
       - name: Run ruff format check
         run: ruff format --check .
+
+      - name: Run actionlint (CIHARD-05)
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+        with:
+          # raven-actions/actionlint prepends the 'v'; pass the bare semver so
+          # the release tag resolves to v1.7.12 (a leading 'v' yields vv1.7.12,
+          # a 404 against rhysd/actionlint releases).
+          version: 1.7.12
 
       - name: time.time() lint gate (Pitfall 3)
         run: python scripts/lint_no_wallclock.py
@@ -54,6 +66,86 @@ jobs:
       - name: CLI smoke check
         run: python -m horus_os --version
 
+      # D-08: em-dash guard - runs once on ubuntu/3.11 only.
+      # Scoped to files changed in this push/PR to avoid tripping on
+      # legacy content that predates this rule. The self-test confirms
+      # the grep actually detects U+2014 before scanning changed files.
+      - name: No em-dashes in committed prose (D-08)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        shell: bash
+        run: |
+          # Positive self-test: guard MUST detect the deliberate fixture
+          if ! grep -q $'\xe2\x80\x94' tests/ci_guards/sample_emdash.txt; then
+            echo "ERROR: self-test failed - em-dash guard cannot detect U+2014"
+            exit 1
+          fi
+          echo "Self-test passed: em-dash detected in fixture."
+          # Collect files changed in this push or PR (against the base ref)
+          BASE_REF="${GITHUB_BASE_REF:-}"
+          if [ -n "$BASE_REF" ]; then
+            CHANGED=$(git diff --name-only "origin/${BASE_REF}" HEAD -- \
+              '*.py' '*.md' '*.ts' '*.tsx' '*.yml' '*.yaml' '*.toml' 2>/dev/null || true)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- \
+              '*.py' '*.md' '*.ts' '*.tsx' '*.yml' '*.yaml' '*.toml' 2>/dev/null || true)
+          fi
+          # Exclude the deliberate fixture from the scan
+          CHANGED=$(echo "$CHANGED" | grep -v '^tests/ci_guards/sample_emdash\.txt$' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No changed files to scan. Guard passes."
+            exit 0
+          fi
+          MATCHES=""
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            if grep -qn $'\xe2\x80\x94' "$f"; then
+              MATCHES="$MATCHES $f"
+            fi
+          done <<< "$CHANGED"
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: em-dash (U+2014) found in changed files:$MATCHES"
+            exit 1
+          fi
+          echo "No em-dashes found in changed files."
+
+      # D-08: reserved private-pipeline and personal-data name guard.
+      # Runs once on ubuntu/3.11 only, scoped to changed files.
+      - name: No reserved private-pipeline or personal-data names (D-08)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        shell: bash
+        run: |
+          BASE_REF="${GITHUB_BASE_REF:-}"
+          if [ -n "$BASE_REF" ]; then
+            CHANGED=$(git diff --name-only "origin/${BASE_REF}" HEAD -- \
+              '*.py' '*.md' '*.ts' '*.tsx' '*.yml' '*.yaml' '*.toml' 2>/dev/null || true)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- \
+              '*.py' '*.md' '*.ts' '*.tsx' '*.yml' '*.yaml' '*.toml' 2>/dev/null || true)
+          fi
+          # Exclude the ci_guards fixture directory from the scan.
+          CHANGED=$(echo "$CHANGED" | grep -v '^tests/ci_guards/' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No changed files to scan. Guard passes."
+            exit 0
+          fi
+          MATCHES=""
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            # Pattern from 60-RESEARCH.md Pattern 4 / PITFALLS.md Pitfall 18.
+            # Each reserved word carries one single-char class (e.g. r[a]lph)
+            # so this pattern matches the real names yet contains no literal
+            # reserved word itself: the guard scans workflow files (no blanket
+            # .github/workflows exclusion) without self-matching on this line.
+            if grep -qniE '\b(r[a]lph|s[o]l|a[t]las|v[i]triol|q[u]ill|s[c]ribe|p[o]stman)\b' "$f"; then
+              MATCHES="$MATCHES $f"
+            fi
+          done <<< "$CHANGED"
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: reserved private-pipeline names found in changed files:$MATCHES"
+            exit 1
+          fi
+          echo "No reserved private-pipeline names found in changed files."
+
   install-smoke:
     name: install-smoke / ${{ matrix.os }} / Python ${{ matrix.python-version }}
     needs: lint-and-test
@@ -66,10 +158,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -99,9 +193,11 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -138,9 +234,11 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -161,8 +259,8 @@ jobs:
 
   # TEST-20 (Phase 49): full plugin install + grant + load smoke on the
   # 3-OS x 2-Python matrix. Pip-installs the reference plugin from
-  # examples/horus-os-example-plugin, then drives the full discovery →
-  # registry → permission gate → loader pipeline via scripts/install_smoke_plugin.py
+  # examples/horus-os-example-plugin, then drives the full discovery ->
+  # registry -> permission gate -> loader pipeline via scripts/install_smoke_plugin.py
   # (a TestClient-based driver that exercises the FastAPI app in-process).
   # The release-gate's `plugin-install-smoke-ci` check (Phase 49 Task 2)
   # greps ci.yml for the literal `install-smoke-plugin` string so this
@@ -178,9 +276,11 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip

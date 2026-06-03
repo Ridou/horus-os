@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 96" fill="none" role="img" aria-label="horus-os">
+  <!-- Horizontal lockup: Wedjat mark + wordmark. For README hero / docs headers. -->
+  <g stroke="#00d4ff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M12 30 C 36 12, 78 10, 100 22" />
+    <path d="M16 44 C 30 28, 72 26, 92 40" />
+    <path d="M16 44 C 34 58, 72 56, 92 40" />
+    <path d="M92 40 C 104 38, 116 34, 126 26" />
+    <path d="M40 54 C 40 68, 40 78, 37 86" />
+    <path d="M60 55 C 62 74, 76 86, 88 80 C 96 76, 94 64, 84 66" />
+  </g>
+  <circle cx="52" cy="41" r="8" fill="#00d4ff" />
+  <text x="156" y="61" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="48" font-weight="700" letter-spacing="-1" fill="#e0e0e0">horus<tspan fill="#00d4ff">-os</tspan></text>
+</svg>

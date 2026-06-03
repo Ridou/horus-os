@@ -62,9 +62,11 @@ from horus_os.plugins import (
     PluginRegistry,
     discover_plugins,
 )
+from horus_os.server.dashboard_api import router as dashboard_router
+from horus_os.server.integrations_write import router as integrations_write_router
 from horus_os.server.plugins_api import router as plugins_router
 from horus_os.storage import Database, TraceRecord
-from horus_os.tools import ToolRegistry, read_file_tool
+from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
 
 DEFAULT_MAX_ITERATIONS = 10
@@ -78,8 +80,16 @@ DEFAULT_MAX_ITERATIONS = 10
 PLUGIN_LIFECYCLE_TIMEOUT_S = 2.0
 
 
-def create_app(data_dir: str | Path | None = None) -> Any:
-    """Return a configured FastAPI instance backed by the given data_dir."""
+def create_app(
+    data_dir: str | Path | None = None,
+    dashboard_dist: str | Path | None = None,
+) -> Any:
+    """Return a configured FastAPI instance backed by the given data_dir.
+
+    ``dashboard_dist`` overrides the location of the bundled Next.js static
+    export. When None, the packaged ``server/dashboard_dist/`` directory is used
+    if it exists, otherwise the legacy single-page HTML dashboard is served.
+    """
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -110,15 +120,15 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     # third-party plugins into the master ToolRegistry / AdapterRegistry.
     # Each failure (DiscoveryError, validate failure, permission denial,
     # load failure) is routed to plugin_registry.mark_error and the
-    # loop continues — broken plugins NEVER crash lifespan startup
+    # loop continues - broken plugins NEVER crash lifespan startup
     # (ISOLATE-01).
     #
     # Phase 43 additions:
     # 1. HORUS_OS_DISABLE_PLUGINS env var short-circuits the entire
     #    pipeline (ISOLATE-03 escape hatch). PluginRegistry stays empty.
-    # 2. Per-spec PluginRegistry.is_enabled gate — disabled plugins
+    # 2. Per-spec PluginRegistry.is_enabled gate - disabled plugins
     #    skip clean (no validate / load / start).
-    # 3. PermissionGate.resolve between register and load — missing
+    # 3. PermissionGate.resolve between register and load - missing
     #    grants flip status to error / error_phase='permission'.
     # 4. Lifespan loop below wraps plugin adapter start/stop in
     #    asyncio.wait_for(timeout=PLUGIN_LIFECYCLE_TIMEOUT_S).
@@ -135,7 +145,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         tool_registry=_app_tool_registry,
         adapter_registry=_registry,
     )
-    # Materialized adapter instances by name — populated as plugins
+    # Materialized adapter instances by name - populated as plugins
     # load, consumed by the lifespan to call start/stop under the
     # bounded wait. Kept separate from AdapterRegistry (which stores
     # names only).
@@ -249,7 +259,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         # Startup: call `start(context)` on each first-party adapter.
         # A failing start is captured into the registry; other adapters
         # still get their turn. First-party adapters (discord, slack,
-        # otel, ...) stay on the v0.3 unbounded-wait path — they are
+        # otel, ...) stay on the v0.3 unbounded-wait path - they are
         # trusted code shipped with the package.
         for _a in _adapters:
             _start = getattr(_a, "start", None)
@@ -400,20 +410,33 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         allow_credentials=False,
     )
 
-    static_dir = Path(__file__).parent / "static"
-    index_html = static_dir / "index.html"
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # Phase v0.7: serve the bundled Next.js dashboard export when it is present
+    # (built into server/dashboard_dist/ at wheel-build time). When it is absent
+    # (for example an editable install with no Node build), fall back to the
+    # legacy single-page HTML dashboard. The export is mounted at "/" at the very
+    # end of create_app so that every /api route is matched ahead of it.
+    _dashboard_dist = (
+        Path(dashboard_dist).expanduser()
+        if dashboard_dist is not None
+        else Path(__file__).parent / "dashboard_dist"
+    )
+    _serve_bundled_dashboard = (_dashboard_dist / "index.html").is_file()
+    if not _serve_bundled_dashboard:
+        static_dir = Path(__file__).parent / "static"
+        index_html = static_dir / "index.html"
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    @app.get("/")
-    def index() -> Any:
-        return FileResponse(str(index_html))
+        @app.get("/")
+        def index() -> Any:
+            return FileResponse(str(index_html))
 
     def _config() -> Config:
         return Config.load(Path(data_dir).expanduser() if data_dir is not None else None)
 
-    @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+    # Phase v0.7: /api/health now lives on the dashboard router below and
+    # returns the richer HealthResponse (status, version, db_size_bytes,
+    # and live trace / note / agent counts). It still degrades to a cheap
+    # 200 liveness probe when the database file does not yet exist.
 
     @app.get("/api/traces")
     def list_traces(limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -992,6 +1015,26 @@ def create_app(data_dir: str | Path | None = None) -> Any:
     # request can hit them.
     app.include_router(plugins_router)
 
+    # Phase v0.7: mount the read-only dashboard JSON surface (team,
+    # memory, activity, health, settings). Same boot-order contract as
+    # the plugins router: every route is wired before the first request.
+    app.include_router(dashboard_router)
+
+    # Phase 62: mount the credential write surface (POST /api/integrations/{name}/keys
+    # and POST /api/integrations/{name}/verify). Mounted after dashboard_router so
+    # the read-only GET /api/integrations is already wired.
+    app.include_router(integrations_write_router)
+
+    # Phase v0.7: mount the bundled Next.js static export at the root, AFTER every
+    # /api route so the API always takes precedence. html=True serves index.html
+    # for "/" and for each prerendered route directory (for example /team/).
+    if _serve_bundled_dashboard:
+        app.mount(
+            "/",
+            StaticFiles(directory=str(_dashboard_dist), html=True),
+            name="dashboard",
+        )
+
     return app
 
 
@@ -1015,6 +1058,7 @@ def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistr
     registry.register(read_note_tool(notes_store))
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
+    registry.register(make_github_read_tool())
     return registry
 
 

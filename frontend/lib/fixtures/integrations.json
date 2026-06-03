@@ -1,0 +1,110 @@
+{
+  "demo_mode": true,
+  "integrations": [
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "category": "AI Provider",
+      "description": "Powers the default agent runtime. Required for Claude-based agents.",
+      "status": "missing",
+      "env_var": "ANTHROPIC_API_KEY",
+      "required_vars": ["ANTHROPIC_API_KEY"],
+      "credential_portal_url": "https://console.anthropic.com/settings/keys"
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini",
+      "category": "AI Provider",
+      "description": "Powers Gemini-based agents. Required for Google AI model support.",
+      "status": "missing",
+      "env_var": "GEMINI_API_KEY",
+      "required_vars": ["GEMINI_API_KEY"],
+      "credential_portal_url": "https://aistudio.google.com/apikey"
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "category": "Communication",
+      "description": "Enables agents to send and receive messages in Discord servers.",
+      "status": "missing",
+      "env_var": "HORUS_OS_DISCORD_TOKEN",
+      "required_vars": ["HORUS_OS_DISCORD_TOKEN"],
+      "credential_portal_url": "https://discord.com/developers/applications"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "category": "Communication",
+      "description": "Enables agents to post messages and respond to events in Slack workspaces.",
+      "status": "missing",
+      "env_var": "HORUS_OS_SLACK_BOT_TOKEN",
+      "required_vars": ["HORUS_OS_SLACK_BOT_TOKEN", "HORUS_OS_SLACK_SIGNING_SECRET"],
+      "credential_portal_url": "https://api.slack.com/apps"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "category": "Communication",
+      "description": "Enables agents to send and receive email via IMAP and SMTP.",
+      "status": "missing",
+      "env_var": "HORUS_OS_EMAIL_IMAP_HOST",
+      "required_vars": [
+        "HORUS_OS_EMAIL_IMAP_HOST",
+        "HORUS_OS_EMAIL_IMAP_USER",
+        "HORUS_OS_EMAIL_IMAP_PASSWORD",
+        "HORUS_OS_EMAIL_SMTP_HOST"
+      ],
+      "credential_portal_url": ""
+    },
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "category": "Productivity",
+      "description": "Allows agents to read and create calendar events via Google Calendar.",
+      "status": "missing",
+      "env_var": "HORUS_OS_CALENDAR_OAUTH_CLIENT_PATH",
+      "required_vars": ["HORUS_OS_CALENDAR_OAUTH_CLIENT_PATH"],
+      "credential_portal_url": "https://console.cloud.google.com/apis/credentials"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "Developer",
+      "description": "Gives agents access to GitHub repositories, issues, and pull requests.",
+      "status": "missing",
+      "env_var": "GITHUB_TOKEN",
+      "required_vars": ["GITHUB_TOKEN"],
+      "credential_portal_url": "https://github.com/settings/tokens"
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "category": "Database",
+      "description": "Syncs agent data to a Supabase project for remote persistence.",
+      "status": "missing",
+      "env_var": "SUPABASE_URL",
+      "required_vars": ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"],
+      "credential_portal_url": "https://supabase.com/dashboard"
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel",
+      "category": "Deploy",
+      "description": "Enables agents to trigger and monitor Vercel deployments.",
+      "status": "missing",
+      "env_var": "HORUS_OS_VERCEL_TOKEN",
+      "required_vars": ["HORUS_OS_VERCEL_TOKEN"],
+      "credential_portal_url": "https://vercel.com/account/tokens"
+    },
+    {
+      "id": "tailscale",
+      "name": "Tailscale",
+      "category": "Network",
+      "description": "Connects agents to your Tailscale network for secure remote access.",
+      "status": "missing",
+      "env_var": "HORUS_OS_TAILSCALE_API_KEY",
+      "required_vars": ["HORUS_OS_TAILSCALE_API_KEY"],
+      "credential_portal_url": "https://login.tailscale.com/admin/settings/keys"
+    }
+  ]
+}

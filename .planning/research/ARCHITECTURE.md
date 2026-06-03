@@ -1,790 +1,609 @@
-# Architecture Research
+# Architecture Research — v0.6 Contribution Gate Integration
 
-**Domain:** v0.5 Plugin System — in-process third-party plugin loading with declared capabilities
-**Researched:** 2026-05-26
-**Confidence:** HIGH
+**Domain:** Open-source release/CI/contributor-trust infrastructure for a Python package (horus-os).
+**Researched:** 2026-05-29.
+**Mode:** Subsequent-milestone integration map (NOT greenfield).
+**Confidence:** HIGH for integration points, MEDIUM for tool choices (sigstore vs cosign, CycloneDX vs SPDX — decision-time locks called out in PROJECT.md).
 
-This file is the integration blueprint for v0.5. It assumes the reader has read PROJECT.md and ROADMAP.md and is familiar with the AdapterRegistry (Phase 22), the ToolRegistry (Phase 04), the ObservationBus (Phase 32), and the lazy-import pattern used by `OtelAdapter` (Phase 38). It maps every new component to a file path, every integration point to a named method, and proposes a strict build order with named dependencies.
+## Scope of this document
 
-## Standard Architecture
+This is **not** a from-scratch architecture. v0.5.0 already ships a 5-job CI matrix, an 8-check release gate, a STOP-BEFORE-TAG release procedure in `docs/RELEASE.md`, and a working contributor template set under `.github/`. The v0.6 contribution gate adds:
 
-### System Overview
+1. Signed release artifacts (SIGN).
+2. Supply-chain scanning + SBOMs (SUPPLY).
+3. Fork-PR hardening (CIHARD).
+4. Contributor docs + templates expansion (CONTRIB).
+5. Security disclosure surface (SECDISC).
+6. Release-gate extension (REL).
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  CLI / DASHBOARD SURFACE                                                     │
-│  ┌───────────────────────────┐  ┌────────────────────────────────────────┐   │
-│  │ horus-os plugins install  │  │ /plugins dashboard tab                 │   │
-│  │ horus-os plugins list     │  │ list / enable / disable / grant        │   │
-│  │ horus-os plugins enable   │  │ status, error count, capability chips  │   │
-│  └─────────────┬─────────────┘  └────────────────┬───────────────────────┘   │
-│                │                                   │                          │
-├────────────────┼───────────────────────────────────┼─────────────────────────┤
-│  API LAYER (FastAPI on app.state)                  │                          │
-│  ┌─────────────▼───────────────────────────────────▼───────────────────────┐ │
-│  │  /api/plugins  (GET list, GET :name, POST :name/enable, /disable,      │ │
-│  │  POST :name/grant, DELETE :name/grant/:capability)                     │ │
-│  └─────────────┬───────────────────────────────────────────────────────────┘ │
-├────────────────┼───────────────────────────────────────────────────────────────┤
-│  PLUGIN RUNTIME (new — src/horus_os/plugins/)                                │
-│  ┌─────────────▼───────────────────────────────────────────────────────────┐ │
-│  │ PluginRegistry  (app.state.plugin_registry — sibling of adapter_registry│ │
-│  │                  and tool_registry; PluginEntry rows)                   │ │
-│  └─────┬──────────────────────────────┬──────────────────────────────┬────┘ │
-│        │                              │                              │      │
-│  ┌─────▼─────┐                  ┌─────▼─────┐                  ┌─────▼─────┐│
-│  │ Discoverer│                  │ Validator │                  │ Permission││
-│  │  EP scan +│                  │ manifest +│                  │  Gate     ││
-│  │  fs scan  │                  │ compat +  │                  │  grant    ││
-│  │           │                  │ shape     │                  │  check    ││
-│  └─────┬─────┘                  └─────┬─────┘                  └─────┬─────┘│
-│        │                              │                              │      │
-│        └────────────────┬─────────────┴───────────────┬──────────────┘      │
-│                         ▼                             ▼                     │
-│              ┌──────────────────────┐      ┌──────────────────────┐        │
-│              │ Loader               │      │ HealthSubscriber     │        │
-│              │ - import entry mods  │      │ subscribes to        │        │
-│              │ - register tools via │      │ ObservationBus       │        │
-│              │   ToolRegistry       │      │ filters per-plugin   │        │
-│              │ - register adapters  │      │ surfaces err rate /  │        │
-│              │   via AdapterRegistry│      │ p95 latency          │        │
-│              │ - wrap with capability│     └──────────────────────┘        │
-│              │   enforcement        │                                       │
-│              └─────────┬────────────┘                                       │
-├────────────────────────┼──────────────────────────────────────────────────────┤
-│  EXISTING REGISTRIES (reused — no API breakage)                              │
-│  ┌─────────────────────▼──────┐    ┌──────────────────────────────────────┐  │
-│  │ ToolRegistry (v0.1)        │    │ AdapterRegistry (v0.3)               │  │
-│  │ - register(tool)           │    │ - register(name)                     │  │
-│  │ - invoke(name, input)      │    │ - mark_running / mark_error / touch  │  │
-│  └────────────────────────────┘    └──────────────────────────────────────┘  │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  PERSISTENCE (schema v5 → v6)                                                 │
-│  ┌──────────────────┐  ┌────────────────────────┐  ┌──────────────────────┐  │
-│  │ plugins          │  │ plugin_capabilities    │  │ plugin_status        │  │
-│  │ (installed list, │  │ (per-capability grant: │  │ (last_seen, error    │  │
-│  │  manifest hash)  │  │  state, granted_at)    │  │  count, last_error)  │  │
-│  └──────────────────┘  └────────────────────────┘  └──────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+Every section below answers: **what file, what section of that file, what existing pattern from v0.4 Phase 38/39 or v0.5 Phase 49/50 is the precedent, and what backward-compat invariant must hold**.
 
-### Component Responsibilities
+---
 
-| Component | New / Modified | Location | Responsibility |
-|-----------|----------------|----------|----------------|
-| `PluginSpec` (dataclass) | NEW | `src/horus_os/plugins/spec.py` | In-memory parsed manifest. One per discovered plugin. |
-| `PluginEntry` (dataclass) | NEW | `src/horus_os/plugins/registry.py` | One row per plugin: name, status, last error, granted capabilities. Mirror of v0.3 `AdapterEntry`. |
-| `PluginRegistry` | NEW | `src/horus_os/plugins/registry.py` | Per-app registry attached to `app.state.plugin_registry`. Mirror of v0.3 `AdapterRegistry`. |
-| `discover_plugins()` | NEW | `src/horus_os/plugins/discovery.py` | Walk `entry_points(group="horus_os.plugins")` plus scan `~/.horus-os/plugins/`. Return `list[PluginSpec]`. Mirror of v0.3 `discover_adapters()`. |
-| `validate_manifest()` | NEW | `src/horus_os/plugins/manifest.py` | Parse `horus-plugin.toml` via stdlib `tomllib`. Enforce field shape + horus_os_compat range. |
-| `PermissionGate` | NEW | `src/horus_os/plugins/permissions.py` | Compare declared capabilities against persisted grants. Returns `(grant_state, pending_capabilities)`. |
-| `CapabilityGuard` | NEW | `src/horus_os/plugins/permissions.py` | Decorator-style wrapper around plugin-provided tool handlers and adapter `bind`. Refuses calls when capability is not granted. |
-| `PluginLoader` | NEW | `src/horus_os/plugins/loader.py` | Imports entry-point modules. Threads `ToolRegistry` + `AdapterRegistry` references into plugin-provided tools and adapters. Wraps them with `CapabilityGuard`. |
-| `PluginHealthSubscriber` | NEW | `src/horus_os/plugins/health.py` | Subscribes to `ObservationBus`. Per-plugin error rate and latency p95 over a rolling window. Reads but never writes. |
-| Schema migration v5→v6 | MODIFIED | `src/horus_os/storage.py` | Three new tables: `plugins`, `plugin_capabilities`, `plugin_status`. Additive-only. v0.4 databases keep reading. |
-| `Database.{save,load,list}_plugin*` | NEW | `src/horus_os/storage.py` | CRUD for the three new tables. Same pattern as `save_profile` / `load_profile`. |
-| `/api/plugins` routes | NEW | `src/horus_os/server/api.py` | List / enable / disable / grant / revoke. Reads from `app.state.plugin_registry`, writes to `Database`. |
-| `/plugins` dashboard tab | NEW | `src/horus_os/server/static/index.html` + JS | Vanilla-JS, same pattern as v0.3 `/adapters` and v0.4 `/observability`. |
-| `horus-os plugins` CLI | NEW | `src/horus_os/cli/plugins_cmd.py` | Subcommands: `install`, `uninstall`, `list`, `info`, `enable`, `disable`. |
-| `ToolRegistry` | UNCHANGED (used as-is) | `src/horus_os/tools/registry.py` | Plugin loader calls `register(tool)` with `replace=False` default. Duplicate names rejected. |
-| `AdapterRegistry` | UNCHANGED (used as-is) | `src/horus_os/adapters/base.py` | Plugin loader calls `register(name)` on plugin-provided adapters; lifespan hooks already cover `start`/`stop`. |
-| `ObservationBus` | UNCHANGED (used as-is) | `src/horus_os/observability/bus.py` | `PluginHealthSubscriber.on_event` is subscribed alongside `CostAnnotator` and `SQLitePersister`. |
-
-## Recommended Project Structure
+## Current architecture (v0.5.0 substrate, must remain intact)
 
 ```
-src/horus_os/
-├── plugins/                    # NEW — entire plugin runtime lives here
-│   ├── __init__.py             # public API: discover_plugins, PluginRegistry, PluginSpec
-│   ├── spec.py                 # PluginSpec dataclass (manifest in-memory)
-│   ├── manifest.py             # parse horus-plugin.toml, validate, compat-check
-│   ├── discovery.py            # entry_points + filesystem scan
-│   ├── registry.py             # PluginRegistry + PluginEntry (mirror AdapterRegistry)
-│   ├── permissions.py          # PermissionGate + CapabilityGuard
-│   ├── loader.py               # import modules, register tools/adapters, wrap with guards
-│   └── health.py               # PluginHealthSubscriber, subscribes to ObservationBus
-├── adapters/                   # unchanged
-├── tools/                      # unchanged
-├── observability/              # unchanged (PluginHealthSubscriber subscribes here)
-├── server/
-│   └── api.py                  # MODIFIED — add /api/plugins routes + lifespan plugin wiring
-├── cli/
-│   ├── plugins_cmd.py          # NEW — horus-os plugins {install,uninstall,list,info,enable,disable}
-│   └── __init__.py             # MODIFIED — re-export run_plugins
-├── storage.py                  # MODIFIED — v5→v6 migration + plugin CRUD
-└── __main__.py                 # MODIFIED — add `plugins` subparser
++----------------------------------------------------------+
+|  Trigger surface                                          |
+|  push:main / pull_request:main                            |
++----------------------+-----------------------------------+
+                       |
+                       v
++----------------------------------------------------------+
+|  .github/workflows/ci.yml — single workflow, 5 jobs      |
+|  +--------------------------------------------------+    |
+|  |  lint-and-test  (3 OS x 2 py = 6 matrix entries) |    |
+|  |  -- ruff + pytest + capture-overhead + CLI smoke |    |
+|  +--------------------------------------------------+    |
+|       | needs:                                            |
+|       v                                                   |
+|  +---------------------+ +---------------------------+    |
+|  | install-smoke       | | install-smoke-no-otel     |    |
+|  | (.[all] extras)     | | (.[dev] only)             |    |
+|  +---------------------+ +---------------------------+    |
+|  +---------------------+ +---------------------------+    |
+|  | install-smoke-      | | install-smoke-plugin      |    |
+|  | with-otel           | | (reference plugin)        |    |
+|  | ([dev,otel])        | |                           |    |
+|  +---------------------+ +---------------------------+    |
++----------------------------------------------------------+
 
-tests/
-├── plugins/
-│   ├── test_manifest.py
-│   ├── test_discovery.py
-│   ├── test_registry.py
-│   ├── test_permissions.py
-│   ├── test_loader.py
-│   ├── test_loader_isolation.py    # failure containment cases
-│   ├── test_health.py
-│   └── fixtures/
-│       ├── manifest_valid.toml
-│       ├── manifest_bad_version.toml
-│       └── good_plugin_pkg/        # importable test plugin (entry-point registered via conftest)
-├── server/
-│   └── test_api_plugins.py
-└── cli/
-    └── test_plugins_cmd.py
++----------------------------------------------------------+
+|  scripts/release_gate.py — local pre-tag gate            |
+|  8 checks, exit 0 = green:                                |
+|   1. pricing-freshness                                    |
+|   2. ci-two-variant-smoke (greps ci.yml for two literals) |
+|   3. wheel-pricing-bundle (python -m build + zipfile)     |
+|   4. pytest                                               |
+|   5. docs-drift (manifest schema)                         |
+|   6. plugin-install-smoke-ci (greps ci.yml)               |
+|   7. reference-plugin-manifest-valid                      |
+|   8. v0-4-fixture-roundtrip                               |
++----------------------------------------------------------+
 
-examples/
-└── horus-os-example-plugin/        # reference plugin (separate package, same monorepo)
-    ├── pyproject.toml              # declares entry-point `horus_os.plugins`
-    ├── horus-plugin.toml           # the manifest
-    ├── README.md
-    └── src/horus_os_example_plugin/
-        ├── __init__.py
-        ├── tools.py                # echo_text tool
-        └── adapter.py              # noop_webhook adapter
++----------------------------------------------------------+
+|  docs/RELEASE.md — STOP-BEFORE-TAG manual procedure       |
+|  Pre-flight -> release_gate.py -> version bump ->         |
+|  CHANGELOG -> push -> wait CI -> git tag -a ->            |
+|  gh release create                                        |
++----------------------------------------------------------+
+
++----------------------------------------------------------+
+|  Contributor surface (.github/)                           |
+|  PULL_REQUEST_TEMPLATE.md (50 lines, includes "PRs from   |
+|    forks closed without review" NOTICE block)             |
+|  ISSUE_TEMPLATE/                                          |
+|    bug_report.yml (form)                                  |
+|    feature_request.yml (form)                             |
+|    config.yml (blank_issues_enabled: false; SECURITY      |
+|      contact link to /security/advisories/new)            |
+|  workflows/issue-claim-watcher.yml (canned reply bot)     |
+|  CODEOWNERS -- DOES NOT EXIST                             |
++----------------------------------------------------------+
+
++----------------------------------------------------------+
+|  Top-level governance                                     |
+|  CONTRIBUTING.md (209 lines, "NOT accepting outside PRs") |
+|  SECURITY.md (84 lines, GHSA disclosure already set up;   |
+|    section "Contributor-pipeline security (not active     |
+|    yet)" already wired to flip at v0.6)                   |
+|  CODE_OF_CONDUCT.md (already in tree)                     |
+|  STATUS.md ("solo development mode" TL;DR; v0.6 listed    |
+|    as NOT PLANNED with TBD date)                          |
++----------------------------------------------------------+
 ```
 
-### Structure Rationale
+**Byte-identity invariants v0.6 must preserve** (Phase 49 precedent — release_gate.py existing 8 checks are literal-string-greppable):
 
-- **`src/horus_os/plugins/` is one package, not a single file.** v0.3 put adapter discovery in one file (`adapters/base.py`); plugins are a bigger surface (discovery + manifest + permissions + loader + health) so each concern gets its own module. Mirrors the `observability/` package layout from v0.4.
-- **Plugin runtime imports `tools.ToolRegistry` and `adapters.base.AdapterRegistry`, never vice versa.** One-way dependency: plugins → registries. Keeps registries reusable by core code that never knew about plugins.
-- **Manifest module is pure parsing + validation, no I/O.** `manifest.py` accepts a bytes payload and returns a `PluginSpec` or raises. The filesystem read happens in `discovery.py`. Makes manifest tests synthetic-bytes-only.
-- **`PluginHealthSubscriber` reads, never writes.** It subscribes to events that other subscribers (`SQLitePersister`) already persist. Doubling persistence would lie about cost. The v0.4 `tool_invocations` table already has everything needed for per-plugin rollups, identified by tool name.
-- **Reference plugin lives in `examples/horus-os-example-plugin/` as a separate installable package.** Same repo, separate `pyproject.toml`. CI installs it from a path dep so the install path matches what third-party authors will use.
+- `install-smoke-no-otel` and `install-smoke-with-otel` job names — `release_gate.py:130-131` greps for these literals.
+- `install-smoke-plugin` job name — `release_gate.py:132` greps for this literal.
+- 8 existing release-gate check names (`pricing-freshness`, `ci-two-variant-smoke`, `wheel-pricing-bundle`, `pytest`, `docs-drift`, `plugin-install-smoke-ci`, `reference-plugin-manifest-valid`, `v0-4-fixture-roundtrip`) — REL-11 contract is "existing checks stay green; new checks add on top."
+- `--check` CLI choices set `{pricing,wheel,ci,tests,docs-drift,plugin-install,reference-manifest,fixture-roundtrip}` — v0.6 EXTENDS this enum, MUST NOT rename existing values.
+- `docs/RELEASE.md` STOP-BEFORE-TAG block prose — v0.6 prepends new steps to the pre-tag list, MUST NOT mutate existing prose.
+- `pyproject.toml` base `dependencies = ["pydantic>=2.7,<3", "packaging>=24.0"]` — v0.5 deliberately added these two; v0.6 SHOULD NOT add new runtime deps (signing/SBOM tooling lives in CI, not the runtime).
 
-## Architectural Patterns
+---
 
-### Pattern 1: Manifest model — TOML on disk, dataclass in memory
+## v0.6 integration map (answers to all 9 architecture questions)
 
-**What:** Plugin authors write a `horus-plugin.toml`. The runtime parses it into a frozen `PluginSpec` dataclass on first discovery and stores the hash on disk for change detection.
+### Q1 — Where do signing steps live in ci.yml?
 
-**When to use:** Every plugin discovered via either entry-point or filesystem scan resolves through this path. There is no second manifest format.
-
-**Trade-offs:** TOML is human-edited (good), but `tomllib` is read-only (v0.5 never writes a manifest; the CLI's `install` command runs `pip install` and lets pip stamp the entry point, no manifest mutation needed). Stdlib `tomllib` ships on Python 3.11+ so zero new deps.
-
-**Concrete `horus-plugin.toml` fields:**
-
-```toml
-# Identity (required)
-name = "horus-os-example-plugin"        # PyPI / dist name; must match entry-point dist
-version = "0.1.0"                       # SemVer; the plugin's own version, not horus-os's
-description = "A reference plugin demonstrating tool + adapter registration."
-author = "Jane Doe <jane@example.com>"
-license = "Apache-2.0"
-homepage = "https://github.com/janedoe/horus-os-example-plugin"
-
-# Compatibility (required)
-horus_os_compat = ">=0.5,<0.7"          # PEP 440 range; checked at validate time
-
-# Entry points (at least one required)
-[tools]
-echo_text = "horus_os_example_plugin.tools:echo_text_tool"   # dotted-path import
-
-[adapters]
-noop_webhook = "horus_os_example_plugin.adapter:NoopWebhookAdapter"
-
-# Declared capabilities (default deny — anything not listed cannot be used)
-[[capabilities]]
-name = "filesystem.read"
-paths = ["~/Documents/**", "/tmp/horus-*"]               # glob list, optional refinement
-reason = "Reads the user's reference notes for cross-linking."
-
-[[capabilities]]
-name = "net.outbound"
-hosts = ["api.example.com"]                              # host allowlist, optional
-reason = "Posts a status ping every 5 minutes."
-
-[[capabilities]]
-name = "secrets.read"
-keys = ["EXAMPLE_API_KEY"]                               # env-var/secret key allowlist
-reason = "Authenticates against api.example.com."
-```
-
-**`PluginSpec` dataclass shape (the in-memory model):**
-
-```python
-# src/horus_os/plugins/spec.py
-from dataclasses import dataclass, field
-
-@dataclass(frozen=True)
-class CapabilityRequest:
-    name: str                           # e.g. "filesystem.read"
-    reason: str                         # plugin-author-supplied justification (shown to user)
-    paths: tuple[str, ...] = ()         # optional refinement (globs)
-    hosts: tuple[str, ...] = ()         # optional refinement (host list)
-    keys: tuple[str, ...] = ()          # optional refinement (env/secret keys)
-
-@dataclass(frozen=True)
-class PluginSpec:
-    # Identity
-    name: str
-    version: str
-    description: str
-    author: str
-    license: str
-    homepage: str | None
-    # Compat
-    horus_os_compat: str                # PEP 440 spec string
-    # Entry points (dotted paths; resolved at load time, not parse time)
-    tool_entries: tuple[tuple[str, str], ...]      # ((tool_name, "pkg.mod:factory"), ...)
-    adapter_entries: tuple[tuple[str, str], ...]   # ((adapter_name, "pkg.mod:Class"), ...)
-    # Capabilities
-    capabilities: tuple[CapabilityRequest, ...]
-    # Provenance
-    source: str                         # "entry_point:horus_os.plugins" or "filesystem:~/.horus-os/plugins/foo"
-    manifest_hash: str                  # sha256 of manifest bytes, for change detection
-```
-
-### Pattern 2: Discovery + load pipeline as a six-phase pipeline
-
-**What:** The lifespan handler in `server/api.py` runs the same six phases for every plugin. Each phase has a single failure mode and a single registry mutation. Phase boundaries are observable in `/api/plugins`.
-
-**Why six phases not "one big load":** v0.3's `discover_adapters()` is one phase (find-and-instantiate) with one failure mode (silently skip). Plugins have four distinct failure modes (manifest invalid, compat mismatch, permission denied, import error) that need different error surfaces in the dashboard. A single phase would collapse all four into "broken plugin," which is exactly the UX hole v0.3 has on adapter load failures.
-
-**The six phases, with the exact lifespan integration point:**
-
-```python
-# src/horus_os/server/api.py — inside create_app()'s _lifespan async ctx mgr
-#   (runs after the v0.3 adapter start loop)
-
-# Phase A: Discover (no side effects on registries)
-plugin_specs = discover_plugins(
-    extra_paths=[_resolved_data_dir.parent / ".horus-os" / "plugins"]
-)
-plugin_registry = PluginRegistry()
-
-for spec in plugin_specs:
-    plugin_registry.register(spec.name, spec=spec)
-
-    # Phase B: Validate (manifest shape + horus_os_compat)
-    try:
-        validate_manifest(spec, current_version=__version__)
-    except ValidationError as exc:
-        plugin_registry.mark_error(spec.name, "validate", f"{type(exc).__name__}: {exc}")
-        continue
-
-    # Phase C: Permission gate (compare against persisted grants)
-    granted, pending = PermissionGate(db).resolve(spec)
-    if pending:
-        plugin_registry.mark_pending_grants(spec.name, pending)
-        continue   # plugin sits in "needs grant" state; not loaded
-
-    # Phase D: Load (import entry-point modules; register tools + adapters via existing registries)
-    try:
-        loader = PluginLoader(
-            tool_registry=_app_tool_registry,
-            adapter_registry=_registry,
-            guards=CapabilityGuard.for_grants(granted),
-        )
-        loaded = loader.load(spec)            # returns Loaded(adapters=[...], tools=[...])
-        plugin_registry.mark_loaded(spec.name, loaded)
-    except Exception as exc:
-        plugin_registry.mark_error(spec.name, "load", f"{type(exc).__name__}: {exc}")
-        continue
-
-    # Phase E: Start (for adapter lifecycle — reuses v0.3 lifespan code)
-    for adapter in loaded.adapters:
-        start = getattr(adapter, "start", None)
-        if start is None:
-            continue
-        try:
-            await asyncio.wait_for(start(_adapter_context), timeout=10.0)
-        except Exception as exc:
-            plugin_registry.mark_error(spec.name, "start", f"{type(exc).__name__}: {exc}")
-
-# Phase F: Health (subscribe one watcher per app, filters per-plugin)
-_health = PluginHealthSubscriber(plugin_registry)
-_bus.subscribe(_health.on_event)
-
-app.state.plugin_registry = plugin_registry
-```
-
-**Trade-off:** Six explicit phases is more code than one fused load, but each phase's status is independently surfaceable in `/api/plugins`. The "explain why a plugin is not running" question that haunts every plugin system has a one-word answer from this design.
-
-### Pattern 3: Capability enforcement at the registry boundary, not the call site
-
-**Decision:** Wrap plugin-provided tools at registration time. Built-in tools and built-in adapters skip the wrap entirely (implicit full-grant).
-
-**Where the wrap goes:** Inside `PluginLoader.load(spec)`, before calling `tool_registry.register(tool)`, the loader replaces `tool.handler` with a `CapabilityGuard`-wrapped handler. The same loader wraps the adapter's `bind` to refuse mount when a declared capability is not granted. By the time the tool is in the registry, every invocation already passes through the guard. `tools/loop.py` and `tools/registry.py` see no plugin-specific code.
-
-**Why not at the call site (in `loop.py` or `registry.invoke()`):**
-
-1. The call site doesn't know which tools came from which plugins; that mapping lives in `PluginEntry`. Threading it through changes `ToolRegistry.invoke`'s signature, which v0.4's observability hooks depend on. Wrap-at-registration keeps the v0.4 API surface byte-identical.
-2. Built-ins (`read_file_tool`, the memory tools, the calendar adapter's tools) would have to be explicitly allowlisted in the call-site check. Wrap-at-registration means built-ins skip the codepath because the wrap simply isn't applied.
-3. The guard naturally composes with the v0.4 cost / latency capture inside `tools/loop.py:_execute_one`: the guard is the outermost wrapper, so a refused call records `status=refused` and `error_type=CapabilityError` in `tool_invocations` without any extra plumbing.
-
-**`CapabilityGuard` surface:**
-
-```python
-# src/horus_os/plugins/permissions.py
-from typing import Callable
-
-class CapabilityError(PermissionError):
-    """Raised when a plugin tool tries to use an un-granted capability."""
-
-class CapabilityGuard:
-    def __init__(self, granted: frozenset[str]):
-        self._granted = granted
-
-    def wrap_tool_handler(self, plugin_name: str, capabilities: tuple[str, ...],
-                          handler: Callable) -> Callable:
-        missing = tuple(c for c in capabilities if c not in self._granted)
-        if not missing:
-            return handler                                # full grant — pass-through
-
-        def _refuse(**kwargs):
-            raise CapabilityError(
-                f"plugin {plugin_name!r} requires {missing!r} but they are not granted; "
-                f"grant via `horus-os plugins grant {plugin_name} --capability {missing[0]}`"
-            )
-        return _refuse
-
-    @classmethod
-    def for_grants(cls, granted: dict[str, frozenset[str]]) -> "GuardFactory":
-        # Returns a per-plugin guard lookup so loader can produce one guard per plugin.
-        ...
-```
-
-**Built-in tools and adapters skip this entirely:** `read_file_tool`, the memory tools, the v0.3 webhook adapter all register through the same `ToolRegistry.register` / `AdapterRegistry.register` calls they already use. The plugin loader is the only caller of `wrap_tool_handler`. Built-ins are "implicit full grant" by construction, not by allowlist.
-
-**Persistence schema for grants (the `plugin_capabilities` table):**
-
-```sql
-CREATE TABLE IF NOT EXISTS plugin_capabilities (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    plugin_name   TEXT NOT NULL,
-    capability    TEXT NOT NULL,             -- e.g. "filesystem.read"
-    state         TEXT NOT NULL,             -- "granted" | "revoked" | "pending"
-    refinement    TEXT,                      -- JSON of paths/hosts/keys (NULL = full grant for the capability name)
-    requested_at  TEXT NOT NULL,             -- ISO-8601 UTC, when manifest first surfaced this request
-    granted_at    TEXT,                      -- ISO-8601 UTC, NULL until user grants
-    revoked_at    TEXT,                      -- ISO-8601 UTC, NULL unless revoked
-    manifest_hash TEXT NOT NULL,             -- the manifest hash this row was last reconciled against
-    UNIQUE (plugin_name, capability)
-);
-
-CREATE INDEX IF NOT EXISTS idx_plugin_capabilities_plugin
-    ON plugin_capabilities(plugin_name);
-```
-
-**Manifest-hash tie is the critical UX detail:** when a plugin update changes the requested capability set, `manifest_hash` no longer matches and the row flips to `state=pending` even if it was previously granted. This implements PROJECT.md's "never silently re-granted across plugin upgrades that change the requested set."
-
-### Pattern 4: Failure isolation by in-process catch-and-degrade
-
-**v0.5 chooses in-process loading** (PROJECT.md "Out of Scope" explicitly defers OS-level isolation to v0.6+). The boundary is a Python `try/except` at every phase boundary plus the subscriber exception-swallow already in `ObservationBus`.
-
-**Per-phase failure containment:**
-
-| Phase | What can fail | Containment | Status in registry |
-|-------|---------------|-------------|---------------------|
-| A. Discover | importlib EP scan raises, manifest file unreadable | Wrap each EP iteration in try/except (mirror v0.3 `discover_adapters` exception swallow). Skip the broken EP, log to stderr at INFO. | Plugin never appears in `app.state.plugin_registry`; logs explain why. |
-| B. Validate | `tomllib.loads` raises, compat range mismatch, unknown field, capability name not on allowlist | `ValidationError` caught in lifespan loop. Plugin registered with `status="error"`, `error_phase="validate"`, error message recorded. | `GET /api/plugins/:name` shows the validation error verbatim. |
-| C. Permission gate | Database read fails, manifest hash mismatch | DB read failure crashes start (database is required). Hash mismatch is by design. Plugin sits in `status="pending"`. | `pending` state distinct from `error`; dashboard prompts the user. |
-| D. Load | Entry-point import raises, factory returns wrong type, `tool_registry.register` raises `ValueError` on name conflict | Caught in lifespan loop. Plugin registered with `status="error"`, `error_phase="load"`. Any tools already registered earlier in the load are unregistered via a tracked rollback list before the next iteration. | Surfaces `error_phase="load"` + the exception message. |
-| E. Start | Adapter `start(ctx)` raises or hangs | `try/except` around start; status flipped to `error`. **Hang containment:** v0.5 wraps each `start` in `asyncio.wait_for(start(ctx), timeout=10.0)`. Adapters that need more than 10s should do that work in a background task spawned from `start`, not block `start` itself. The v0.3 `DiscordAdapter` already follows this pattern. | `status="error"`, `error_phase="start"`, with an explicit `TimeoutError` message if the cap fired. |
-| F. Health | Subscriber raises during `on_event` | `ObservationBus.publish` already wraps every handler with bare `try/except BaseException` (see `observability/bus.py` lines 174-181). The plugin runtime gets this isolation for free. | Errors silently absorbed; the plugin's status is unaffected by its own observability subscriber crashing. |
-
-**Tool-invocation-time failure (not at load, at runtime):** a plugin tool that throws on invocation is caught by `tools/loop.py:_execute_one` (already-existing v0.4 capture site). The error is persisted in `tool_invocations` with `status="error"`, `error_type=type(exc).__name__`. The `PluginHealthSubscriber` reads this stream and flips `plugin_status.last_error_at` plus increments `error_count` over the rolling window. Nothing else changes. The v0.4 substrate already does the heavy lifting.
-
-**What in-process containment does not protect against:** a plugin that imports `sys` and calls `sys.exit(1)`, or one that monkey-patches `builtins`, or one that spawns a runaway greenlet. PROJECT.md is explicit that this is acceptable for v0.5; sandboxing is v0.6+. The reference plugin and CONTRIBUTING.md will document "no `sys.exit`, no global monkey-patching, no unbounded background tasks" as conventions, not contracts.
-
-### Pattern 5: Health rollup as a v0.4 ObservationBus consumer
-
-**`PluginHealthSubscriber` reads `LLMCallEvent` and `ToolCallEvent` and rolls up per-plugin numbers in memory.** No new SQLite writes. The v0.4 `tool_invocations` table already records every tool call with `tool_name`, `status`, `latency_ms`. Per-plugin rollup is "which tools did this plugin register?" lookup against `PluginRegistry`, then sum.
-
-```python
-# src/horus_os/plugins/health.py
-class PluginHealthSubscriber:
-    def __init__(self, registry: PluginRegistry, window_seconds: int = 3600):
-        self._registry = registry
-        self._window = window_seconds
-        # ring buffers per plugin, keyed by name
-        self._samples: dict[str, deque[tuple[float, str]]] = defaultdict(deque)
-
-    def on_event(self, event: ObservationEvent) -> None:
-        if event.kind != "TOOL_CALL":
-            return
-        plugin_name = self._registry.plugin_for_tool(event.tool_name)
-        if plugin_name is None:
-            return                                          # built-in tool; ignore
-        ts = time.monotonic()
-        self._samples[plugin_name].append((ts, event.status))
-        self._evict_old(plugin_name, ts)
-        if event.status == "error":
-            entry = self._registry.get(plugin_name)
-            if entry is not None:
-                entry.error_count += 1
-                entry.last_error_at = event.created_at
-
-    def rollup(self, plugin_name: str) -> PluginHealth: ...
-```
-
-This pattern keeps cost where it already is (SQLite), keeps the dashboard read path simple (in-memory rollup), and means the v0.4 `/api/observability/*` routes work unchanged for any user who wants the full SQL view.
-
-## Data Flow
-
-### Startup Sequence (FastAPI lifespan order)
+**Recommendation: NEW workflow file `.github/workflows/release.yml`, NOT additions to `ci.yml`.**
 
 ```
-create_app() called
-    ↓
-discover_adapters()                       [v0.3 — built-in adapters]
-    ↓
-discover_plugins()                        [v0.5 — entry points + ~/.horus-os/plugins/]
-    ↓
-PluginRegistry constructed
-    ↓
-ObservationBus subscriptions:
-  1. CostAnnotator.on_event              [v0.4 — must run first]
-  2. SQLitePersister.on_event            [v0.4 — persists annotated event]
-  3. PluginHealthSubscriber.on_event     [v0.5 — reads only, rolls up per-plugin]
-    ↓
-lifespan startup:
-  for adapter in built-in adapters:      [v0.3 unchanged]
-      await adapter.start(ctx)
-  for spec in plugin_specs:              [v0.5 NEW]
-      validate → permission → load → start
-    ↓
-app yields to FastAPI request loop
+.github/workflows/
+  ci.yml          (existing; PR + push:main -- runs on every commit)
+  release.yml     (NEW; on: release.types: [published] -- runs once per tag)
+  issue-claim-watcher.yml (existing; deleted at gate-flip in Phase 59)
 ```
 
-### Plugin Tool Invocation Path
+**Trigger:** `on: release: types: [published]` (not `on: push: tags:`). The release-published trigger means signing happens AFTER `gh release create` lands in the manual STOP-BEFORE-TAG sequence, preserving the human-confirmation gate `docs/RELEASE.md` already documents. This matches the sigstore-python `release-signing-artifacts` mode where the action uploads bundles to the existing release page rather than racing to mint one.
 
-```
-agent.run_agent_loop
-    ↓
-tools/loop.py:_execute_one(tool_use)     [v0.4 capture site — start perf_counter]
-    ↓
-ToolRegistry.invoke(name, input)         [v0.1 unchanged]
-    ↓
-tool.handler(**input)                    [v0.5 NEW — handler is now CapabilityGuard-wrapped]
-    ├── CapabilityGuard checks granted set
-    │     ├── full grant  → calls original handler
-    │     └── missing cap → raises CapabilityError
-    ↓
-return value flows back up
-    ↓
-loop.py records ToolCallEvent on the ObservationBus    [v0.4 unchanged]
-    ↓
-PluginHealthSubscriber sees the event, rolls up        [v0.5 NEW]
+**Required permissions block in release.yml:**
+
+```yaml
+permissions:
+  id-token: write       # OIDC token for sigstore keyless signing
+  contents: write       # upload signed bundles to the release
+  attestations: write   # actions/attest-build-provenance writes
 ```
 
-### Permission Grant Flow (User Action)
+**Job shape (one job, sequential steps):**
 
-```
-User opens /plugins tab in dashboard
-    ↓
-GET /api/plugins                          → returns list with pending_capabilities[] highlighted
-    ↓
-User clicks "grant" on a capability
-    ↓
-POST /api/plugins/:name/grant {capability: "filesystem.read"}
-    ↓
-Database: UPDATE plugin_capabilities SET state='granted', granted_at=now()
-    ↓
-PluginRegistry.mark_grant_applied(:name, :capability)
-    ↓
-Response: { "name": ..., "status": "granted_pending_restart", "needs_restart": true }
-```
-
-**Restart-required is intentional for v0.5.** Hot-loading a plugin after granting is feasible (re-run phases D-E from the lifespan path) but adds a code path with surprising failure modes (capability cache mismatch, partial load state). v0.5 prompts the user to restart; v0.6 can add hot-reload once the rest of the surface is stable.
-
-### Schema Migration v5 → v6
-
-Additive only. Idempotent under the same `OperationalError`-suppression pattern v0.4 ships (storage.py lines 186-212).
-
-```sql
--- v6: plugin runtime tables
-
-CREATE TABLE IF NOT EXISTS plugins (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL UNIQUE,
-    version         TEXT NOT NULL,
-    description     TEXT NOT NULL DEFAULT '',
-    author          TEXT,
-    license         TEXT,
-    homepage        TEXT,
-    horus_os_compat TEXT NOT NULL,
-    source          TEXT NOT NULL,           -- "entry_point" | "filesystem"
-    source_detail   TEXT NOT NULL,           -- "horus_os.plugins:foo" or "/abs/path"
-    manifest_hash   TEXT NOT NULL,
-    enabled         INTEGER NOT NULL DEFAULT 1,
-    installed_at    TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_plugins_name ON plugins(name);
-
-CREATE TABLE IF NOT EXISTS plugin_capabilities (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    plugin_name   TEXT NOT NULL,
-    capability    TEXT NOT NULL,
-    state         TEXT NOT NULL,             -- "granted" | "revoked" | "pending"
-    refinement    TEXT,                      -- JSON of paths/hosts/keys (NULL = full grant)
-    reason        TEXT,                      -- author-supplied justification
-    requested_at  TEXT NOT NULL,
-    granted_at    TEXT,
-    revoked_at    TEXT,
-    manifest_hash TEXT NOT NULL,             -- breaks the grant when manifest changes
-    UNIQUE (plugin_name, capability)
-);
-
-CREATE INDEX IF NOT EXISTS idx_plugin_capabilities_plugin
-    ON plugin_capabilities(plugin_name);
-
-CREATE TABLE IF NOT EXISTS plugin_status (
-    plugin_name      TEXT NOT NULL PRIMARY KEY,
-    status           TEXT NOT NULL,          -- "loaded" | "pending" | "error" | "disabled"
-    error_phase      TEXT,                   -- "validate" | "load" | "start" | NULL
-    last_error       TEXT,
-    last_error_at    TEXT,
-    error_count      INTEGER NOT NULL DEFAULT 0,
-    last_loaded_at   TEXT,
-    last_seen_at     TEXT
-);
+```yaml
+jobs:
+  sign-and-attest:
+    runs-on: ubuntu-latest    # signing does NOT need 3-OS matrix
+    steps:
+      - actions/checkout@v4
+      - actions/setup-python@v5  (3.12)
+      - run: python -m pip install build
+      - run: python -m build       # produces dist/*.whl + dist/*.tar.gz
+      - uses: sigstore/gh-action-sigstore-python
+        with:
+          inputs: ./dist/*.whl ./dist/*.tar.gz
+          release-signing-artifacts: true    # auto-uploads .sigstore bundles
+      - uses: actions/attest-build-provenance
+        with:
+          subject-path: 'dist/*'
+      - uses: actions/attest-sbom            # see Q2
+        with:
+          subject-path: 'dist/*'
+          sbom-path: sbom.cdx.json
 ```
 
-`Database.init()` adds a `stored_version < 6` block alongside the existing v4 and v5 blocks. No existing rows touched. v0.4 databases continue to read.
+**Why a separate workflow, not new jobs in ci.yml:**
 
-## API Surface
+1. `ci.yml` runs on `pull_request: branches:[main]` — fork PRs would trigger signing attempts, fail on missing OIDC, and pollute CI runs.
+2. `release.yml` runs ONCE per release, not on every commit. Embedding it in ci.yml means every PR pays the wheel-build cost.
+3. Separation maps to the `release_gate.py` philosophy: ci.yml proves the CODE is shippable; release.yml proves the ARTIFACTS are signed. Two distinct contracts.
+4. Existing precedent: the project already separates ci.yml from issue-claim-watcher.yml on trigger boundaries (CI events vs issue events). release.yml extends the same "one workflow per trigger class" pattern.
 
-### `GET /api/plugins`
+**Signed git tags:** Git tag signing happens in the human STOP-BEFORE-TAG sequence on the maintainer's workstation (`git tag -s vN.M.P` or `git tag -a vN.M.P` with GPG configured in git). This is a `docs/RELEASE.md` prose update (one line, change `git tag -a` to `git tag -s`), not a CI change.
 
-```json
-{
-  "plugins": [
-    {
-      "name": "horus-os-example-plugin",
-      "version": "0.1.0",
-      "status": "loaded",
-      "enabled": true,
-      "description": "A reference plugin demonstrating tool + adapter registration.",
-      "author": "Jane Doe <jane@example.com>",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/janedoe/horus-os-example-plugin",
-      "source": "entry_point",
-      "source_detail": "horus_os.plugins:example",
-      "registered_tools": ["echo_text"],
-      "registered_adapters": ["noop_webhook"],
-      "capabilities": [
-        {"name": "filesystem.read", "state": "granted", "reason": "Reads notes.", "granted_at": "..."},
-        {"name": "net.outbound",    "state": "pending", "reason": "Pings api.", "granted_at": null}
-      ],
-      "health": {
-        "last_seen_at": "2026-05-26T12:34:56Z",
-        "error_count_1h": 0,
-        "latency_p95_ms_1h": 23,
-        "sample_count_1h": 47
-      }
-    }
-  ]
-}
+**Precedent cited:** v0.5 Phase 49 added a NEW job (`install-smoke-plugin`) to ci.yml because the contract was "every commit must pass this." v0.6 SIGN's contract is "every shipped artifact must carry this," which is a release-time concern. Different trigger then different workflow file. The same logic that puts `release_gate.py` outside CI (it's a maintainer-runs-once-per-tag tool, see docs/RELEASE.md "## Why the release gate exists") puts signing in `release.yml`.
+
+---
+
+### Q2 — Where does SBOM generation live?
+
+**Recommendation: NEW workflow step inside `release.yml`, NOT a new `scripts/build_sbom.py`.**
+
+**File path:** `.github/workflows/release.yml`, step between `python -m build` and `sigstore/gh-action-sigstore-python`.
+
+**Tool:** `cyclonedx-py` (the official CycloneDX Python generator). Format choice CycloneDX per PROJECT.md:43-44 ("Likely CycloneDX (Python tooling more mature)"). Final lock-in is a requirements-time decision the roadmapper carries forward.
+
+**Step shape:**
+
+```yaml
+- name: Generate SBOM (CycloneDX)
+  run: |
+    python -m pip install cyclonedx-bom
+    python -m cyclonedx_py environment --output-format JSON --output-file sbom.cdx.json
 ```
 
-### Full route table
+**Where the SBOM lands:**
 
-| Method | Path | Body | Returns | Notes |
-|--------|------|------|---------|-------|
-| `GET` | `/api/plugins` | — | `{plugins: [PluginRow, ...]}` | Lists all discovered plugins regardless of state. |
-| `GET` | `/api/plugins/{name}` | — | `PluginRow` | 404 if not discovered. |
-| `POST` | `/api/plugins/{name}/enable` | `{}` | `PluginRow` | Sets `plugins.enabled=1`; needs_restart=true. |
-| `POST` | `/api/plugins/{name}/disable` | `{}` | `PluginRow` | Sets `plugins.enabled=0`; unregisters tools/adapters at restart. |
-| `POST` | `/api/plugins/{name}/grant` | `{"capability": "filesystem.read", "refinement": null}` | `PluginRow` | Flips `plugin_capabilities.state` to granted. needs_restart=true on first grant. |
-| `DELETE` | `/api/plugins/{name}/grant/{capability}` | — | `PluginRow` | Revokes a capability. needs_restart=true. |
-| `POST` | `/api/plugins/refresh` | `{}` | `{discovered: int, new: int}` | Re-runs Phase A (discover) without restart; reports diff. Does not load new plugins (those need restart). |
+- **Primary:** Attached to the GitHub Release as a release asset via `gh release upload vN.M.P sbom.cdx.json` (same surface as the signed bundles).
+- **Secondary:** Signed via `actions/attest-sbom` (writes to the GitHub attestation API; queryable via `gh attestation verify`).
+- **NOT stored in:** the wheel itself (would bloat package), `dist/` permanently (CI ephemeral), or `docs/` (would drift between releases).
 
-**Why not `/api/plugins/{name}/reload`?** It is feasible but adds a known-painful code path (live unload + re-register of tools/adapters). v0.5 punts; v0.6 can add it once we see real usage.
+**Why no `scripts/build_sbom.py`:**
 
-## CLI Surface
+1. SBOM generation needs the FINAL installed environment for the release artifact, which only exists after `python -m build`. Wrapping a one-line `cyclonedx-py` invocation in a stdlib-only Python script (the `release_gate.py` convention) buys nothing.
+2. `release_gate.py` carries a stdlib-only contract (line 88: "Pure stdlib"). cyclonedx-py is a third-party package, so it can't live there.
+3. There IS a `scripts/build_manifest_schema.py` precedent for "regenerate-this-artifact" scripts (Phase 47), but the manifest schema is a SOURCE artifact committed to the repo; the SBOM is an OUTPUT artifact attached to the release. Different lifecycle, different home.
+
+**Precedent cited:** Phase 38 OtelAdapter chose to live behind an optional `[otel]` extra rather than be added to base deps for the same reason: the SBOM tooling is a release-time concern, not a runtime concern. Just as `opentelemetry-sdk` does not appear in base `dependencies`, `cyclonedx-bom` does not need to either; it's a CI-time pip install in the release workflow.
+
+---
+
+### Q3 — How does scripts/release_gate.py absorb new checks?
+
+**Recommendation: Same 8 to N extension pattern Phase 49 used for the v0.4 to v0.5 4 to 8 jump.** Add new functions, extend the `--check` enum, extend the docstring's numbered list, extend the env-var override list.
+
+**Three new v0.6 checks to add (REL contract):**
+
+| # | Check name | What it asserts | Greps / probes |
+|---|------------|-----------------|----------------|
+| 9 | `release-workflow-signing-present` | `.github/workflows/release.yml` exists AND contains the literal `sigstore/gh-action-sigstore-python` | grep, no Python import |
+| 10 | `release-workflow-sbom-present` | `.github/workflows/release.yml` contains the literal `cyclonedx_py` (or `cyclonedx-bom`) | grep |
+| 11 | `pip-audit-clean` | `python -m pip_audit --strict` against the installed `[all]` extras exits 0 | subprocess |
+| 12 | `dependabot-config-present` (optional) | `.github/dependabot.yml` exists with `package-ecosystem: pip` AND `package-ecosystem: github-actions` entries | grep |
+
+Pick three for REL-13 (matching the cardinality jump Phase 49 made, 4 new checks). Recommended cut: ship #9, #10, #11. Drop #12 to Phase polish or merge into #9 (the release workflow's existence implies Dependabot wiring).
+
+**File edits to scripts/release_gate.py:**
+
+1. **Docstring (lines 1-93):** Extend "Runs EIGHT checks" to "Runs ELEVEN checks (4 v0.4 + 4 v0.5 + 3 v0.6)." Add three new numbered sections, copying the prose shape from sections 5-8 (the v0.5 additions in Phase 49). Each new docstring section names the file path, the contract, and the pitfall it closes.
+
+2. **New constants (after line 134):**
+   ```python
+   DEFAULT_RELEASE_YML_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
+   RELEASE_LITERAL_SIGSTORE = "sigstore/gh-action-sigstore-python"
+   RELEASE_LITERAL_SBOM = "cyclonedx_py"
+   ```
+
+3. **Three new `check_*` functions** following the existing function signature contract:
+   - `check_release_workflow_signing_present(release_yml_path: Path) -> CheckResult` cloning the shape of `check_ci_two_variant_smoke_present` (lines 229-256). Pure grep, no subprocess.
+   - `check_release_workflow_sbom_present(release_yml_path: Path) -> CheckResult` same shape.
+   - `check_pip_audit_clean(repo_root: Path) -> CheckResult` cloning the shape of `check_pytest_pass` (lines 307-330). subprocess.run with capture_output, tail 20 lines on failure.
+
+4. **`--check` argparse enum (lines 685-694):** Add `"release-signing"`, `"release-sbom"`, `"pip-audit"` to the `choices` tuple. PRESERVE the existing 8 values byte-identical (REL-11 contract).
+
+5. **Path-override env vars (after line 670):** Add `_resolved_release_yml_path()` mirroring the `_resolved_ci_yml_path()` shape (lines 650-654), reading `HORUS_OS_RELEASE_YML_PATH_OVERRIDE`. Required for hermetic tests (`tests/test_release_gate_v0_6_checks.py`).
+
+6. **`main()` dispatch (lines 718-759):** Append three new `if selected in (None, "release-signing"):` blocks. PRESERVE the ordering of existing dispatch (v0.4 checks first, v0.5 checks second, v0.6 checks third). Phase 49 added v0.5 checks AFTER v0.4 checks in the dispatch list; Phase XX (the v0.6 release-gate-extension phase) appends v0.6 after v0.5.
+
+7. **Skip-env support:** Add `HORUS_OS_RELEASE_GATE_SKIP_PIP_AUDIT` to mirror `HORUS_OS_RELEASE_GATE_SKIP_BUILD` semantics for the one new subprocess-heavy check.
+
+**Test surface:** New `tests/test_release_gate_v0_6_checks.py` cloning the shape of the existing v0.5 test (referenced in Phase 49 success criteria). Each new check needs (a) one happy-path test, (b) one negative-path test using the env-var path-override to point at a mutated file.
+
+**Precedent cited:**
+- Phase 49 Task 1 ("scripts/release_gate.py extension (4 new checks)", ROADMAP.md:512) is the exact precedent. Same shape, same idioms.
+- The 4-to-8 jump (Phase 49) and 8-to-11 jump (v0.6) both preserve the literal-string-grep idiom for the CI-shape checks. Greppability is the contract: the gate runs in <5s on a clean checkout because it reads files and runs one subprocess (pytest), and v0.6 adds at most one more subprocess (pip-audit).
+
+---
+
+### Q4 — Fork-PR safety: how does ci.yml split?
+
+**Recommendation: One workflow file `ci.yml`, two-tier job split via the `if:` guard on per-job permissions and trigger source. NOT a separate `ci-public.yml` + `ci-trusted.yml`.**
+
+**Reasoning, why one file not two:**
+
+1. Two workflow files create a duplication trap: every CI change must land in two places, and the `release_gate.py` literal-string check (`install-smoke-plugin` lives in `ci.yml`) would have to track which file the job moved to.
+2. GitHub Actions supports per-job permissions and per-job `if:` guards. The splitting can be done inline.
+3. The 5 existing jobs all run safely on fork PRs today (they install + lint + test from the fork's code, with NO secrets). The hardening is about (a) which jobs receive secrets, (b) which jobs run on every PR vs only on labeled/trusted PRs.
+
+**Tier A (runs on EVERY PR, including untrusted forks), no secrets:**
+
+- `lint-and-test`, read-only of fork code, no secrets needed.
+- `install-smoke`, fresh install from fork code, no secrets.
+- `install-smoke-no-otel`, same.
+- `install-smoke-with-otel`, same.
+- `install-smoke-plugin`, same; reference plugin lives in-repo.
+
+(All five existing jobs are Tier A. No fork-PR risk today because none consume secrets.)
+
+**Tier B (runs ONLY on push:main or labeled PR with `safe-to-test`), may consume secrets:**
+
+- NEW `supply-chain-audit` job, runs `pip-audit`, may upload SARIF to GitHub Security tab (requires `security-events: write`).
+- Future Tier B candidates: any job that needs to push to a registry, post to external services, or read repo secrets.
+
+**Tier B guard pattern (YAML structure):**
+
+```yaml
+supply-chain-audit:
+  if: |
+    github.event_name == 'push' ||
+    (github.event_name == 'pull_request' &&
+     github.event.pull_request.head.repo.full_name == github.repository) ||
+    (github.event_name == 'pull_request' &&
+     contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
+  runs-on: ubuntu-latest
+  permissions:
+    security-events: write   # only this job, not the whole workflow
+    contents: read
+  steps:
+    - ...
+```
+
+**Top-level workflow guard:** Set `permissions: read-all` at the workflow level (REVOKES the default fork-write surface), then opt-in to write per job. This is the GitHub-recommended "least-privilege per job" pattern.
+
+**Pinned action versions by SHA:** Apply across the whole workflow file. `actions/checkout@v4` becomes `actions/checkout@<40-char-sha>  # v4.x.y`. Comment marks the human-readable version. Dependabot's `package-ecosystem: github-actions` raises PRs to bump the SHAs.
+
+**Why NOT `pull_request_target`:** It runs against the BASE branch's workflow code with secrets attached. Known footgun pattern (Pwn Requests). The `if:`-guard pattern above achieves the same gating without that risk surface.
+
+**Two-file alternative (rejected):** `ci-public.yml` (fork-safe) + `ci-trusted.yml` (`on: pull_request_target` or workflow_run trigger). Rejected because (a) `pull_request_target` is exactly the footgun we're avoiding, (b) the file-split forces release_gate.py to grep two files for the install-smoke literals, breaking the Phase 49 simple grep contract.
+
+**Precedent cited:** ci.yml today already has per-job `needs:` and per-step `if: runner.os != 'Windows'` guards (lines 211, 218, Phase 49 added them for the Windows-vs-bash shell split). v0.6 extends the same per-job `if:` discipline to the trigger axis.
+
+---
+
+### Q5 — Where do contributor templates live?
+
+**Recommendation: Extend the existing `.github/` tree. NO new top-level docs.** v0.5 already shipped a near-complete contributor surface; v0.6 polishes specific gaps and FLIPS prose from "not accepting" to "open."
+
+**Files to MODIFY (existing):**
+
+| Path | Change | Precedent |
+|------|--------|-----------|
+| `.github/PULL_REQUEST_TEMPLATE.md` | Remove the HTML-comment NOTICE block (lines 1-11) that says "PRs from forks will be acknowledged and closed without review." Keep the rest (sections, checklist) byte-identical. | Phase 50 gate-flip pattern, the prose flip is one targeted edit. |
+| `.github/ISSUE_TEMPLATE/bug_report.yml` | Verify all fields are present (OS / Python / horus-os version). Likely no edits. | Existing v0.5 form. |
+| `.github/ISSUE_TEMPLATE/feature_request.yml` | Verify; likely no edits. | Existing v0.5 form. |
+| `.github/ISSUE_TEMPLATE/config.yml` | Keep as-is. `blank_issues_enabled: false` + the SECURITY contact link to `/security/advisories/new` is correct for v0.6. | No change. |
+| `CONTRIBUTING.md` (top-level, 209 lines) | Significant rewrite: remove "NOT accepting outside PRs" notice. Add CLAIM-FLOW section (how to claim an issue, paired with disabling `.github/workflows/issue-claim-watcher.yml`). Add BRANCH-POLICY section. Add COMMIT-FORMAT section (already partly there; codify per CLAUDE.md hard rules, conventional-commit prefix, no em-dashes, no PII). Add TEST/DOC-EXPECTATIONS section. Add TRIAGE-SLA section (or split to a new doc, see below). | Phase 47 expanded `docs/PLUGINS.md` from scratch; same prose-discipline applies here. |
+| `SECURITY.md` (top-level, 84 lines) | Update the "Supported versions" table (currently shows v0.3.x as the supported line, must roll to v0.5.x then v0.6.x). DELETE the "Contributor-pipeline security (not active yet)" section (lines 58-65), this is the exact section the project staged for v0.6 deletion. | This section was DESIGNED to be deleted at v0.6, see line 58 "(not active yet)". The deletion is the gate flip. |
+| `STATUS.md` (top-level, 204 lines) | TL;DR section (lines 13-25) rewrites from "solo development mode / Outside pull requests are NOT being merged" to the v0.6 "open for contributions" prose. Milestone-timeline table row `v0.6+ Contribution gate` flips State from NOT PLANNED to SHIPPED with the tag. | Phase 50 STATE.md roll-forward precedent, single targeted edit, dated. |
+| `README.md` | Add a "Contributing" section with CTAs (link to CONTRIBUTING.md, link to good-first-issues label, link to Discussions). Update any "not accepting PRs" prose that mirrors the SECURITY.md / STATUS.md notice. | Phase 47 README updates are the shape precedent. |
+| `.github/workflows/issue-claim-watcher.yml` | DISABLE or DELETE. The "claim language not honored" canned reply contradicts the gate-flip. Delete the workflow file. | This workflow exists to enforce the solo-dev policy; it gets removed when that policy ends. |
+| `CHANGELOG.md` | `[0.6.0]` section under Added: signing, SBOM, pip-audit, Dependabot, CODEOWNERS, fork-PR hardening. Under Removed: solo-dev NOTICE on PR template, issue-claim-watcher.yml. | Phase 50 CHANGELOG promotion is the shape precedent (RELEASE.md step 4). |
+
+**Files to CREATE (new):**
+
+| Path | Purpose | Precedent |
+|------|---------|-----------|
+| `.github/CODEOWNERS` | Single-line file: `* @Ridou` (the sole maintainer) OR per-directory ownership if v0.6 brings additional reviewers. Required for "review requested automatically on PR open." | First-time file; the pattern is GitHub-standard. |
+| `.github/ISSUE_TEMPLATE/security_advisory.yml` (OPTIONAL) | Redundant with the existing config.yml contact-link to `/security/advisories/new`. RECOMMENDED: do NOT add. The contact link is the right UX. | Existing config.yml decision is correct. |
+| `.github/dependabot.yml` | Two ecosystems: `pip` (weekly, base + each optional extra), `github-actions` (weekly, for action SHA bumps). | New file; standard GitHub pattern. |
+| `docs/TRIAGE.md` (or fold into CONTRIBUTING.md) | Triage SLA, label taxonomy, response-time expectations. Recommendation: fold into CONTRIBUTING.md to keep the doc count down. | Phase 47 chose to ship a separate `docs/PLUGIN-SECURITY.md` rather than expanding `docs/PLUGINS.md`, but that was because PLUGIN-SECURITY has a distinct audience (security-conscious users). TRIAGE has the same audience as CONTRIBUTING (would-be contributors), so in-document is better. |
+
+**Issue templates: forms vs markdown.** The existing files (`bug_report.yml`, `feature_request.yml`) are FORMS (`.yml` extension, `name: / description: / body: -` shape). Forms are the GitHub-recommended modern pattern. STAY with forms; do NOT regress to markdown templates. The single new template (security advisory) is NOT needed because the contact link is better.
+
+**Precedent cited:** Phase 47 (docs trio: PLUGINS.md, PLUGIN-SECURITY.md, MIGRATION-v0.4-to-v0.5.md) is the precedent for "land a coordinated doc-set in one phase." v0.6 does the same for CONTRIBUTING + SECURITY + STATUS + README + CHANGELOG as ONE coordinated edit, all dated 2026-DD-DD on the v0.6.0 tag day.
+
+---
+
+### Q6 — Where does SECURITY.md go (what does v0.6 add)?
+
+SECURITY.md ALREADY EXISTS at the repo root (84 lines). GitHub Security Advisories ALREADY documented as the reporting channel (lines 18-21). The private vulnerability reporting GitHub setting (Settings -> Security -> "Private vulnerability reporting") is enabled implicitly by the SECURITY.md reference to `/security/advisories/new`.
+
+**v0.6 changes to SECURITY.md:**
+
+1. **Supported-versions table (lines 8-11):** Update to v0.5.x or v0.6.x (the latest minor). PRE-1.0 policy ("only latest minor receives fixes") is correct; only the version number rolls.
+2. **Delete the "Contributor-pipeline security (not active yet)" section (lines 58-65).** This whole section was staged for deletion AT the v0.6 gate flip, the prose says "When the project opens for contributions" which is exactly this milestone.
+3. **Add a "Response SLO" subsection** under "Reporting a vulnerability", e.g. "acknowledge within 48 hours, triage within 7 days, fix-or-document-mitigation within 30 days for high-severity." The existing prose (lines 30-32) has soft language ("expect a response in the advisory thread within 14 days"); v0.6 firms it.
+4. **Add a "CVE coordination notes" subsection**, point to how GHSA to CVE upgrades work, who files (maintainer auto-fills via the GHSA UI). One paragraph.
+
+**v0.6 changes to GitHub repo settings (NOT in committed files; document in docs/RELEASE.md or a new docs/MAINTAINER.md):**
+
+- Confirm "Private vulnerability reporting" is enabled at Settings -> Security.
+- Confirm "Secret scanning" + "Push protection" are enabled.
+- Confirm "Code scanning" is enabled (pip-audit results upload as SARIF, if Tier B job exists).
+- Confirm "Dependabot alerts" + "Dependabot security updates" are enabled.
+
+**Where to document the maintainer-applied settings:** Either append a "Repo settings checklist" section to `docs/RELEASE.md` (mirroring its existing maintainer-checklist shape) OR create a new `docs/MAINTAINER.md` for one-time-setup vs per-release procedures.
+
+**Recommendation:** Append to `docs/RELEASE.md` under a new top-level section `## One-time repo settings (apply once, verify each release)`. This keeps the maintainer doc count low and follows the established "everything pre-tag in RELEASE.md" pattern.
+
+**Precedent cited:** docs/RELEASE.md already carries the "Why the release gate exists" prose section (lines 169-193) that mixes prose-rationale with procedure. Adding a "Repo settings" section follows the same idiom.
+
+---
+
+### Q7 — Where does the gate flip land?
+
+The "gate flip" is a coordinated set of file edits dated to the v0.6.0 tag day. Single commit (or single PR) lands all of them so the tag and the public-facing prose ship atomically.
+
+**Mandatory file edits at v0.6.0 ship:**
+
+| File | Edit | Lines |
+|------|------|-------|
+| `STATUS.md` | TL;DR rewrite. Milestone table row. Last-updated date bump. | Tight diff, ~15 lines. |
+| `README.md` | "Project status" prose flip. Add "Contributing" section with CTAs. | ~10-20 lines. |
+| `CONTRIBUTING.md` | Remove "NOT accepting" notice. Add CLAIM-FLOW + BRANCH-POLICY + TRIAGE. | Significant rewrite. |
+| `SECURITY.md` | Delete lines 58-65. Bump supported-versions table. Add SLO subsection. | ~20 lines. |
+| `.github/PULL_REQUEST_TEMPLATE.md` | Delete HTML-comment NOTICE block (lines 1-11). | 11 lines. |
+| `.github/workflows/issue-claim-watcher.yml` | Delete file. | Whole file. |
+| `pyproject.toml` line 7 | `version = "0.6.0"` | 1 line. |
+| `src/horus_os/__init__.py` | `__version__ = "0.6.0"` | 1 line. |
+| `CHANGELOG.md` | `[Unreleased]` -> `[0.6.0] - YYYY-MM-DD`; fresh empty `[Unreleased]` stub. | Phase 50 idiom. |
+| `.planning/STATE.md` | Milestone roll-forward to next milestone or sentinel "no active milestone yet." | Phase 50 idiom. |
+
+**Maintainer-applied GitHub repo settings at v0.6.0 tag time (documented in docs/RELEASE.md, NOT in code):**
+
+- Enable branch protection on `main` (require PR, require status checks: all 5 ci.yml jobs + the new supply-chain Tier B job, require linear history).
+- Enable "Require signed commits" on `main` (optional but matches the signing posture).
+- Add `good-first-issue`, `help-wanted`, `safe-to-test`, `triage` labels (required for the fork-PR hardening guard).
+- Confirm Discussions is enabled (the issue-template config.yml links to it).
+
+**Precedent cited:**
+- Phase 50 STATE.md roll-forward (`milestone` to next, `progress.percent` reset) is the documented pattern from docs/RELEASE.md "## Post-release" (lines 160-167).
+- CHANGELOG `[Unreleased]` to `[N.M.P] - YYYY-MM-DD` is docs/RELEASE.md step 4 (lines 134-137).
+- The PR-template NOTICE deletion is a single-commit atomic edit, same shape as Phase 49 adding `install-smoke-plugin` to ci.yml.
+
+---
+
+### Q8 — Build order (8-12 phases)
+
+**Hard dependency rule:** the release-gate extension (Q3) CANNOT land before the artifacts it asserts exist. release-signing-workflow-present check (#9) requires release.yml in tree; pip-audit-clean check (#11) requires pip-audit to be a runnable subprocess. Therefore release-gate extension is downstream of signing + supply-chain.
+
+**Recommended phase order (10 phases, mirroring v0.5's Phases 40-50 cardinality):**
 
 ```
-horus-os plugins list                      # table of installed/discovered plugins with status
-horus-os plugins list --format json        # same data as /api/plugins, for scripting
-horus-os plugins info <name>               # one plugin's full detail (manifest + capabilities + health)
-horus-os plugins install <pip-spec>        # pip install <spec> into active venv, then refresh
-horus-os plugins uninstall <name>          # pip uninstall <name>, then refresh
-horus-os plugins enable <name>             # flip enabled flag
-horus-os plugins disable <name>            # flip enabled flag
-horus-os plugins grant <name> --capability <cap>     # grant one capability
-horus-os plugins grant <name> --all                  # grant everything the manifest requests
-horus-os plugins revoke <name> --capability <cap>    # revoke
+Phase 51  v0.6 baseline + research lock-in
+          (Mirror of v0.5 Phase 40. Lock decisions: sigstore-python vs
+          cosign, CycloneDX vs SPDX, pip-audit vs safety. Commit
+          tests/perf/v0_5_baseline.json if any perf surface added.
+          Pure infrastructure; no behavior change.)
+   |
+   v
+Phase 52  Signing workflow (release.yml)
+          (NEW .github/workflows/release.yml: sigstore-python action,
+          actions/attest-build-provenance. Dry-run on a fake test
+          release. id-token: write permission. SIGN-01..SIGN-03.)
+   |
+   v
+Phase 53  SBOM generation
+          (Extend release.yml with cyclonedx-py step + actions/attest-sbom.
+          Sample SBOM committed under docs/ as a reference. Verification
+          procedure documented. SUPPLY-01.)
+   |
+   v
+Phase 54  Supply-chain scanning (Dependabot + pip-audit)
+          (.github/dependabot.yml NEW. pip-audit step in ci.yml as a
+          Tier-B-eligible job, runs on push:main + main-branch PRs.
+          SUPPLY-02, SUPPLY-03.)
+   |
+   v
+Phase 55  Fork-PR hardening (action pinning + Tier A/B split)
+          (Pin every uses: in ci.yml + release.yml to SHA. Add the if:
+          guard pattern on the pip-audit job (Phase 54 output) so it
+          becomes Tier B. Top-level permissions: read-all in both
+          workflow files. CIHARD-01..CIHARD-03.)
+   |
+   v
+Phase 56  Contributor docs + templates expansion
+          (CONTRIBUTING.md rewrite, README.md "Contributing" section,
+          .github/CODEOWNERS NEW, PR template NOTICE removal staged
+          as a code-only edit not yet flipping the prose, see Phase 59.
+          CONTRIB-01..CONTRIB-04.)
+   |
+   v
+Phase 57  SECURITY.md expansion + repo-settings doc
+          (SECURITY.md SLO + CVE-coordination sections. docs/RELEASE.md
+          new "One-time repo settings" section. The "Contributor-pipeline
+          security (not active yet)" deletion is staged here, BUT the
+          actual prose flip is Phase 59. SECDISC-01..SECDISC-02.)
+   |
+   v
+Phase 58  Release-gate extension (release_gate.py 8 -> 11)
+          (Add check_release_workflow_signing_present, _sbom_present,
+          _pip_audit_clean. Extend --check enum. Tests cloned from
+          Phase 49's test idiom. REL-13.)
+   |
+   v
+Phase 59  Three-OS hard gate + gate flip + release
+          (Mirror of Phase 49 + Phase 50 combined. CI green on full
+          matrix + new pip-audit job. release_gate.py 11/11 green.
+          THEN the atomic gate-flip commit: STATUS.md TL;DR, README CTA,
+          CONTRIBUTING NOTICE deletion, PR-template NOTICE deletion,
+          SECURITY contributor-pipeline section deletion, issue-claim-
+          watcher.yml deletion, version bump to 0.6.0, CHANGELOG
+          promotion. STOP-BEFORE-TAG block in the phase SUMMARY.
+          REL-14, all CONTRIB-* and SECDISC-* validated.)
 ```
 
-**Integration with existing CLI router (`src/horus_os/__main__.py`):** add one `plugins_p = sub.add_parser("plugins", ...)` block with `plugins_sub = plugins_p.add_subparsers(...)`, mirroring the existing `agents` subcommand pattern (lines 131-207). Each `plugins_sub` op calls back into `run_plugins(args, *, stdout, stderr)` in `cli/plugins_cmd.py`. Zero changes to `init`, `run`, `serve`, `traces`, `usage`, or `agents`.
+**Optional consolidations to hit 8 phases:**
+- Merge 51 into 52 (baseline + first delivery in one).
+- Merge 54 into 55 (pip-audit + hardening as one CI-pass).
+- Merge 56 + 57 (the docs flip is naturally one PR).
 
-**`horus-os usage` is unaffected.** It queries `tool_invocations` by `tool_name`, which doesn't change. A future `horus-os usage --by plugin` is feasible but not required for v0.5. `horus-os plugins info <name>` already shows the per-plugin health rollup.
+**Optional expansions to hit 12 phases:**
+- Split 52 into signing-the-workflow and signing-the-tag (separate concerns).
+- Split 56 into CONTRIBUTING vs CODEOWNERS vs README (three small PRs).
 
-**The `install` subcommand wraps `pip install` against the active venv** via `subprocess.check_call([sys.executable, "-m", "pip", "install", spec])`. Three guard rails:
+**10 phases is the cleanest cut.** Matches v0.5's 11-phase cardinality without padding.
 
-1. Before install, refuse if `sys.prefix == sys.base_prefix` (no venv active). Installing into the system Python is a footgun. Override with `--allow-system-python`.
-2. After install, run a fresh `discover_plugins()` and show the user the manifest of every newly-discovered plugin, with requested capabilities highlighted.
-3. Print "review with `horus-os plugins info <name>` before granting capabilities". No automatic grant on install.
+**Hard dependencies (why this order):**
 
-## Scaling Considerations
+1. **52 -> 58.** release_gate.py check `release-workflow-signing-present` greps release.yml for `sigstore/gh-action-sigstore-python`. The file must exist before the check can pass.
+2. **53 -> 58.** Same logic; `release-workflow-sbom-present` greps for `cyclonedx_py`.
+3. **54 -> 58.** `pip-audit-clean` shells out to `python -m pip_audit`. pip-audit must be a known dependency the gate can install.
+4. **52 -> 55.** Action-pinning sweep includes both ci.yml AND release.yml. release.yml has to exist to be pinned.
+5. **54 -> 55.** The pip-audit job is the first NEW Tier B job. Tier A/B classification framework lands when the first Tier B job needs it.
+6. **57 -> 59.** SECURITY.md "Contributor-pipeline" deletion is part of the gate flip. The other SECURITY edits (SLO, CVE) can land earlier in Phase 57 without the gate flip.
+7. **56 -> 59.** CONTRIBUTING rewrite delivers the CLAIM-FLOW prose; the actual NOTICE deletion in PULL_REQUEST_TEMPLATE.md is part of the gate-flip commit in Phase 59.
+8. **58 -> 59.** Phase 59 cannot tag if release_gate.py is not 11/11 green.
 
-| Scale | Adjustments |
-|-------|-------------|
-| 0-10 plugins | No adjustments needed. In-memory `PluginRegistry`, in-memory `PluginHealthSubscriber` ring buffers, per-call `CapabilityGuard` lookup is a frozenset membership check (O(1)). |
-| 10-100 plugins | Still fine. The ring buffer is bounded per-plugin; total memory is bounded. Discovery walks entry points once at startup; `pip` users are unlikely to install 100+ plugins anyway. |
-| 100+ plugins (theoretical) | The discovery scan would dominate startup. Mitigation if this becomes real: cache the manifest_hash → PluginSpec dict on disk in `~/.horus-os/cache/plugin_index.json`, invalidate on `horus-os plugins install`. Premature for v0.5. |
+**Parallel opportunities (mirroring v0.5's 44 || 45 precedent):**
+- Phase 53 (SBOM) || Phase 54 (pip-audit + Dependabot). Both consume the release.yml substrate from Phase 52 but do not depend on each other.
+- Phase 56 (contributor docs) || Phase 57 (SECURITY expansion). Different files, no cross-edits.
 
-### Scaling Priorities
+---
 
-1. **First bottleneck:** none expected at v0.5 scale. The plugin runtime is in-process and the operations are O(plugins) at startup, O(1) at tool invocation.
-2. **Second bottleneck:** memory for `PluginHealthSubscriber` ring buffers if a plugin spams the bus. Mitigation: ring buffer is bounded by max-1000-events-per-plugin, oldest evicted; configurable via `cfg.plugin_health_window`.
+### Q9 — Backward-compat constraints
 
-## Anti-Patterns
+**v0.5 surfaces that v0.6 MUST NOT break (byte-identity contracts):**
 
-### Anti-Pattern 1: Centralized capability check inside `ToolRegistry.invoke`
+1. **`.github/workflows/ci.yml` job names** — the literals `install-smoke-no-otel`, `install-smoke-with-otel`, `install-smoke-plugin` must remain in the file. `release_gate.py:130-132` greps for them. (Renaming any breaks `ci-two-variant-smoke` or `plugin-install-smoke-ci` checks.)
 
-**What people do:** Add a `capability_check` parameter to `ToolRegistry.invoke()` and switch on plugin-or-not at every call site.
+2. **`install-smoke-plugin` job behavior** — the steps that pip-install the reference plugin, init the DB, and run `scripts/install_smoke_plugin.py` must continue to run on the same 3-OS x 2-Python matrix. v0.6 can ADD steps (e.g. verify signature on a built artifact) but cannot remove the existing 7 steps.
 
-**Why it's wrong:** Threads plugin awareness into core registry code that v0.1 through v0.4 happily lived without. Every existing call site (tools/loop.py, server/api.py routes, the agent loop) has to learn about plugins. Built-ins need an explicit "skip the check" path. The v0.4 observability hooks become entangled with v0.5 permission logic.
+3. **`install-smoke` job (the `.[all]` extras variant)** — exists separately from the `-no-otel` and `-with-otel` variants because each proves a distinct extras-combination contract. Do not collapse.
 
-**Do this instead:** Wrap at registration in `PluginLoader.load()`. Built-ins skip the wrap because they don't go through `PluginLoader`. `ToolRegistry.invoke` is byte-identical to v0.4.
+4. **`scripts/release_gate.py` exit code semantics** — `0` on full pass, `1` on any fail (lines 763-765). v0.6's new checks must follow the same `CheckResult.ok` Boolean discipline and not introduce a new exit code.
 
-### Anti-Pattern 2: Loading plugins synchronously inside `discover_plugins()`
+5. **`scripts/release_gate.py` `--check` enum values** — the 8 existing values (`pricing`, `wheel`, `ci`, `tests`, `docs-drift`, `plugin-install`, `reference-manifest`, `fixture-roundtrip`) MUST remain. New values append; existing values do not rename.
 
-**What people do:** Make `discover_plugins()` return a list of fully-loaded plugins with tools already registered, mirroring v0.3's `discover_adapters()` which returns instantiated adapters.
+6. **`scripts/release_gate.py` env-var contract** — `HORUS_OS_PRICING_MAX_AGE_DAYS`, `HORUS_OS_RELEASE_GATE_SKIP_BUILD`, `HORUS_OS_RELEASE_GATE_SKIP_TESTS`, and the five path-override variables remain operational. New env vars append.
 
-**Why it's wrong:** Plugins have a permission gate (Phase C) that needs the database, and a separate validate phase (Phase B) that should run with no side effects. Fusing all four into one function means a manifest validation failure tears down the same call path as a permission denial, and you can't tell them apart in the dashboard.
+7. **`docs/RELEASE.md` STOP-BEFORE-TAG block** — the 9-step "Release procedure" sequence (lines 118-157) can grow new steps (insertions) but the existing steps cannot mutate. Mainly: step 7 (`git tag -a vN.M.P`) can change to `git tag -s` if signed tags are mandated, one-character change.
 
-**Do this instead:** `discover_plugins()` returns `list[PluginSpec]` and is side-effect-free. Validation, permission, and load are explicit phases in the lifespan handler. Each phase has a single failure mode and a single registry mutation.
+8. **`pyproject.toml` base `dependencies`** — `["pydantic>=2.7,<3", "packaging>=24.0"]` (lines 25-28). v0.6 SHOULD NOT add to this list (signing/SBOM/audit tooling is CI-time, not runtime). If a hard requirement emerges, it gets called out as REL-DDDD.
 
-### Anti-Pattern 3: Persisting the full manifest in SQLite
+9. **`pyproject.toml` optional-dependencies** — `[anthropic, gemini, dashboard, discord, slack, calendar, otel, all, dev]` (lines 30-62). The `all` group enumerates the union; if any extra changes, `all` updates in lock-step (current pattern). v0.6 likely does not touch this.
 
-**What people do:** JSON-serialize the entire `PluginSpec` into the `plugins` table.
+10. **`.github/ISSUE_TEMPLATE/config.yml`** — `blank_issues_enabled: false`. Preserve. The contact-link list can grow but the existing two entries (Discussions, Security advisory) stay.
 
-**Why it's wrong:** Duplicates state. The plugin's pip-installed `horus-plugin.toml` is the source of truth; the database is a runtime view. If they drift (user edits the toml; runtime forgets to re-read), behavior depends on which one wins, and that's a Heisenbug factory.
+11. **`.github/PULL_REQUEST_TEMPLATE.md` sections** — once the NOTICE HTML-comment block is deleted, the remaining sections (`## What this PR does`, `## Why`, `## Test plan`, `## Checklist`, `## Notes for reviewers`) and the Checklist items stay. v0.6 may add a `[ ] No em-dashes` and `[ ] No PII` items (they're already there per lines 43-44).
 
-**Do this instead:** Persist only what the database needs that the manifest doesn't have: `enabled`, grant state, last error, error count. The manifest is re-parsed on every startup. The `manifest_hash` column is the bridge. When it changes, grants flip to `pending` automatically.
+12. **`docs/manifest-v1.schema.json` + `MANIFEST_V1_SCHEMA`** — the v0.5 docs-drift check (`release_gate.py:338-411`) gates these byte-identical. v0.6 has zero plugin-manifest work; this contract holds automatically.
 
-### Anti-Pattern 4: Default-allow on a missing manifest field
+13. **`tests/fixtures/v0_4_database.sqlite3`** — never mutated, copied to tempfile by the gate (release_gate.py:512-517). v0.6 schema work is also zero; this fixture stays as-is. If v0.6 happens to introduce a v6->v7 migration, the fixture round-trip test extends (per v0.5 Phase 49 precedent).
 
-**What people do:** Treat absence of a `[[capabilities]]` block as "this plugin needs no capabilities" and silently full-grant.
+14. **`tests/perf/v0_4_baseline.json` + `tests/perf/v0_5_baseline.json`** (if it exists) — the capture-overhead benchmark uses these as pinned references. v0.6 does not touch perf; these stay.
 
-**Why it's wrong:** A plugin author who forgets the block ships an unaudited plugin. The threat model for v0.5 is "ship-fast plugin authors might forget things," not "malicious plugin authors might lie," but "forgot to declare" is the more common failure and it should fail visible.
+15. **Python 3.11 + 3.12 + 3-OS matrix** — non-negotiable per CLAUDE.md "Hard rules" item 5. v0.6 ADDS no new OS or Python version; the matrix shape is the contract.
 
-**Do this instead:** Empty `[[capabilities]]` is treated as "this plugin claims it needs zero capabilities." If the plugin then tries to do anything sensitive (read a file, hit the network), the runtime can't tell because v0.5 doesn't sandbox. The contract is: plugin author declares everything they will use. CONTRIBUTING.md says this in big letters. The reference plugin demonstrates a correctly-declared capability set.
+**Things v0.6 explicitly DOES change (not byte-compat, but called-out):**
 
-## Integration Points
+- `.github/PULL_REQUEST_TEMPLATE.md` deletes its 11-line NOTICE block (gate flip).
+- `.github/workflows/issue-claim-watcher.yml` is deleted.
+- `SECURITY.md` deletes its 8-line "(not active yet)" section.
+- `STATUS.md` TL;DR rewrites (lines 13-25).
+- `CONTRIBUTING.md` rewrites large portions.
+- `pyproject.toml` line 7 + `src/horus_os/__init__.py` `__version__` bump to `0.6.0`.
 
-### Reused from v0.3 / v0.4 (no API breakage)
+All of these are EXPECTED, DOCUMENTED diffs that the user sees in the v0.6.0 GitHub Release notes.
 
-| Existing component | How v0.5 uses it | Touch |
-|--------------------|------------------|-------|
-| `ToolRegistry.register(tool)` (`tools/registry.py`) | `PluginLoader` calls this with plugin-provided tools after wrapping handlers with `CapabilityGuard`. Built-ins go through the same call (no wrap). | Zero changes. |
-| `ToolRegistry.invoke(name, input)` (`tools/registry.py`) | Unchanged. The wrapped handler is already in place. | Zero changes. |
-| `AdapterRegistry` (`adapters/base.py`) | `PluginLoader` calls `register(name)` and `mark_running` / `mark_error` on plugin-provided adapters. Lifespan loop iterates over the merged adapter list (built-in + plugin). | Zero changes to AdapterRegistry. v0.5 merges plugin adapters into `_adapters` before the v0.3 lifespan loop runs. |
-| `AdapterContext` (`adapters/base.py`) | Plugin-provided adapters receive the same `AdapterContext` as built-ins; can register tools via `context.tool_registry`. | Zero changes. |
-| `ObservationBus` (`observability/bus.py`) | `PluginHealthSubscriber` subscribes alongside the v0.4 CostAnnotator + SQLitePersister. Subscriber exception-swallow already covers misbehaving health subscribers. | Zero changes. |
-| `tool_invocations` table (`storage.py`) | Read-only source for per-plugin health rollup. The `tool_name` column joins to `PluginRegistry.plugin_for_tool(name)`. | Zero changes. |
-| FastAPI app lifespan (`server/api.py:_lifespan`) | v0.5 extends the existing `for _a in _adapters: await _start(...)` loop with a plugin block that runs after built-in adapter startup. | Adds ~30 lines, replaces nothing. |
-| `Config.load()` (`config.py`) | Adds optional `plugin_paths: list[Path]` (defaults to `[~/.horus-os/plugins]`) and `plugin_health_window: int` (default 3600 seconds). Both nullable; existing configs read fine. | One field added. |
+---
 
-### New external integration points
+## Anti-patterns to reject (v0.6-specific)
 
-| Integration | Pattern | Notes |
-|-------------|---------|-------|
-| `pip install` (subprocess) | `horus-os plugins install` shells out to `python -m pip install <spec>`. | Refuses to run without active venv (overridable). Streams pip's stdout/stderr to the user. |
-| `importlib.metadata.entry_points(group="horus_os.plugins")` | Standard Python plugin discovery. Same mechanism `discover_adapters()` uses for the `horus_os.adapters` group. | Two distinct groups; one plugin can register under both (the reference plugin does). |
-| `~/.horus-os/plugins/` filesystem scan | `discover_plugins()` walks each subdir for a `horus-plugin.toml`. Importable via the subdir's `pyproject.toml` only if it's been `pip install -e`'d; otherwise the toml is parseable but the plugin can't load (status="error", error_phase="load", message points to the missing install). | Provides a path for dev plugins not yet packaged. |
-| `tomllib` (stdlib, Python 3.11+) | Parse `horus-plugin.toml`. Read-only. | Zero new deps. |
-| `packaging.specifiers.SpecifierSet` (stdlib via `packaging`, already transitive via pip and setuptools) | Validate `horus_os_compat` against `horus_os.__version__`. | If `packaging` is not already pulled, add as direct dep. It is well-tested, pure-Python, three-OS clean. |
+### Anti-Pattern A: Sign in ci.yml
 
-## Suggested Build Order
+**What it would look like:** New `sign-artifacts` job in ci.yml with `if: github.ref_type == 'tag'`.
+**Why wrong:** ci.yml triggers on `push: branches: [main]` and `pull_request: branches: [main]`, neither receives tag pushes. The `if:` guard would silently always be false. Also: sigstore action requires `id-token: write` permission; granting that workflow-wide opens the signing surface to every PR's actions.
+**Do instead:** Separate `release.yml` triggered by `on: release: types: [published]`.
 
-The eight work-items below have explicit dependencies. Anything not in a phase's "depends on" list runs in parallel with it. These map onto GSD phase numbers at roadmapper-time; the labels A–H are research-internal.
+### Anti-Pattern B: cosign with stored signing keys
 
-### Work-item A: Manifest model + discovery (the foundation)
+**What it would look like:** Maintainer-held cosign keypair, password in repo secret.
+**Why wrong:** Key rotation burden, secret-exposure risk on every workflow run, no audit trail. PROJECT.md:42 already biases to keyless OIDC sigstore.
+**Do instead:** sigstore-python with GitHub-OIDC keyless signing, identity tied to the workflow run, transparency-log entry on Rekor, no key to lose.
 
-**Files created:** `plugins/__init__.py`, `plugins/spec.py`, `plugins/manifest.py`, `plugins/discovery.py`.
-**Depends on:** nothing in v0.5. v0.4 substrate (ObservationBus, schema v5) is the only prerequisite.
-**Acceptance:** `discover_plugins()` returns a `list[PluginSpec]` from a fixture entry-point and a fixture `~/.horus-os/plugins/foo/horus-plugin.toml`. Manifest with invalid horus_os_compat raises `ValidationError`. Zero registry touch.
-**Why first:** Everything downstream needs `PluginSpec`. Manifest parsing has no dependencies, so it can land before any runtime wiring.
+### Anti-Pattern C: pull_request_target for fork CI
 
-### Work-item B: Schema migration v5→v6 + persistence
+**What it would look like:** `on: pull_request_target` to run Tier B jobs on fork PRs with repo secrets.
+**Why wrong:** Runs against the BASE branch's workflow code with secrets attached. Classic "Pwn Requests" attack surface, fork PR can edit workflow files in its head, but `pull_request_target` ignores those edits and runs base. The fork modifies non-workflow code to exfiltrate secrets via the workflow run.
+**Do instead:** `if:` guard on `pull_request` events combining `head.repo.full_name == repository` (in-repo PR) with `contains(labels, 'safe-to-test')` (maintainer-blessed fork PR). Maintainer must apply the label after a code review pass.
 
-**Files modified:** `storage.py` (v5→v6 block + plugin CRUD methods).
-**Files created:** none.
-**Depends on:** nothing.
-**Acceptance:** `Database.init()` against a v5 fixture database upgrades cleanly to v6; v4 fixture upgrades through v5 to v6; running init twice is a no-op. Three new tables exist; old tables untouched. Plugin CRUD methods round-trip.
-**Why early and parallel with A:** Schema lands before registry needs it. Can run in parallel with A because they touch disjoint files (`storage.py` vs `plugins/`).
+### Anti-Pattern D: Two workflow files (ci-public + ci-trusted)
 
-### Work-item C: Registry + permission model
+**What it would look like:** Split jobs into `.github/workflows/ci-public.yml` (untrusted) + `.github/workflows/ci-trusted.yml` (trusted).
+**Why wrong:** release_gate.py's literal-string greps assume `ci.yml`. Splitting forces the gate to grep two files (Phase 49 contract assumes one). Also: every CI change must land twice.
+**Do instead:** Inline `if:` guards per job; one ci.yml.
 
-**Files created:** `plugins/registry.py`, `plugins/permissions.py`.
-**Depends on:** A (`PluginSpec`), B (`Database.save_plugin_capability` etc).
-**Acceptance:** `PluginRegistry.register(spec)` creates an entry. `PermissionGate.resolve(spec)` returns `(granted_dict, pending_list)`. `CapabilityGuard.wrap_tool_handler(...)` returns a refusing handler when the cap is missing. Manifest-hash mismatch surfaces capabilities as pending.
-**Why after A and B:** the registry consumes specs (A) and the permission gate persists / reads through the database (B).
+### Anti-Pattern E: Adding cyclonedx-bom to base pyproject dependencies
 
-### Work-item D: Loader + registry integration
+**What it would look like:** `dependencies = ["pydantic>=2.7,<3", "packaging>=24.0", "cyclonedx-bom>=4.0"]`.
+**Why wrong:** SBOM generation is a CI-time concern. Users running `pip install horus-os` should not pull a CycloneDX runtime they never use. Mirror of Phase 38's correct call to gate `opentelemetry-*` behind `[otel]`.
+**Do instead:** `pip install cyclonedx-bom` step inside `release.yml` only.
 
-**Files created:** `plugins/loader.py`, `plugins/health.py`.
-**Files modified:** `server/api.py` (lifespan: add the six-phase plugin block after built-in adapter startup, plus the `PluginHealthSubscriber` subscribe).
-**Depends on:** A, B, C.
-**Acceptance:** A fixture plugin's tool registers in `ToolRegistry`; its adapter registers in `AdapterRegistry`. CapabilityGuard wraps the tool handler. A plugin missing a granted capability refuses to invoke the wrapped handler. A plugin whose entry-point import raises lands in `status="error", error_phase="load"` and does not break other plugins. `PluginHealthSubscriber.rollup(name)` returns sensible numbers after synthetic events.
-**Why fourth:** the loader is the integration point. Builds on every prior phase.
+### Anti-Pattern F: Renaming any existing release_gate.py check
 
-### Work-item E: `/api/plugins` REST surface
+**What it would look like:** Rename `pricing-freshness` to `pricing-card-freshness` to be more descriptive.
+**Why wrong:** v0.6 phase SUMMARYs, v0.5 phase SUMMARYs, docs/RELEASE.md, and any tooling that parses gate output (none today, but the option exists) all assume the 8 existing names. The contract is "checks add; checks do not rename."
+**Do instead:** Append new checks; preserve existing names verbatim.
 
-**Files modified:** `server/api.py` (add 6 routes).
-**Files created:** `tests/server/test_api_plugins.py`.
-**Depends on:** D (loader writes to the registry; routes read from it).
-**Acceptance:** All six routes (`GET /api/plugins`, `GET /api/plugins/{name}`, `POST .../enable`, `POST .../disable`, `POST .../grant`, `DELETE .../grant/{cap}`) round-trip. Disable + restart unregisters. Grant + restart loads.
-**Why before CLI and dashboard:** both downstream surfaces should consume `/api/plugins` rather than re-implement the read path.
+### Anti-Pattern G: New top-level docs for v0.6
 
-### Work-item F: `horus-os plugins` CLI
+**What it would look like:** New `CONTRIBUTING-v2.md` or `GOVERNANCE.md` or `MAINTAINERS.md` at repo root.
+**Why wrong:** CONTRIBUTING.md already exists at top level and is the conventional contributor-doc location. Adding parallel files fragments the contributor surface and breaks the "one doc per audience" discipline Phase 47 set (PLUGINS for plugin authors, PLUGIN-SECURITY for security users, MIGRATION for upgraders).
+**Do instead:** Expand CONTRIBUTING.md in place. Add `docs/TRIAGE.md` ONLY if the triage prose exceeds what fits naturally in CONTRIBUTING.
 
-**Files created:** `cli/plugins_cmd.py`.
-**Files modified:** `cli/__init__.py` (export `run_plugins`), `__main__.py` (add `plugins` subparser).
-**Depends on:** E (CLI's `list` and `info` go through the API; or, equivalently, through the same query module — either way, E's contracts shape F's output).
-**Acceptance:** `horus-os plugins list` lists installed plugins. `install` runs pip then refresh. `info` prints the manifest. `grant` flips the database. CI runs `horus-os plugins install -e ./examples/horus-os-example-plugin` and asserts the new plugin appears.
-
-### Work-item G: `/plugins` dashboard tab
-
-**Files modified:** `server/static/index.html` + JS.
-**Depends on:** E (consumes `/api/plugins`).
-**Acceptance:** `/plugins` tab lists discovered plugins with status badges, capability chips (granted/pending/revoked), enable/disable toggles, "grant" buttons that POST to the API. Pre-v0.4 behavior of `/adapters` and `/observability` tabs unchanged.
-
-### Work-item H: Reference plugin + 3-OS gate + release
-
-**Files created:** `examples/horus-os-example-plugin/` (full package).
-**Files modified:** `pyproject.toml` (the host one, if the example is referenced from the install-smoke job), CI workflow, CHANGELOG, docs (`docs/PLUGINS.md`, `docs/MIGRATION-v0.4-to-v0.5.md`).
-**Depends on:** F (CLI install path tested against the reference plugin), G (dashboard renders the reference plugin's manifest).
-**Acceptance:** `pip install -e ./examples/horus-os-example-plugin` works on three OSes and two Python versions; the plugin shows up in `/plugins`; granting a capability and restarting makes its tool invocable; revoking and restarting makes it refuse. v0.5.0 tag cuts.
-
-**Parallelization map:** A ∥ B → C → D → E → (F ∥ G) → H. The "F ∥ G" parallelism is the only one worth exploiting at execution time; everything else has hard dependencies.
-
-**Roadmapper note:** these eight items above are research-suggested, not yet phase-numbered. The roadmapper should map them to GSD phase numbers, decide whether some collapse (e.g. A and B might be one phase per the "schema migration + skeleton" pattern v0.4 used in Phase 32), and confirm with the user before plan generation. Hard rule: A's `PluginSpec` is consumed by every later phase; do not invert.
+---
 
 ## Sources
 
-**Internal (HIGH confidence — read directly):**
-- `/Users/santino/Projects/horus-os/.planning/PROJECT.md` — v0.5 milestone target features and decisions
-- `/Users/santino/Projects/horus-os/.planning/ROADMAP.md` — v0.3 and v0.4 phase detail
-- `/Users/santino/Projects/horus-os/src/horus_os/adapters/base.py` — AdapterRegistry / AdapterEntry / Adapter Protocol / LifecycleAdapter / discover_adapters() shape
-- `/Users/santino/Projects/horus-os/src/horus_os/adapters/webhook.py` — reference adapter pattern (bind + lazy FastAPI import)
-- `/Users/santino/Projects/horus-os/src/horus_os/tools/registry.py` — ToolRegistry.register / invoke contract
-- `/Users/santino/Projects/horus-os/src/horus_os/tools/builtin.py` — built-in tool factory pattern
-- `/Users/santino/Projects/horus-os/src/horus_os/observability/bus.py` — ObservationBus subscriber semantics + exception-swallow contract
-- `/Users/santino/Projects/horus-os/src/horus_os/storage.py` — schema version + ALTER TABLE idempotency pattern for v5
-- `/Users/santino/Projects/horus-os/src/horus_os/server/api.py` — lifespan structure, app.state placements, adapter startup loop
-- `/Users/santino/Projects/horus-os/src/horus_os/__main__.py` — subparser pattern (used by the `plugins` subcommand)
-- `/Users/santino/Projects/horus-os/.planning/research/STACK.md` — v0.4 stack research, confirms the lazy-import + LifecycleAdapter pattern v0.5 plugins reuse
-
-**External (MEDIUM-HIGH confidence — verified against current docs):**
-- [Python entry points specification](https://packaging.python.org/en/latest/specifications/entry-points/) — entry-point group format, dist-info storage, importlib.metadata.entry_points() API
-- [Python importlib.metadata reference](https://docs.python.org/3/library/importlib.metadata.html) — entry_points(group=) signature, EntryPoint.load() semantics
-- [Creating and discovering plugins (Python Packaging User Guide)](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/) — recommended discovery pattern (this is the pattern v0.3 AdapterRegistry already uses)
-- [VS Code Extension Manifest reference](https://code.visualstudio.com/api/references/extension-manifest) — manifest field structure, activation events, declared contributes; v0.5 borrows the "declare everything statically" pattern but uses TOML not JSON
-- [VS Code Activation Events](https://code.visualstudio.com/api/references/activation-events) — confirms the lazy-load-on-need pattern; v0.5's discover-on-startup is simpler because horus-os is a single long-running process
-- [VS Code permission system discussion](https://github.com/microsoft/vscode/issues/187386) — confirms the gap in VS Code's model: no declared capability system. v0.5 ships one from day one, learning from VS Code's omission.
-- [Designing a plugin architecture in Python (python.org.il)](https://python.org.il/en/presentations/designing-a-plugin-architecture-in-python) — interface + entry-point + manifest layered design; matches the v0.5 layout
-
-**Sanity-check cross-references (MEDIUM confidence):**
-- [pytest plugin system docs](https://docs.pytest.org/en/stable/how-to/writing_plugins.html) — entry-point group `pytest11`, fixture-based hook contracts; confirms in-process plugin loading is the default Python pattern
-- [Setuptools entry point user guide](https://setuptools.pypa.io/en/latest/userguide/entry_point.html) — pyproject.toml `[project.entry-points."group.name"]` syntax that plugins use
+- `/Users/santino/Projects/horus-os/.planning/PROJECT.md` (v0.6 milestone scope + decision-time locks).
+- `/Users/santino/Projects/horus-os/.github/workflows/ci.yml` (current 5-job structure).
+- `/Users/santino/Projects/horus-os/scripts/release_gate.py` (existing 8 checks, docstring, dispatch).
+- `/Users/santino/Projects/horus-os/docs/RELEASE.md` (STOP-BEFORE-TAG sequence).
+- `/Users/santino/Projects/horus-os/pyproject.toml` (base deps + extras + ruff config).
+- `/Users/santino/Projects/horus-os/ARCHITECTURE.md` (v0.3-baseline architecture; unchanged for v0.6).
+- `/Users/santino/Projects/horus-os/.planning/ROADMAP.md` (Phase 38, 39, 47, 48, 49, 50 precedent for "release-gate extension," "docs trio," "STOP-BEFORE-TAG block," "three-OS install gate").
+- `/Users/santino/Projects/horus-os/SECURITY.md` (existing disclosure surface; "(not active yet)" section staged for v0.6 deletion).
+- `/Users/santino/Projects/horus-os/STATUS.md` (existing solo-dev TL;DR; v0.6 row marked NOT PLANNED).
+- `/Users/santino/Projects/horus-os/.github/PULL_REQUEST_TEMPLATE.md` (existing template with NOTICE block to delete at gate flip).
+- `/Users/santino/Projects/horus-os/.github/ISSUE_TEMPLATE/{bug_report.yml,feature_request.yml,config.yml}` (existing v0.5 form set).
+- `/Users/santino/Projects/horus-os/CONTRIBUTING.md` (existing 209 lines, needs rewrite for CLAIM-FLOW + BRANCH-POLICY).
+- [Sigstore CI Quickstart](https://docs.sigstore.dev/quickstart/quickstart-ci/).
+- [gh-action-sigstore-python](https://github.com/sigstore/gh-action-sigstore-python).
+- [actions/attest-build-provenance](https://github.com/actions/attest).
+- [CycloneDX/cyclonedx-python](https://github.com/CycloneDX/cyclonedx-python).
+- [Creating SBOM attestations in GitHub Actions](https://andrewlock.net/creating-sbom-attestations-in-github-actions/).
 
 ---
-*Architecture research for: v0.5 Plugin System on horus-os*
-*Researched: 2026-05-26*
+*Architecture research for: horus-os v0.6 Contribution Gate, release/CI/contributor-trust integration.*
+*Researched: 2026-05-29.*

@@ -1,0 +1,17 @@
+# pip-audit ignore-list for horus-os.
+#
+# Format: every CVE/GHSA/PYSEC ID line MUST be preceded by a
+# comment of the form:
+#
+#   # YYYY-MM-DD: <reason>
+#
+# The date is the ignore-entry's birth date. The reason explains
+# why this CVE is currently un-fixable (typically a transitive
+# dependency awaiting an upstream patch). One fix-tracking
+# Markdown file per ignored CVE lives at
+# .github/pip-audit-tracking/<ID>.md.
+#
+# The release-gate `local-pip-audit-clean` check (Phase 57) rejects
+# any entry in this file that lacks a dated reason comment.
+#
+# At v0.6.0 launch, this list is empty.

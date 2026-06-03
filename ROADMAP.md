@@ -9,42 +9,22 @@ Planning detail lives under `.planning/`. Start with
 |-----------|--------|-------|-----|
 | v0.1 Foundation | 01-11 | shipped 2026-05-23 | `v0.1.0` |
 | v0.2 Multi-Agent + Streaming | 12-21 | shipped 2026-05-23 | `v0.2.0` |
-| **v0.3 Adapter Ecosystem** | **22-31** | **active** | `v0.3.0` (planned) |
-| v0.4 Observability | TBD | not planned | |
-| v0.5 Plugin system | TBD | not planned | |
+| v0.3 Adapter Ecosystem | 22-31 | shipped 2026-05-24 | `v0.3.0` |
+| v0.4 Observability | 32-39 | shipped 2026-05-26 | `v0.4.0` |
+| v0.5 Plugin System | 40-50 | shipped 2026-05-27 | `v0.5.0` |
+| v0.6 (contribution gate) | TBD | not planned | |
 
-## Active milestone: v0.3 Adapter Ecosystem
+For the live phase pointer read `.planning/STATE.md`. For the public status page read `STATUS.md`. For release contents read `CHANGELOG.md`.
 
-**Goal:** Take the v0.2 adapter plugin interface from "one reference webhook" to a real ecosystem. Ship four first-class adapters (Discord, Slack, email, calendar) that turn horus-os into a personal command center reachable from the user's existing channels. Add adapter lifecycle hooks for long-running connections, surface adapter health in the dashboard, and document the setup path for each integration.
+## Next milestone: v0.6 (scope to be decided)
 
-### Decisions locked in for v0.3
+`v0.6` is the earliest possible window for opening outside contributions (see `STATUS.md`). Scope is not yet committed. Candidates floated but not promised:
 
-| Decision | Choice |
-|----------|--------|
-| Lifecycle hooks | Adapter Protocol gains optional `start(ctx)` and `stop()` async hooks. FastAPI lifespan integration runs them at startup and shutdown. Existing webhook adapter works unchanged. |
-| Adapters shipped | Discord, Slack, email (IMAP+SMTP), calendar (Google). Each ships with mocked-SDK tests and a setup guide. |
-| Adapter SDKs | Discord and Slack via official Python SDKs (added as optional deps under their adapter's extra). Email via stdlib `imaplib` + `smtplib`. Calendar via `google-api-python-client`. |
-| Auth and secrets | Each adapter reads its credentials from an env var; calendar uses OAuth with token storage in the data dir. |
-| Dashboard | New `/adapters` view shows status (running, stopped, error), last activity, error count. Enable/disable via REST. |
-| License | Apache 2.0 (unchanged) |
-| Three-OS gate | Same hard gate as v0.1 (Phase 10) and v0.2 (Phase 20), re-applied before release. |
+- Sandboxed plugin execution via OS-level isolation (subprocess/container). Deferred from v0.5; would only land if real-world abuse warrants the engineering cost.
+- Hardening + readiness work toward the contribution gate (CI signing, supply-chain checks, contributor docs, issue templates).
+- Continued feature work (additional adapters, agents, tooling).
 
-### Phases
-
-| # | Title | Goal | Status |
-|---|-------|------|--------|
-| 22 | Adapter lifecycle hooks | Optional `start(ctx)`/`stop()` on Adapter Protocol; FastAPI lifespan integration; `/api/adapters` reports status. | queued |
-| 23 | Discord adapter | Bot listens for mentions/DMs, routes to a configured agent, replies in channel. Setup guide for token + intents. | queued |
-| 24 | Slack adapter | Events API for `app_mention` and DMs; signing-secret HMAC verification; slash command support. | queued |
-| 25 | Email adapter | IMAP poll + SMTP send. Thread-preserving replies. Stdlib only. | queued |
-| 26 | Calendar adapter | Google Calendar "list today's events" tool; optional event creation gated behind a permission flag. | queued |
-| 27 | Dashboard adapter management | `/adapters` view with status, last activity, error count; enable/disable from UI. | queued |
-| 28 | Documentation and examples refresh | ARCHITECTURE update; four adapter examples; v0.2-to-v0.3 migration guide. | queued |
-| 29 | Test surface expansion | Lifecycle tests, mocked-SDK tests per adapter, cross-adapter routing. | queued |
-| 30 | Three-OS install verification (v0.3) | install-smoke green on Ubuntu/macOS/Windows for Python 3.11 + 3.12. | queued |
-| 31 | v0.3.0 release | Tag v0.3.0, CHANGELOG updated, version bumped, GitHub Release with migration notes. | queued |
-
-**Parallelization:** `22 → (23 ∥ 24 ∥ 25 ∥ 26) → 27 → 28 → 29 → 30 → 31`. Phase 22 (lifecycle hooks) gates the four adapter implementations because long-running adapters need start/stop semantics that the v0.2 Protocol does not provide. After 22 lands, the four adapters can ship in parallel.
+The next milestone is opened by the maintainer; v0.6 phases are not yet drafted.
 
 ## Shipped: v0.2 Multi-Agent + Streaming
 
@@ -106,12 +86,9 @@ Planning detail lives under `.planning/`. Start with
 | 10 | Three-OS install verification | install-smoke CI on macOS, Ubuntu, Windows. |
 | 11 | First public release | v0.1.0 tagged, CHANGELOG, GitHub Release. |
 
-## Future milestones (placeholders)
+## Shipped milestone summaries
 
-- **v0.4 Observability.** Cost tracking per agent, per tool. Latency dashboards.
-- **v0.5 Plugin system.** Third-party tools and agents load from a manifest.
-
-Shape is decided in flight. Open an issue or discussion to push on any of these.
+For the deep per-phase breakdown of v0.3, v0.4, and v0.5, read `.planning/ROADMAP.md`. For the public-facing shipped highlights, read `STATUS.md`. Shape of v0.6+ is decided in flight; open an issue or discussion to push on it.
 
 ## Anti-goals
 

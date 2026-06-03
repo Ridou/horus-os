@@ -1,0 +1,32 @@
+{
+  "notes": [
+    {
+      "path": "notes/welcome-to-horus-os.md",
+      "title": "Welcome to horus-os",
+      "size_bytes": 1720,
+      "modified_at": "2026-05-30T22:00:00Z",
+      "preview": "Start here. This note explains how memory works: your agents read and write plain markdown notes, and you can browse every one of them right here."
+    },
+    {
+      "path": "notes/project-overview.md",
+      "title": "Project Overview",
+      "size_bytes": 2048,
+      "modified_at": "2026-05-30T18:00:00Z",
+      "preview": "horus-os is a self-hosted autonomous command center. The runtime is Python, the dashboard is Next.js, and persistence is SQLite."
+    },
+    {
+      "path": "notes/team-charter.md",
+      "title": "Team Charter",
+      "size_bytes": 1536,
+      "modified_at": "2026-05-29T11:20:00Z",
+      "preview": "Five starter agents coordinate around a shared goal queue. The Coordinator delegates, specialists execute."
+    },
+    {
+      "path": "notes/release-checklist.md",
+      "title": "Release Checklist",
+      "size_bytes": 980,
+      "modified_at": "2026-05-28T16:45:00Z",
+      "preview": "Run the test suite, update the changelog, tag the version, and verify the static export builds clean."
+    }
+  ]
+}

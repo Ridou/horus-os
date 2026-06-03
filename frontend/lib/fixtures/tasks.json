@@ -1,0 +1,49 @@
+{
+  "tasks": [
+    {
+      "task_id": "demo-task-pending-001",
+      "title": "Review the starter team configuration",
+      "description": "Open the Team page to see the five starter agents and their roles.",
+      "status": "pending",
+      "agent_profile_name": "Coordinator",
+      "created_at": "2026-05-31T10:00:00Z",
+      "updated_at": "2026-05-31T10:00:00Z"
+    },
+    {
+      "task_id": "demo-task-running-001",
+      "title": "Analyze codebase structure",
+      "description": "Scanning source files and building a dependency map.",
+      "status": "running",
+      "agent_profile_name": "Engineer",
+      "created_at": "2026-05-31T10:01:00Z",
+      "updated_at": "2026-05-31T10:01:00Z"
+    },
+    {
+      "task_id": "demo-task-completed-001",
+      "title": "Generate project overview note",
+      "description": "Written a summary of the project to notes/project-overview.md.",
+      "status": "completed",
+      "agent_profile_name": "Writer",
+      "created_at": "2026-05-31T09:55:00Z",
+      "updated_at": "2026-05-31T09:56:00Z"
+    },
+    {
+      "task_id": "demo-task-error-001",
+      "title": "Fetch external documentation",
+      "description": "Connection to remote host timed out. Retry when network is available.",
+      "status": "error",
+      "agent_profile_name": "Researcher",
+      "created_at": "2026-05-31T09:50:00Z",
+      "updated_at": "2026-05-31T09:51:00Z"
+    },
+    {
+      "task_id": "demo-task-pending-002",
+      "title": "Schedule weekly dependency audit",
+      "description": "Check for outdated packages and open a summary note.",
+      "status": "pending",
+      "agent_profile_name": "Operator",
+      "created_at": "2026-05-31T09:45:00Z",
+      "updated_at": "2026-05-31T09:45:00Z"
+    }
+  ]
+}

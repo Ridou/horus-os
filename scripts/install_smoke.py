@@ -36,7 +36,7 @@ from pathlib import Path
 
 CLI = "horus-os"
 
-SCHEMA_VERSION_EXPECTED = 6
+SCHEMA_VERSION_EXPECTED = 12
 DEFAULT_PROFILE_NAME = "default"
 
 PUBLIC_SURFACE_IMPORT_SNIPPET = (
@@ -72,6 +72,18 @@ PER_MODULE_IMPORT_SNIPPET = (
     "assert CalendarAdapter.__name__ == 'CalendarAdapter'\n"
     "assert WebhookAdapter.__name__ == 'WebhookAdapter'\n"
     "print('PER_MODULE_IMPORT_OK')\n"
+)
+
+# Phase 67 (GH-02): the optional read-only GitHub tool imports and builds
+# without the [github] extra installed, because its HTTP client is lazy
+# imported inside the handler. CI installs '.[all]' (which excludes the
+# github extra), so this marker proves the lazy-import contract holds even
+# when the extra is absent.
+GITHUB_TOOL_IMPORT_SNIPPET = (
+    "from horus_os.tools.github_tool import make_github_read_tool\n"
+    "tool = make_github_read_tool()\n"
+    "assert tool.name == 'github_read', tool.name\n"
+    "print('GITHUB_TOOL_IMPORT_OK')\n"
 )
 
 # Phase 30: TestClient pass against create_app(tmp). The smoke driver
@@ -335,12 +347,13 @@ def main() -> int:
             )
         print("OK   smoke_test removed from agent_profiles")
 
-        # 9. traces on an empty database prints the empty marker
+        # 9. traces lists the seeded demo trace that init records so the
+        #    dashboard is not empty on first run.
         expect(
-            "traces empty",
+            "traces shows seeded demo",
             run(["traces", "--data-dir", str(tmp_dir)]),
             code=0,
-            in_stdout=["(no traces yet)"],
+            in_stdout=["How do I get started with horus-os?"],
         )
 
         # 10. run without an API key fails cleanly (streaming default branch)
@@ -419,6 +432,20 @@ def main() -> int:
             code=0,
             in_stdout=["API_TESTCLIENT_OK adapters="],
         )
+
+        # 16. Optional GitHub read tool imports and builds with the [github]
+        #     extra absent (lazy-import contract; GH-02 / Phase 67).
+        gh_tool = run_python(GITHUB_TOOL_IMPORT_SNIPPET)
+        expect(
+            "github_read tool imports without the [github] extra",
+            gh_tool,
+            code=0,
+            in_stdout=["GITHUB_TOOL_IMPORT_OK"],
+        )
+        # Surface the marker in the driver's own stdout so the pytest wrapper
+        # and the CI log can assert on it directly (the child stdout above is
+        # captured, not echoed).
+        print("GITHUB_TOOL_IMPORT_OK")
 
         print("\nAll install-smoke checks passed.")
         return 0

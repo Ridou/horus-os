@@ -84,23 +84,23 @@ additive only.
 
 Three new tables:
 
-- `plugins` — one row per discovered or installed plugin. Carries
+- `plugins` - one row per discovered or installed plugin. Carries
   `name`, `version`, `manifest_hash`, `enabled`, `installed_at`,
   `source` (entry_point or filesystem).
-- `plugin_capabilities` — one row per granted or pending capability,
+- `plugin_capabilities` - one row per granted or pending capability,
   pinned to `(plugin_name, plugin_version, capability)`. State is
   one of `granted`, `pending`, `revoked`, `expired`. CASCADE deletes
   on plugin removal.
-- `plugin_status` — one row per plugin carrying runtime status
+- `plugin_status` - one row per plugin carrying runtime status
   (`pending`, `running`, `error`, `disabled`) plus `error_phase`,
   `error_message`, `last_seen`.
 
 Two new NULLABLE columns:
 
-- `tool_invocations.plugin_name TEXT NULL` — set on every tool call
+- `tool_invocations.plugin_name TEXT NULL` - set on every tool call
   contributed by a plugin; NULL for v0.4 core tool calls (the
   dashboard renders these as "horus-os core" attribution).
-- `llm_calls.plugin_name TEXT NULL` — set on every LLM call made
+- `llm_calls.plugin_name TEXT NULL` - set on every LLM call made
   inside a plugin-contributed tool's handler; NULL for v0.4 core
   LLM calls.
 
@@ -127,7 +127,7 @@ Two pure-Python packages are now declared in
   downgrade gate parses `Requires-Dist` lines through
   `packaging.requirements.Requirement`.
 
-Both are universal pure-Python wheels — no 3-OS install-smoke
+Both are universal pure-Python wheels - no 3-OS install-smoke
 impact, no Windows wheel gap, no native build step. A bare
 `pip install horus-os` pulls both at install time without any extra
 flag.
@@ -144,8 +144,8 @@ The safety hatch is the boot flag `--disable-all-plugins`, wired in
 `src/horus_os/cli/serve_cmd.py`. Pass the CLI flag (or set the
 `HORUS_OS_DISABLE_ALL_PLUGINS=1` env var) and `horus-os` starts with
 entry-point discovery and local-directory discovery both skipped.
-Every adapter loads as if v0.4 — the four shipped v0.3 adapters plus
-the v0.4 OtelAdapter — while every third-party plugin stays dormant.
+Every adapter loads as if v0.4 - the four shipped v0.3 adapters plus
+the v0.4 OtelAdapter - while every third-party plugin stays dormant.
 Use this when a third-party plugin is misbehaving and you need to
 keep the rest of the system running.
 
@@ -159,14 +159,16 @@ under v0.5.
 ## Verification
 
 The migration ran successfully when the SQLite `user_version` pragma
-reports `6`:
+reports `8` or higher:
 
 ```
 sqlite3 ~/.horus-os/data.db "PRAGMA user_version"
 ```
 
-Expected output: `6`. If the value is `5`, the v0.5 runtime did not
-finish its startup migration — check the server logs for the
+Expected output: `9` (the schema version current at v0.5+). Later
+releases bump this number as they add additive columns, so a value
+above `9` is also healthy. If the value is `5`, the v0.5 runtime did
+not finish its startup migration. Check the server logs for the
 migration error and re-run `horus-os serve`.
 
 ## See also

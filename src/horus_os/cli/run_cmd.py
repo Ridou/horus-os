@@ -19,7 +19,7 @@ from horus_os.memory.tools import (
     search_notes_tool,
 )
 from horus_os.storage import Database
-from horus_os.tools import ToolRegistry, read_file_tool
+from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
 from horus_os.types import AgentProfile, AgentResult, ToolCallEvent, ToolResult
 
 ENV_KEY_FOR = {
@@ -259,6 +259,7 @@ def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegi
     registry.register(read_note_tool(notes_store))
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
+    registry.register(make_github_read_tool())
     return registry
 
 

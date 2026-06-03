@@ -40,7 +40,7 @@ def test_init_creates_schema_on_fresh_db(tmp_path: Path) -> None:
         assert "note_writes" in tables
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:
@@ -133,6 +133,57 @@ def test_list_traces_pagination(tmp_path: Path) -> None:
     assert [r.response_text for r in page_3] == ["r0"]
 
 
+def test_agent_activity_groups_per_agent(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.record_trace("a1", _make_result(), agent_profile_name="Coordinator")
+    time.sleep(0.001)
+    last_coord = db.record_trace("a2", _make_result(), agent_profile_name="Coordinator")
+    db.record_trace("b1", _make_result(), agent_profile_name="Engineer")
+    # An unattributed trace buckets under the literal "default" key.
+    db.record_trace("c1", _make_result())
+
+    activity = db.agent_activity()
+    assert activity["Coordinator"][0] == 2
+    assert activity["Engineer"][0] == 1
+    assert activity["default"][0] == 1
+    # last_created_at for Coordinator matches the newer of its two traces.
+    coord_record = db.get_trace(last_coord)
+    assert coord_record is not None
+    assert activity["Coordinator"][1] == coord_record.created_at
+
+
+def test_agent_activity_empty_on_fresh_db(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    assert db.agent_activity() == {}
+
+
+def test_list_traces_for_agent_newest_first(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    db.record_trace("x1", _make_result(text="r0"), agent_profile_name="Writer")
+    time.sleep(0.001)
+    db.record_trace("x2", _make_result(text="r1"), agent_profile_name="Writer")
+    db.record_trace("other", _make_result(text="r2"), agent_profile_name="Operator")
+    # Unattributed traces match the "default" bucket.
+    db.record_trace("d1", _make_result(text="r3"))
+
+    writer = db.list_traces_for_agent("Writer")
+    assert [t.response_text for t in writer] == ["r1", "r0"]
+    assert db.list_traces_for_agent("Writer", limit=1)[0].response_text == "r1"
+    assert [t.response_text for t in db.list_traces_for_agent("default")] == ["r3"]
+
+
+def test_count_traces(tmp_path: Path) -> None:
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+    assert db.count_traces() == 0
+    db.record_trace("hi", _make_result())
+    db.record_trace("hi again", _make_result())
+    assert db.count_traces() == 2
+
+
 def test_error_status_records_message(tmp_path: Path) -> None:
     db = Database(tmp_path / "horus.sqlite")
     db.init()
@@ -217,7 +268,7 @@ def test_schema_v1_database_upgrades_to_current(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -291,7 +342,7 @@ def test_schema_v2_database_upgrades_to_v3(tmp_path: Path) -> None:
         }
         assert "agent_profiles" in tables
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
     record = db.get_trace("abc123")
     assert record is not None
     assert record.prompt == "hello"
@@ -445,7 +496,7 @@ def test_migration_v3_to_v4(tmp_path: Path) -> None:
     # Version is bumped to 5.
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
         cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
         assert "parent_trace_id" in cols
         assert "agent_profile_name" in cols
@@ -546,7 +597,7 @@ def test_schema_v4_database_upgrades_to_v5(tmp_path: Path) -> None:
 
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -584,7 +635,7 @@ def test_v5_init_is_idempotent(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(db.path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
         llm_count = conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0]
         assert llm_count == 0
         tool_count = conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0]
@@ -620,3 +671,103 @@ def test_pragmas_read_back_correctly(tmp_path: Path) -> None:
     assert synchronous == 1, (
         f"expected synchronous=1 (NORMAL), got {synchronous} (0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA)"
     )
+
+
+# ---------------------------------------------------------------------------
+# v7 -> v8 migration: integration_verification_state (MIG-06)
+# ---------------------------------------------------------------------------
+
+
+def test_v7_to_v8_migration_adds_verification_table_idempotently(tmp_path: Path) -> None:
+    """A v7 database upgrades to v8 by gaining integration_verification_state.
+
+    Simulates a pre-v8 database by creating schema_version=7 and inserting a
+    sentinel row in agent_profiles. Runs init() twice to prove idempotency.
+    The sentinel row must survive the upgrade (additive-only contract, MIG-06).
+    """
+    db_path = tmp_path / "horus.sqlite"
+    # Build a minimal v7 database: version row + sentinel agent row, no new table.
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_version (version INTEGER NOT NULL PRIMARY KEY);
+            INSERT INTO schema_version (version) VALUES (7);
+            CREATE TABLE agent_profiles (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL UNIQUE,
+                system_prompt TEXT NOT NULL DEFAULT '',
+                default_model TEXT,
+                allowed_tools TEXT,
+                memory_scope  TEXT,
+                color         TEXT,
+                description   TEXT,
+                soul_path     TEXT,
+                created_at    TEXT NOT NULL,
+                updated_at    TEXT NOT NULL
+            );
+            INSERT INTO agent_profiles (name, system_prompt, created_at, updated_at)
+                VALUES ('sentinel-v7', 'I am a sentinel row', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+            """
+        )
+
+    db = Database(db_path)
+    # First init: upgrade from v7 to v8.
+    db.init()
+    with sqlite3.connect(str(db_path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 12, f"expected schema_version=12 after upgrade, got {version}"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "integration_verification_state" in tables, (
+            "integration_verification_state table must exist after v7->v8 upgrade"
+        )
+        # Sentinel row must survive the additive migration.
+        sentinel = conn.execute(
+            "SELECT system_prompt FROM agent_profiles WHERE name = 'sentinel-v7'"
+        ).fetchone()
+        assert sentinel is not None and sentinel[0] == "I am a sentinel row", (
+            f"sentinel row lost or corrupted after upgrade: {sentinel}"
+        )
+
+    # Second init: idempotent, no exception, version stays at current.
+    db.init()
+    with sqlite3.connect(str(db_path)) as conn:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 12, "version must remain 12 after second init()"
+        count = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
+        assert count == 1, "schema_version must have exactly one row"
+
+
+def test_integration_verification_hash_change_invalidates(tmp_path: Path) -> None:
+    """Key hash change must reset verified to 0 and clear verified_at (VERIFY-03).
+
+    Also proves that same-hash re-write preserves an existing verified=1 state.
+    """
+    db = Database(tmp_path / "horus.sqlite")
+    db.init()
+
+    # Insert first hash, mark verified.
+    db.upsert_integration_verification("anthropic", "sha256-hashA", verified=True)
+    row = db.get_integration_verification("anthropic")
+    assert row is not None
+    assert row["verified"] == 1, "verified should be 1 after marking True"
+    assert row["verified_at"] is not None, "verified_at should be set when verified=True"
+    assert row["key_hash"] == "sha256-hashA"
+
+    # Re-upsert the same hash with verified=False: must NOT clobber the stored verified=1.
+    db.upsert_integration_verification("anthropic", "sha256-hashA", verified=False)
+    row = db.get_integration_verification("anthropic")
+    assert row is not None
+    assert row["verified"] == 1, "same-hash write must preserve existing verified=1"
+
+    # Now upsert a different hash: must reset verified to 0 and clear verified_at.
+    db.upsert_integration_verification("anthropic", "sha256-hashB", verified=False)
+    row = db.get_integration_verification("anthropic")
+    assert row is not None
+    assert row["verified"] == 0, "hash change must reset verified to 0"
+    assert row["verified_at"] is None, "hash change must clear verified_at"
+    assert row["key_hash"] == "sha256-hashB", "key_hash must update to new hash"
+
+    # Unknown integration_id returns None.
+    assert db.get_integration_verification("unknown-integration") is None

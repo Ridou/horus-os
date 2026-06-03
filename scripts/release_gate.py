@@ -1,6 +1,10 @@
-"""Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49).
+"""Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49 + Phase 57 + Phase 53-followup).
 
-Runs EIGHT checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5):
+Runs FOURTEEN checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5 + 5 v0.6
+Phase 57 + 1 v0.6 Phase 53-followup SBOM-03 wheel-vs-SBOM diff). The 5 Phase 57
+v0.6 checks are APPENDED to the existing v0.5 enum; the SBOM-03 diff check is
+appended after. The 8 v0.4/v0.5 enum values remain byte-identical to v0.5
+(load-bearing constraint #3 from .planning/STATE.md).
 
 1. pricing-freshness: src/horus_os/observability/pricing.json
    `updated_at` is within HORUS_OS_PRICING_MAX_AGE_DAYS (default 14)
@@ -43,7 +47,7 @@ Runs EIGHT checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5):
    migration with the three plugin tables, two plugin_name columns,
    and the ``idx_tool_invocations_plugin`` index present, and a
    second ``init()`` call is idempotent. T-49-01 mitigation: the
-   committed fixture is NEVER mutated — the check copies to a
+   committed fixture is NEVER mutated - the check copies to a
    tempfile and unlinks in a finally block.
 
 Exit semantics: 0 only when all enabled checks pass; 1 when any
@@ -98,6 +102,7 @@ import argparse
 import difflib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -132,6 +137,30 @@ CI_LITERAL_WITH_OTEL = "install-smoke-with-otel"
 CI_LITERAL_PLUGIN_INSTALL_SMOKE = "install-smoke-plugin"
 
 PRICING_WHEEL_MEMBER_SUFFIX = "horus_os/observability/pricing.json"
+
+# v0.6 (Phase 57) defaults: paths the 5 new checks scan.
+DEFAULT_RELEASE_YML_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
+DEFAULT_AUDIT_YML_PATH = REPO_ROOT / ".github" / "workflows" / "audit.yml"
+DEFAULT_WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+DEFAULT_PIP_AUDIT_IGNORE_PATH = REPO_ROOT / ".github" / "pip-audit-ignore.txt"
+
+# Signing + SBOM literals greppped by the v0.6 grep-only checks.
+RELEASE_SIGNING_LITERALS = (
+    "sigstore/gh-action-sigstore-python",
+    "actions/attest-build-provenance",
+)
+RELEASE_SBOM_LITERALS = (
+    "cyclonedx-py",
+    "actions/attest-sbom",
+)
+AUDIT_WORKFLOW_LITERALS = (
+    "pypa/gh-action-pip-audit",
+    "actions/dependency-review-action",
+)
+
+# Action SHA-pin regex (mirrors tests/test_contribution_gate_pitfalls/test_pitfall_02_action_sha_pinning.py).
+_USES_LINE_PATTERN = re.compile(r"^\s*-?\s*uses:\s*([^@\s#]+)@(\S+)")
+_SHA_40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 @dataclass(frozen=True)
@@ -343,7 +372,7 @@ def check_docs_manifest_schema_drift(
     """Pass when docs/manifest-v1.schema.json matches MANIFEST_V1_SCHEMA.
 
     The runtime pydantic schema is dumped via
-    ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` —
+    ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` -
     byte-identical to the serializer in
     ``scripts/build_manifest_schema.py:44`` so a maintainer running the
     build script to fix drift produces a file the gate accepts.
@@ -414,7 +443,7 @@ def check_docs_manifest_schema_drift(
 def check_plugin_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
     """Pass when ci.yml literally contains 'install-smoke-plugin'.
 
-    Single grep — same shape as check_ci_two_variant_smoke_present but
+    Single grep - same shape as check_ci_two_variant_smoke_present but
     for the Phase 49 TEST-20 contract. The job name MUST appear in the
     YAML; if a future maintainer drops the matrix to "speed up CI," the
     gate catches it before tagging.
@@ -631,6 +660,434 @@ def check_v0_4_fixture_roundtrip(fixture_path: Path) -> CheckResult:
                     pass
 
 
+# v0.6 (Phase 57) checks: 5 new grep + scan + subprocess checks appended to the
+# 8 v0.4/v0.5 checks above. Two-tier execution model (REL-15):
+#   - tier-local (<10s): the 4 grep-only checks (signing, sbom, audit, sha-pin)
+#   - tier-release (~60s): tier-local + local-pip-audit-clean (network)
+
+
+def check_release_workflow_signing_present(release_yml: Path) -> CheckResult:
+    """release.yml contains sigstore-python + attest-build-provenance literals (REL-14)."""
+    if not release_yml.is_file():
+        return CheckResult(
+            name="release-workflow-signing-present",
+            ok=False,
+            diagnostic=f"release.yml not found at {release_yml} (Phase 52 substrate broken)",
+        )
+    text = release_yml.read_text(encoding="utf-8")
+    missing = [lit for lit in RELEASE_SIGNING_LITERALS if lit not in text]
+    if missing:
+        return CheckResult(
+            name="release-workflow-signing-present",
+            ok=False,
+            diagnostic=(
+                f"release.yml missing signing literals: {', '.join(missing)}; "
+                "Phase 52 SIGN-01/02 substrate broken"
+            ),
+        )
+    return CheckResult(
+        name="release-workflow-signing-present",
+        ok=True,
+        diagnostic="sigstore-python + attest-build-provenance present in release.yml",
+    )
+
+
+def check_release_workflow_sbom_present(release_yml: Path) -> CheckResult:
+    """release.yml contains cyclonedx-py + attest-sbom literals (REL-14)."""
+    if not release_yml.is_file():
+        return CheckResult(
+            name="release-workflow-sbom-present",
+            ok=False,
+            diagnostic=f"release.yml not found at {release_yml} (Phase 53 substrate broken)",
+        )
+    text = release_yml.read_text(encoding="utf-8")
+    missing = [lit for lit in RELEASE_SBOM_LITERALS if lit not in text]
+    if missing:
+        return CheckResult(
+            name="release-workflow-sbom-present",
+            ok=False,
+            diagnostic=(
+                f"release.yml missing SBOM literals: {', '.join(missing)}; "
+                "Phase 53 SBOM-01/02/03 substrate broken"
+            ),
+        )
+    return CheckResult(
+        name="release-workflow-sbom-present",
+        ok=True,
+        diagnostic="cyclonedx-py + attest-sbom present in release.yml",
+    )
+
+
+def check_audit_workflow_present(audit_yml: Path) -> CheckResult:
+    """audit.yml exists and contains pip-audit + dependency-review-action literals (REL-14)."""
+    if not audit_yml.is_file():
+        return CheckResult(
+            name="audit-workflow-present",
+            ok=False,
+            diagnostic=(
+                f"audit.yml not found at {audit_yml}; Phase 53 SUPPLY-01/02 substrate broken"
+            ),
+        )
+    text = audit_yml.read_text(encoding="utf-8")
+    missing = [lit for lit in AUDIT_WORKFLOW_LITERALS if lit not in text]
+    if missing:
+        return CheckResult(
+            name="audit-workflow-present",
+            ok=False,
+            diagnostic=(
+                f"audit.yml missing literals: {', '.join(missing)}; "
+                "Phase 53 SUPPLY-01/02 substrate broken"
+            ),
+        )
+    return CheckResult(
+        name="audit-workflow-present",
+        ok=True,
+        diagnostic="pip-audit + dependency-review-action present in audit.yml",
+    )
+
+
+_PIP_AUDIT_DATED_COMMENT_PATTERN = re.compile(r"^\s*#\s*\d{4}-\d{2}-\d{2}:\s+\S")
+
+
+def _validate_pip_audit_ignore_format(ignore_path: Path) -> str | None:
+    """Return None on valid file, or a diagnostic string on the first violation.
+
+    Each non-comment, non-blank line in .github/pip-audit-ignore.txt MUST be
+    immediately preceded by a `# YYYY-MM-DD: <reason>` comment line per the
+    Phase 53 SUPPLY-03 contract (file header docstring). This validator
+    enforces the contract before pip-audit is invoked, closing the gap
+    where an undocumented ignore entry would silently pass the gate.
+    """
+    if not ignore_path.is_file():
+        return None
+    lines = ignore_path.read_text(encoding="utf-8").splitlines()
+    prev_comment_has_date = False
+    for idx, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped:
+            prev_comment_has_date = False
+            continue
+        if stripped.startswith("#"):
+            prev_comment_has_date = bool(_PIP_AUDIT_DATED_COMMENT_PATTERN.match(line))
+            continue
+        if not prev_comment_has_date:
+            return (
+                f"line {idx}: {stripped!r} is missing the required "
+                "`# YYYY-MM-DD: <reason>` comment on the line above"
+            )
+        prev_comment_has_date = False
+    return None
+
+
+def check_local_pip_audit_clean(allow_offline: bool = False) -> CheckResult:
+    """Run pip-audit -s osv against current install; pass only on clean scan (REL-14 + REL-15).
+
+    Short-circuits with SKIP when allow_offline=True (tier-local offline path).
+    Honors the .github/pip-audit-ignore.txt ignore list (SUPPLY-03 substrate)
+    AND enforces the dated-reason comment contract documented in the
+    ignore-file header.
+    """
+    if allow_offline:
+        return CheckResult(
+            name="local-pip-audit-clean",
+            ok=None,
+            diagnostic=(
+                "SKIPPED - --allow-offline set; rerun without the flag to verify "
+                "network-backed pip-audit scan against OSV"
+            ),
+        )
+    # SUPPLY-03 contract: every ignore entry MUST have a dated reason comment.
+    ignore_format_err = _validate_pip_audit_ignore_format(DEFAULT_PIP_AUDIT_IGNORE_PATH)
+    if ignore_format_err is not None:
+        return CheckResult(
+            name="local-pip-audit-clean",
+            ok=False,
+            diagnostic=(
+                f"pip-audit-ignore.txt format violation: {ignore_format_err}; "
+                "see .github/pip-audit-ignore.txt header for required format"
+            ),
+        )
+    # pip-audit has no file-based ignore flag; it takes one repeatable
+    # --ignore-vuln ID. Translate each non-comment, non-blank line of the
+    # ignore file (already format-validated above) into its own flag. An
+    # empty ignore list yields no flags, so the scan runs unfiltered.
+    ignore_file_arg: list[str] = []
+    if DEFAULT_PIP_AUDIT_IGNORE_PATH.is_file():
+        for raw_line in DEFAULT_PIP_AUDIT_IGNORE_PATH.read_text(encoding="utf-8").splitlines():
+            entry = raw_line.strip()
+            if entry and not entry.startswith("#"):
+                ignore_file_arg += ["--ignore-vuln", entry]
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip_audit", "-s", "osv", *ignore_file_arg],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=90,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        return CheckResult(
+            name="local-pip-audit-clean",
+            ok=None,
+            diagnostic=(
+                f"SKIPPED - pip-audit not available ({type(exc).__name__}); "
+                "install via pip install -e '.[dev]' to enable this check"
+            ),
+        )
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
+        joined = " | ".join(tail)
+        if "No module named" in joined and "pip_audit" in joined:
+            return CheckResult(
+                name="local-pip-audit-clean",
+                ok=None,
+                diagnostic=(
+                    "SKIPPED - pip-audit not importable in this venv; "
+                    "install via pip install -e '.[dev]' to enable this check"
+                ),
+            )
+        return CheckResult(
+            name="local-pip-audit-clean",
+            ok=False,
+            diagnostic=f"pip-audit exited {proc.returncode}; tail: " + joined,
+        )
+    return CheckResult(
+        name="local-pip-audit-clean",
+        ok=True,
+        diagnostic="pip-audit -s osv exited 0 (no advisories against current install)",
+    )
+
+
+def _extract_pip_report_components(report_payload: dict) -> set[tuple[str, str]]:
+    """Return {(canonical_name, version)} for every entry in the pip --report install array.
+
+    Per PEP 658 / pip 22.2+ JSON report shape, each `install` entry has
+    `metadata.name` + `metadata.version`. Name canonicalization mirrors
+    PEP 503 (lowercase, normalize `_`/`.` to `-`) so the diff is robust
+    against the cosmetic name variants (`pydantic_core` vs `pydantic-core`)
+    that cyclonedx-py and pip emit interchangeably.
+    """
+    components: set[tuple[str, str]] = set()
+    for entry in report_payload.get("install", []) or []:
+        metadata = entry.get("metadata") or {}
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            canonical = re.sub(r"[-_.]+", "-", name.strip().lower())
+            components.add((canonical, version.strip()))
+    return components
+
+
+def _extract_sbom_components(sbom_payload: dict) -> set[tuple[str, str]]:
+    """Return {(canonical_name, version)} for every CycloneDX 1.6 `components[]` entry.
+
+    Tolerates absent fields; entries without both name + version are dropped
+    on the floor (matching pip-report behavior).
+    """
+    components: set[tuple[str, str]] = set()
+    for component in sbom_payload.get("components", []) or []:
+        name = component.get("name")
+        version = component.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            canonical = re.sub(r"[-_.]+", "-", name.strip().lower())
+            components.add((canonical, version.strip()))
+    return components
+
+
+def check_sbom_matches_wheel(
+    wheel_path: Path,
+    sbom_path: Path,
+    *,
+    extras: str = "",
+    pip_report_payload: dict | None = None,
+) -> CheckResult:
+    """Diff a CycloneDX 1.6 SBOM against the wheel's actual dependency tree (SBOM-03).
+
+    Runs `pip install --dry-run --ignore-installed --report <tmpfile> <wheel>[extras]`
+    to compute the transitive dependency tree pip would install, then diffs
+    that tree against the components listed in the CycloneDX 1.6 JSON SBOM.
+
+    Returns:
+    - ok=None (SKIP) when either path is absent (release_gate runs pre-release
+      where the wheel + SBOM are not yet built; this check is only relevant at
+      release-rehearsal time when both artifacts exist).
+    - ok=False on any STALE (SBOM has a component pip does not install) OR
+      MISSING (pip installs a component the SBOM does not list) divergence.
+      The wheel's own name is never compared (cyclonedx-py never lists the
+      wheel itself; pip --report does).
+    - ok=True when every pip-report component (excluding the wheel itself)
+      appears in the SBOM AND every SBOM component appears in pip-report.
+
+    The optional `pip_report_payload` kw lets tests inject a synthetic pip
+    report dict; production callers always pass None and the function shells
+    out to pip. Test-friendly injection avoids requiring a working pip + wheel
+    in unit tests while still exercising the diff logic end-to-end.
+    """
+    if wheel_path is None or not wheel_path.is_file():
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=None,
+            diagnostic=(
+                f"SKIPPED - wheel not available at {wheel_path}; this check is "
+                "relevant only at release-rehearsal time when the wheel and SBOM exist"
+            ),
+        )
+    if sbom_path is None or not sbom_path.is_file():
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=None,
+            diagnostic=(
+                f"SKIPPED - SBOM not available at {sbom_path}; this check is "
+                "relevant only at release-rehearsal time when the wheel and SBOM exist"
+            ),
+        )
+    try:
+        sbom_payload = json.loads(sbom_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=False,
+            diagnostic=f"could not read or parse SBOM at {sbom_path}: {type(exc).__name__}: {exc}",
+        )
+
+    if pip_report_payload is None:
+        spec = f"{wheel_path}{extras}" if extras else str(wheel_path)
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="release-gate-pip-report-"
+        ) as tmp:
+            report_path = Path(tmp.name)
+        try:
+            try:
+                proc = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--dry-run",
+                        "--ignore-installed",
+                        "--quiet",
+                        "--report",
+                        str(report_path),
+                        spec,
+                    ],
+                    cwd=str(REPO_ROOT),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=180,
+                )
+            except (FileNotFoundError, OSError) as exc:
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(f"pip not available ({type(exc).__name__}): {exc}"),
+                )
+            if proc.returncode != 0:
+                tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(
+                        f"pip install --dry-run failed for {spec}: exit {proc.returncode}; "
+                        "tail: " + " | ".join(tail)
+                    ),
+                )
+            try:
+                pip_report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return CheckResult(
+                    name="sbom-matches-wheel",
+                    ok=False,
+                    diagnostic=(f"could not read pip --report output: {type(exc).__name__}: {exc}"),
+                )
+        finally:
+            try:
+                report_path.unlink()
+            except OSError:
+                pass
+
+    pip_components = _extract_pip_report_components(pip_report_payload)
+    sbom_components = _extract_sbom_components(sbom_payload)
+
+    # Strip the wheel's own component out of the pip-report side; cyclonedx-py
+    # `environment` scans never include the project itself, only its deps.
+    # The wheel filename shape per PEP 427 is `<name>-<version>-...whl`; the
+    # canonicalized first segment matches the wheel's distribution name.
+    wheel_self_name = re.sub(r"[-_.]+", "-", wheel_path.stem.split("-")[0].strip().lower())
+    pip_components = {(n, v) for (n, v) in pip_components if n != wheel_self_name}
+
+    stale = sbom_components - pip_components  # in SBOM but pip would not install
+    missing = pip_components - sbom_components  # pip would install but absent from SBOM
+
+    if stale or missing:
+        parts: list[str] = []
+        if stale:
+            stale_str = ", ".join(sorted(f"{n}=={v}" for (n, v) in stale)[:5])
+            suffix = f" (+{len(stale) - 5} more)" if len(stale) > 5 else ""
+            parts.append(
+                f"STALE {len(stale)} component(s) in SBOM but not in wheel: {stale_str}{suffix}"
+            )
+        if missing:
+            missing_str = ", ".join(sorted(f"{n}=={v}" for (n, v) in missing)[:5])
+            suffix = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+            parts.append(f"MISSING {len(missing)} wheel dep(s) not in SBOM: {missing_str}{suffix}")
+        return CheckResult(
+            name="sbom-matches-wheel",
+            ok=False,
+            diagnostic="; ".join(parts),
+        )
+
+    return CheckResult(
+        name="sbom-matches-wheel",
+        ok=True,
+        diagnostic=(
+            f"SBOM at {sbom_path.name} matches the {len(pip_components)} "
+            "transitive deps of the wheel (canonical name + version diff clean)"
+        ),
+    )
+
+
+def check_actions_pinned_by_sha(workflows_dir: Path) -> CheckResult:
+    """Every uses: line in every workflow has a 40-char hex SHA ref (REL-14, CIHARD-04)."""
+    if not workflows_dir.is_dir():
+        return CheckResult(
+            name="actions-pinned-by-sha",
+            ok=False,
+            diagnostic=f"workflows dir not found at {workflows_dir}",
+        )
+    offenders: list[str] = []
+    for workflow in sorted(workflows_dir.glob("*.yml")):
+        text = workflow.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.strip().startswith("#"):
+                continue
+            match = _USES_LINE_PATTERN.match(line)
+            if match is None:
+                continue
+            action_path, ref = match.group(1), match.group(2)
+            if action_path.startswith("./"):
+                continue
+            if not _SHA_40_PATTERN.match(ref):
+                offenders.append(f"{workflow.name}: {action_path}@{ref}")
+    if offenders:
+        head = "; ".join(offenders[:5])
+        suffix = f" (+{len(offenders) - 5} more)" if len(offenders) > 5 else ""
+        return CheckResult(
+            name="actions-pinned-by-sha",
+            ok=False,
+            diagnostic=(
+                f"CIHARD-04 violation: {len(offenders)} unpinned uses lines: {head}{suffix}"
+            ),
+        )
+    return CheckResult(
+        name="actions-pinned-by-sha",
+        ok=True,
+        diagnostic="every uses: line in .github/workflows/*.yml is SHA-pinned (40-char hex)",
+    )
+
+
 def _print_result(result: CheckResult) -> None:
     if result.ok is True:
         print(f"OK    {result.name}: {result.diagnostic}")
@@ -676,7 +1133,7 @@ def _resolved_v0_4_fixture_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the eight release-gate checks. Return 0 on full pass, 1 on any fail."""
+    """Run the fourteen release-gate checks. Return 0 on full pass, 1 on any fail."""
     parser = argparse.ArgumentParser(
         description="Pre-tag release-quality gate for horus-os.",
     )
@@ -691,6 +1148,12 @@ def main(argv: list[str] | None = None) -> int:
             "plugin-install",
             "reference-manifest",
             "fixture-roundtrip",
+            "release-workflow-signing-present",
+            "release-workflow-sbom-present",
+            "audit-workflow-present",
+            "local-pip-audit-clean",
+            "actions-pinned-by-sha",
+            "sbom-matches-wheel",
         ),
         default=None,
         help="Run only the named check.",
@@ -700,12 +1163,51 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip the slow wheel build (alias for HORUS_OS_RELEASE_GATE_SKIP_BUILD=1).",
     )
+    parser.add_argument(
+        "--tier",
+        choices=("local", "release"),
+        default="release",
+        help=(
+            "Tier filter (v0.6 / Phase 57): 'local' restricts to the 4 grep-only "
+            "Phase 57 checks (<10s); 'release' (default) runs all 13 checks."
+        ),
+    )
+    parser.add_argument(
+        "--allow-offline",
+        action="store_true",
+        help=(
+            "Short-circuit the local-pip-audit-clean network check with SKIP. "
+            "Use when offline; rerun without the flag before tagging."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    # WR-02 fix: the `local-pip-audit-clean` check requires tier=release
+    # (network-backed pip-audit scan). Reject the inconsistent combination
+    # with a clear error rather than silently producing no result.
+    if args.check == "local-pip-audit-clean" and args.tier == "local":
+        parser.error(
+            "--check local-pip-audit-clean is incompatible with --tier local "
+            "(local tier excludes the network-backed pip-audit scan); "
+            "rerun with --tier release"
+        )
 
     skip_build = args.skip_build or _truthy_env("HORUS_OS_RELEASE_GATE_SKIP_BUILD")
     skip_tests = _truthy_env("HORUS_OS_RELEASE_GATE_SKIP_TESTS")
 
     selected = args.check
+    tier = args.tier
+    allow_offline = args.allow_offline
+
+    # Tier-local restricts the dispatcher to the 4 grep-only Phase 57 checks.
+    # When tier=local AND no explicit --check selected, set a sentinel that
+    # matches none of the v0.4/v0.5 enum values so the existing dispatch
+    # blocks below are skipped. The 4 grep-only Phase 57 dispatch blocks at
+    # the bottom of main() honor the sentinel explicitly.
+    tier_local_sentinel = "_TIER_LOCAL_SKIP_V0_4_V0_5_"
+    if tier == "local" and selected is None:
+        selected = tier_local_sentinel
+
     pricing_path = _resolved_pricing_path()
     ci_yml_path = _resolved_ci_yml_path()
     docs_schema_path = _resolved_docs_schema_path()
@@ -757,6 +1259,66 @@ def main(argv: list[str] | None = None) -> int:
 
     if selected in (None, "fixture-roundtrip"):
         results.append(check_v0_4_fixture_roundtrip(v0_4_fixture_path))
+
+    # v0.6 (Phase 57) checks: 5 new checks. The 4 grep-only ones honor the
+    # tier-local sentinel; local-pip-audit-clean is gated on tier == "release".
+    release_yml = DEFAULT_RELEASE_YML_PATH
+    audit_yml = DEFAULT_AUDIT_YML_PATH
+    workflows_dir = DEFAULT_WORKFLOWS_DIR
+
+    if selected in (None, tier_local_sentinel, "release-workflow-signing-present"):
+        results.append(check_release_workflow_signing_present(release_yml))
+
+    if selected in (None, tier_local_sentinel, "release-workflow-sbom-present"):
+        results.append(check_release_workflow_sbom_present(release_yml))
+
+    if selected in (None, tier_local_sentinel, "audit-workflow-present"):
+        results.append(check_audit_workflow_present(audit_yml))
+
+    if selected in (None, "local-pip-audit-clean") and tier == "release":
+        results.append(check_local_pip_audit_clean(allow_offline=allow_offline))
+
+    if selected in (None, tier_local_sentinel, "actions-pinned-by-sha"):
+        results.append(check_actions_pinned_by_sha(workflows_dir))
+
+    # SBOM-03 second clause (Phase 53 carry-forward closed in 57-followup):
+    # diff the published wheel's dependency tree against the CycloneDX SBOM.
+    # Tier-release only: requires both wheel + SBOM artifacts on disk, which
+    # is the case at release-rehearsal time (post-`python -m build` +
+    # post-`cyclonedx-py environment`). Auto-discovers candidates in dist/;
+    # an explicit env override (HORUS_OS_WHEEL_PATH_OVERRIDE /
+    # HORUS_OS_SBOM_PATH_OVERRIDE) takes precedence for test mode and the
+    # rehearsal-checklist workflow.
+    if selected in (None, "sbom-matches-wheel") and tier == "release":
+        wheel_override = os.environ.get("HORUS_OS_WHEEL_PATH_OVERRIDE")
+        sbom_override = os.environ.get("HORUS_OS_SBOM_PATH_OVERRIDE")
+        if wheel_override and sbom_override:
+            results.append(check_sbom_matches_wheel(Path(wheel_override), Path(sbom_override)))
+        else:
+            dist = REPO_ROOT / "dist"
+            wheels = sorted(dist.glob("*.whl")) if dist.is_dir() else []
+            sboms = sorted(dist.glob("*.cdx.json")) if dist.is_dir() else []
+            if wheels and sboms:
+                # Default: latest wheel + the clean-install SBOM (matches the
+                # SBOM-01 contract: clean install = wheel deps, no extras).
+                clean_sbom = next(
+                    (s for s in sboms if "clean" in s.name),
+                    sboms[-1],
+                )
+                results.append(check_sbom_matches_wheel(wheels[-1], clean_sbom))
+            else:
+                results.append(
+                    CheckResult(
+                        name="sbom-matches-wheel",
+                        ok=None,
+                        diagnostic=(
+                            "SKIPPED - no wheel + SBOM pair found in dist/; "
+                            "this check is relevant at release-rehearsal time only. "
+                            "Set HORUS_OS_WHEEL_PATH_OVERRIDE + HORUS_OS_SBOM_PATH_OVERRIDE "
+                            "or run `python -m build` and SBOM generation first"
+                        ),
+                    )
+                )
 
     for result in results:
         _print_result(result)

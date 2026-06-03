@@ -110,7 +110,9 @@ def test_buffered_run_with_agent_forwards_system_prompt_and_model(
     assert captured["model"] == "claude-sonnet-4-6"
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    # A fresh init seeds one example demo trace; filter it out so this asserts
+    # only on the trace this run recorded.
+    traces = [t for t in db.list_traces() if t.provider != "example"]
     assert len(traces) == 1
     assert traces[0].agent_profile_name == "terse"
 

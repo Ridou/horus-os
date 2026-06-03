@@ -1,0 +1,36 @@
+{
+  "$comment": "HAND-CRAFTED Phase 58 TEST-24 negative fixture. NOT produced by sigstore-python; identity intentionally bound to Other/repo to exercise the EXPECTED_IDENTITY_TEMPLATE rejection branch in scripts/verify_release.py. See README.md in this directory.",
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {
+    "certificate": {
+      "rawBytes": "MIIBwzCCAYqgAwIBAgIUPlaceholderCertForNegativeTestingOnlyAAAAAwCgYIKoZIzj0EAwMwUTELMAkGA1UEBhMCVVMxJTAjBgNVBAoTHGtleWxlc3Muc2lnc3RvcmUuZGV2IGZvciB0ZXN0MRswGQYDVQQDExJzaWdzdG9yZS1pbnRlcm1lZGlhdGUwHhcNMjYwNTMwMTIwMDAwWhcNMjYwNTMwMTIxMDAwWjAAMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEPlaceholderPublicKeyForNegativeTestingOnlyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo38wfTAdBgNVHQ4EFgQUPlaceholderSubjectKeyIdAAAAAAAAAAAAAAAAAAAAAAAAwHwYDVR0jBBgwFoAUPlaceholderAuthorityKeyIdAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "tlogEntries": [
+      {
+        "$comment": "Placeholder transparency-log entry; the test does NOT round-trip through Rekor. Identity-mismatch fails BEFORE Rekor lookup.",
+        "logIndex": "999999999",
+        "logId": {
+          "keyId": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0="
+        },
+        "kindVersion": {
+          "kind": "hashedrekord",
+          "version": "0.0.1"
+        },
+        "integratedTime": "1748563200",
+        "inclusionPromise": {
+          "signedEntryTimestamp": "PlaceholderSETBytesForNegativeTestingOnlyAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    ]
+  },
+  "messageSignature": {
+    "messageDigest": {
+      "algorithm": "SHA2_256",
+      "digest": "PlaceholderArtifactDigestBytesForNegativeTestingOnlyAAAA="
+    },
+    "signature": "PlaceholderSignatureBytesForNegativeTestingOnlyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "$expectedCertSubject": "https://github.com/Other/repo/.github/workflows/release.yml@refs/tags/v0.6.0",
+  "$expectedOidcIssuer": "https://token.actions.githubusercontent.com",
+  "$negativeTestPurpose": "This bundle's logical identity (per the README) is Other/repo; scripts/verify_release.py expects Ridou/horus-os. Any verification attempt MUST fail. The cryptographic primitives are placeholders so 'python -m sigstore verify identity' also fails on signature validity, which is still the correct test outcome (the verifier exited non-zero; the only thing the test asserts is the non-zero exit)."
+}
