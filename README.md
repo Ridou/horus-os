@@ -15,8 +15,8 @@
 </p>
 
 <p align="center">
-  <b><a href="https://horus-os-docs.vercel.app">Documentation</a></b>
-  &nbsp;&middot;&nbsp; <a href="https://horus-os-demo.vercel.app">Live demo</a>
+  <b><a href="https://docs.horus-demo.com">Documentation</a></b>
+  &nbsp;&middot;&nbsp; <a href="https://horus-demo.com">Live demo</a>
   &nbsp;&middot;&nbsp; <a href="#quickstart">Quickstart</a>
   &nbsp;&middot;&nbsp; <a href="STATUS.md">Status</a>
   &nbsp;&middot;&nbsp; <a href="ROADMAP.md">Roadmap</a>
@@ -84,7 +84,7 @@ horus-os run --agent Researcher "Find three sources on retrieval-augmented memor
 horus-os serve        # http://127.0.0.1:8765
 ```
 
-Need a key first? Grab one from the [Anthropic Console](https://console.anthropic.com/) or [Google AI Studio](https://aistudio.google.com/apikey). A full walkthrough lives on the [Get Started page](https://horus-os-demo.vercel.app/get-started). horus-os needs at least one provider key, and your keys stay on your machine.
+Need a key first? Grab one from the [Anthropic Console](https://console.anthropic.com/) or [Google AI Studio](https://aistudio.google.com/apikey). A full walkthrough lives on the [Get Started page](https://horus-demo.com/get-started). horus-os needs at least one provider key, and your keys stay on your machine.
 
 `horus-os init` is not an empty shell. On first run it seeds a five-agent team, a dozen example notes, and a demo trace, so the CLI and the dashboard have something to show immediately. It is all example data you can edit or delete.
 
@@ -147,7 +147,7 @@ The dashboard talks only to your local backend. There is no hosted service behin
   </tr>
 </table>
 
-<p align="center"><a href="https://horus-os-demo.vercel.app">Explore the live demo</a> (sample data, no backend required).</p>
+<p align="center"><a href="https://horus-demo.com">Explore the live demo</a> (sample data, no backend required).</p>
 
 ## What is inside
 
@@ -170,7 +170,7 @@ v0.7, "Look and Feel + Starter Team," is the milestone that makes horus-os feel 
 - **A real dashboard.** A Next.js 16 interface with the team org view, memory browser, activity timeline, traces explorer, and a costs and observability page with charts. Static-exported and bundled in the wheel, so it still runs with no Node.
 - **A starter team, seeded on install.** Five agents with `SOUL.md` personas, a dozen example notes, and a demo trace, so nothing is empty the first time you open it.
 - **An identity.** The eye-of-Horus mark and a cyan-on-near-black design system shared by the dashboard and the docs.
-- **A front door.** A unified marketing and demo site with a guided [Get Started](https://horus-os-demo.vercel.app/get-started) flow. [Try it live.](https://horus-os-demo.vercel.app)
+- **A front door.** A unified marketing and demo site with a guided [Get Started](https://horus-demo.com/get-started) flow. [Try it live.](https://horus-demo.com)
 
 <p align="center">
   <img src="assets/screenshots/landing.png" alt="horus-os unified marketing and demo site" width="90%">
