@@ -18,6 +18,7 @@ import type {
   ChatAgentsResponse,
   ChatStreamEvent,
   ChatStreamRequest,
+  CreateAgentRequest,
   CostByAgentResponse,
   CostByModelResponse,
   HealthResponse,
@@ -29,6 +30,9 @@ import type {
   ResearchReport,
   ResearchStartResponse,
   SettingsResponse,
+  StoreBundle,
+  StoreBundleDetail,
+  StoreBundlesResponse,
   TasksResponse,
   TeamResponse,
   ToolReliabilityResponse,
@@ -178,6 +182,48 @@ delegates, specialists execute, and every run is traced.
 `,
 };
 
+/**
+ * Demo-mode catalog of featured agent bundles. Mirrors the backend store so
+ * the page renders fully with no server (the install action stays disabled in
+ * demo). The full personas live server-side; these summaries drive the grid.
+ */
+const STORE_FIXTURE: StoreBundle[] = [
+  {
+    slug: "atlas",
+    name: "Atlas",
+    color: "#38bdf8",
+    role: "Travel planner",
+    description: "Plans trips, finds places to go, and handles travel logistics.",
+    default_model: null,
+    recommended_tools: ["web_search", "create_calendar_event", "create_note"],
+    recommended_adapters: ["calendar", "voice"],
+    installed: false,
+  },
+  {
+    slug: "vitriol",
+    name: "Vitriol",
+    color: "#34d399",
+    role: "Wellness researcher",
+    description:
+      "Evidence-first wellness and integrative-health information. Not medical advice.",
+    default_model: null,
+    recommended_tools: ["web_search", "search_notes", "create_note"],
+    recommended_adapters: ["web"],
+    installed: false,
+  },
+  {
+    slug: "sol",
+    name: "Sol",
+    color: "#f59e0b",
+    role: "Reflective companion",
+    description: "A reflective conversational companion and journaling partner.",
+    default_model: null,
+    recommended_tools: ["search_notes", "create_note", "append_note"],
+    recommended_adapters: [],
+    installed: false,
+  },
+];
+
 /** Lowercase slug used to key fixtures and route detail lookups. */
 export function agentSlug(name: string): string {
   return name.toLowerCase().replace(/\s+/g, "-");
@@ -236,6 +282,53 @@ function fallbackMemoryNote(path: string): MemoryNoteDetail {
 export const api = {
   team(): Promise<TeamResponse> {
     return getJson<TeamResponse>("/team", () => team);
+  },
+
+  /** GET /api/store: installable agent bundles, flagged installed/not. */
+  storeBundles(): Promise<StoreBundlesResponse> {
+    return getJson<StoreBundlesResponse>("/store", () => ({
+      bundles: STORE_FIXTURE,
+    }));
+  },
+
+  /** GET /api/store/{slug}: a bundle in full, including the persona. */
+  storeBundle(slug: string): Promise<StoreBundleDetail> {
+    return getJson<StoreBundleDetail>(
+      `/store/${encodeURIComponent(slug)}`,
+      () => {
+        const b = STORE_FIXTURE.find((x) => x.slug === slug) ?? STORE_FIXTURE[0];
+        return { ...b, system_prompt: "", setup_notes: "" };
+      },
+    );
+  },
+
+  /** POST /api/store/{slug}/install: create an agent from a bundle. */
+  async installBundle(slug: string): Promise<{ name: string }> {
+    if (DEMO) throw new Error("install is disabled in demo mode");
+    const res = await fetch(
+      `${API_BASE}/store/${encodeURIComponent(slug)}/install`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json() as Promise<{ name: string }>;
+  },
+
+  /** POST /api/agents: create a custom agent (the builder). */
+  async createAgent(payload: CreateAgentRequest): Promise<{ name: string }> {
+    if (DEMO) throw new Error("creating agents is disabled in demo mode");
+    const res = await fetch(`${API_BASE}/agents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const detail =
+        res.status === 409
+          ? "An agent with that name already exists."
+          : `HTTP ${res.status}`;
+      throw new Error(detail);
+    }
+    return res.json() as Promise<{ name: string }>;
   },
 
   /**

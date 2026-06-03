@@ -342,6 +342,40 @@ export interface ChatStreamRequest {
   max_iterations?: number;
 }
 
+/** One installable agent bundle from GET /api/store (grid summary). */
+export interface StoreBundle {
+  slug: string;
+  name: string;
+  color: string;
+  role: string;
+  description: string;
+  default_model: string | null;
+  recommended_tools: string[];
+  recommended_adapters: string[];
+  installed: boolean;
+}
+
+/** GET /api/store */
+export interface StoreBundlesResponse {
+  bundles: StoreBundle[];
+}
+
+/** GET /api/store/{slug}: a bundle in full, including the persona. */
+export interface StoreBundleDetail extends StoreBundle {
+  system_prompt: string;
+  setup_notes: string;
+}
+
+/** Request body for POST /api/agents (the custom-agent builder). */
+export interface CreateAgentRequest {
+  name: string;
+  system_prompt: string;
+  description?: string;
+  color?: string;
+  default_model?: string | null;
+  allowed_tools?: string[] | null;
+}
+
 /**
  * One Server-Sent Event frame emitted by POST /api/chat/stream.
  *

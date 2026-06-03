@@ -616,12 +616,16 @@ def create_app(
         allowed = payload.get("allowed_tools")
         if allowed is not None and not isinstance(allowed, list):
             raise HTTPException(400, detail="allowed_tools must be a list or null")
+        color = payload.get("color")
+        description = payload.get("description")
         profile = AgentProfile(
             name=name,
             system_prompt=system_prompt,
             default_model=payload.get("default_model"),
             allowed_tools=list(allowed) if isinstance(allowed, list) else None,
             memory_scope=payload.get("memory_scope"),
+            color=color if isinstance(color, str) else None,
+            description=description if isinstance(description, str) else None,
         )
         db.save_profile(profile)
         saved = db.load_profile(name)
@@ -668,6 +672,73 @@ def create_app(
         if not deleted:
             raise HTTPException(404, detail=f"agent profile {name!r} not found")
         return Response(status_code=204)
+
+    @app.get("/api/agents/{name}/export")
+    def agents_export(name: str) -> dict[str, Any]:
+        """Export an installed profile as a shareable agent bundle."""
+        from horus_os.store import profile_to_bundle
+
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        db = Database(cfg.db_path)
+        profile = db.load_profile(name)
+        if profile is None:
+            raise HTTPException(404, detail=f"agent profile {name!r} not found")
+        return profile_to_bundle(profile)
+
+    @app.get("/api/store")
+    def store_list() -> dict[str, Any]:
+        """List installable agent bundles, flagged with their installed state."""
+        from horus_os.store import list_bundles
+
+        cfg = _config()
+        installed: set[str] = set()
+        if cfg.db_path.exists():
+            db = Database(cfg.db_path)
+            installed = {p.name for p in db.list_profiles()}
+        bundles = []
+        for bundle in list_bundles():
+            summary = bundle.to_summary()
+            summary["installed"] = bundle.name in installed
+            bundles.append(summary)
+        return {"bundles": bundles}
+
+    @app.get("/api/store/{slug}")
+    def store_detail(slug: str) -> dict[str, Any]:
+        """Return one agent bundle in full, including its persona."""
+        from horus_os.store import get_bundle
+
+        bundle = get_bundle(slug)
+        if bundle is None:
+            raise HTTPException(404, detail=f"bundle {slug!r} not found")
+        detail = bundle.to_detail()
+        cfg = _config()
+        if cfg.db_path.exists():
+            db = Database(cfg.db_path)
+            detail["installed"] = db.load_profile(bundle.name) is not None
+        else:
+            detail["installed"] = False
+        return detail
+
+    @app.post("/api/store/{slug}/install")
+    def store_install(slug: str) -> dict[str, Any]:
+        """Install a bundle by creating an agent profile from it."""
+        from horus_os.store import bundle_to_profile, get_bundle
+
+        cfg = _config()
+        if not cfg.db_path.exists():
+            raise HTTPException(503, detail="database not initialized; run `horus-os init`")
+        bundle = get_bundle(slug)
+        if bundle is None:
+            raise HTTPException(404, detail=f"bundle {slug!r} not found")
+        db = Database(cfg.db_path)
+        if db.load_profile(bundle.name) is not None:
+            raise HTTPException(409, detail=f"agent profile {bundle.name!r} already exists")
+        db.save_profile(bundle_to_profile(bundle))
+        saved = db.load_profile(bundle.name)
+        assert saved is not None
+        return _profile_to_dict(saved, last_activity_at=None)
 
     @app.get("/api/writes")
     def list_writes(limit: int = 50, offset: int = 0) -> dict[str, Any]:

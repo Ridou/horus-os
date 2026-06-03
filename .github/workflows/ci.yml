@@ -136,7 +136,10 @@ jobs:
             # so this pattern matches the real names yet contains no literal
             # reserved word itself: the guard scans workflow files (no blanket
             # .github/workflows exclusion) without self-matching on this line.
-            if grep -qniE '\b(r[a]lph|s[o]l|a[t]las|v[i]triol|q[u]ill|s[c]ribe|p[o]stman)\b' "$f"; then
+            # Atlas, Vitriol, and Sol are deliberately NOT guarded: they are
+            # sanctioned public persona names shipped as featured agent-store
+            # bundles (src/horus_os/store). The remaining names stay reserved.
+            if grep -qniE '\b(r[a]lph|q[u]ill|s[c]ribe|p[o]stman)\b' "$f"; then
               MATCHES="$MATCHES $f"
             fi
           done <<< "$CHANGED"

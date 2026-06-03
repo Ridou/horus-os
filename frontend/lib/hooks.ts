@@ -20,6 +20,14 @@ export function useAgents() {
   });
 }
 
+/** GET /api/store: installable agent bundles. */
+export function useStoreBundles() {
+  return useQuery({
+    queryKey: queryKeys.storeBundles(),
+    queryFn: () => api.storeBundles(),
+  });
+}
+
 /** GET /api/team/{name}. Disabled until a name is selected. */
 export function useAgent(name: string | null) {
   return useQuery({

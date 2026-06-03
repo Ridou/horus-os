@@ -19,4 +19,5 @@ export const queryKeys = {
   tasks: (status: string) => ["tasks", status] as const,
   researchProgress: (id: string) => ["research-progress", id] as const,
   researchReport: (id: string) => ["research-report", id] as const,
+  storeBundles: () => ["store-bundles"] as const,
 };
