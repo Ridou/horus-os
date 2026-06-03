@@ -23,6 +23,12 @@ export function TourOverlay() {
   const spotlightRef = useRef<HTMLDivElement>(null);
   const primaryBtnRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
+  // Whether the current step's target element was found. When it is, the
+  // spotlight box-shadow provides all of the dimming with a crisp cutout so the
+  // highlighted area stays fully visible. When it is not (a step whose target
+  // is not present on the demo page), fall back to a plain dim so the step card
+  // still reads against a backdrop. Either way there is no blur.
+  const [hasTarget, setHasTarget] = useState(false);
 
   // Position the spotlight over the data-tour-step target element.
   // Wait one animation frame after navigation before measuring (Pitfall 2).
@@ -32,11 +38,27 @@ export function TourOverlay() {
   useEffect(() => {
     if (!isTourActive) return;
 
-    const find = () => {
+    let cancelled = false;
+    const timers: number[] = [];
+    setHasTarget(false);
+
+    const find = (): boolean => {
+      if (cancelled || !spotlightRef.current) return false;
       const el = document.querySelector(
         `[data-tour-step="${currentStep + 1}"]`,
       ) as HTMLElement | null;
-      if (!el || !spotlightRef.current) return;
+      if (!el) {
+        // No target on this page: park the spotlight off-screen and let the
+        // container fall back to a plain dim.
+        Object.assign(spotlightRef.current.style, {
+          top: "-9999px",
+          left: "-9999px",
+          width: "0px",
+          height: "0px",
+        });
+        setHasTarget(false);
+        return false;
+      }
       const rect = el.getBoundingClientRect();
       const pad = 8;
       Object.assign(spotlightRef.current.style, {
@@ -45,14 +67,25 @@ export function TourOverlay() {
         width: `${rect.width + pad * 2}px`,
         height: `${rect.height + pad * 2}px`,
       });
+      setHasTarget(true);
+      return true;
     };
 
-    const raf = requestAnimationFrame(find);
+    // The target can mount a frame or two after a route change, so retry
+    // briefly before settling on the plain-dim fallback.
+    const raf = requestAnimationFrame(() => {
+      if (!find()) {
+        timers.push(window.setTimeout(find, 120));
+        timers.push(window.setTimeout(find, 360));
+      }
+    });
     window.addEventListener("scroll", find, { passive: true });
     window.addEventListener("resize", find, { passive: true });
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
+      timers.forEach((t) => window.clearTimeout(t));
       window.removeEventListener("scroll", find);
       window.removeEventListener("resize", find);
     };
@@ -82,7 +115,7 @@ export function TourOverlay() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-bg-primary/75 backdrop-blur-[2px]"
+      className={`fixed inset-0 z-[100] ${hasTarget ? "" : "bg-bg-primary/70"}`}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
