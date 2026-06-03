@@ -108,6 +108,7 @@ Need a key first? Grab one from the [Anthropic Console](https://console.anthropi
 | `supabase` | Cloud SQLite mirror sync. |
 | `slack` | Slack adapter. |
 | `calendar` | Google Calendar adapter. |
+| `voice` | Twilio voice and reservations adapter for outbound calls. |
 | `otel` | OpenTelemetry exporter. |
 | `vercel` | Observe-only Vercel deploy client. |
 | `github` | Read-only GitHub repository tool. |
@@ -156,26 +157,39 @@ The dashboard talks only to your local backend. There is no hosted service behin
 - **Tools and memory.** A tool registry plus a markdown notes vault the agents read and write, with every write captured in an audit log. The vault is plain markdown you can edit in any editor, including Obsidian (point an Obsidian vault at your notes folder).
 - **Observability.** Per-run cost, latency, and tool-reliability tracking, a costs dashboard, a `horus-os usage` CLI, and an opt-in OpenTelemetry exporter behind an extra.
 - **A plugin system.** Third-party tools and adapters load from a `horus-plugin.toml` manifest with default-deny capability grants and per-plugin observability.
-- **Adapters.** Optional, opt-in connectors (Discord, Slack, Email, Calendar) so agents can act on the surfaces you choose.
+- **Adapters.** Optional, opt-in connectors (Discord, Slack, Email, Calendar, and a Twilio voice adapter) so agents can act on the surfaces you choose.
 - **Runs everywhere.** Tested on macOS, Ubuntu, and Windows against Python 3.11 and 3.12.
 
-## What is new in v0.7
+## What is new in v0.8
 
 <p align="center">
   <img src="assets/horus-eye.svg" alt="" width="84">
 </p>
 
-v0.7, "Look and Feel + Starter Team," is the milestone that makes horus-os feel like a product on first run:
+v0.8, "Local-first and Autonomous Research," adds a full local-first capability layer and a flagship Deep Research workflow. Every piece is opt-in; a bare `pip install horus-os` still starts with only an LLM key and activates none of the new features.
 
-- **A real dashboard.** A Next.js 16 interface with the team org view, memory browser, activity timeline, traces explorer, and a costs and observability page with charts. Static-exported and bundled in the wheel, so it still runs with no Node.
-- **A starter team, seeded on install.** Five agents with `SOUL.md` personas, a dozen example notes, and a demo trace, so nothing is empty the first time you open it.
-- **An identity.** The eye-of-Horus mark and a cyan-on-near-black design system shared by the dashboard and the docs.
-- **A front door.** A unified marketing and demo site with a guided [Get Started](https://horus-demo.com/get-started) flow ([try it live](https://horus-demo.com)), plus a full documentation site at [docs.horus-demo.com](https://docs.horus-demo.com).
+- **Local LLM provider (opt-in).** Point horus-os at any OpenAI-compatible local server (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter) via the `[local-llm]` extra and a single `base_url` override.
+- **On-device vector memory (opt-in).** Local ONNX text embeddings and a `sqlite-vec` KNN index alongside the markdown vault, via the `[local-memory]` extra, with zero network egress on memory writes. Off by default; you opt in and run `horus-os memory download-model` to activate.
+- **MCP client (opt-in).** Connect to explicitly-allowlisted Model Context Protocol servers (stdio, SSE, streamable-http) via the `[mcp]` extra. Discovered tools register into the shared tool registry under an `mcp:{server}:{tool}` namespace.
+- **Web access and search (opt-in).** Bring-your-own web search (SearXNG, Brave, Tavily) and an SSRF-guarded HTML-to-text fetch via the `[web]` extra.
+- **Vision and PDF analysis (opt-in).** Image resize and format conversion via the `[vision]` extra and pure-Python PDF text extraction via the `[pdf]` extra, so an agent can read uploaded files.
+- **Deep Research (flagship).** A native coordinator workflow that takes a research question, delegates to a Researcher sub-agent with the web tools, and synthesizes a structured Markdown report with citations. Built on the existing multi-agent delegation runtime, with hard source and iteration caps.
+- **Skills system.** Reusable, TOML-defined agent behaviors discovered from `<data_dir>/skills/` and composed at runtime via the `use_skill` tool.
+- **Gated shell execution.** A `shell_exec` tool gated by a double lock: it registers only when `HORUS_OS_SHELL_ENABLED=true` AND the agent profile's `allowed_tools` explicitly list it.
+- **`[research]` meta-extra.** A single `pip install 'horus-os[research]'` installs the full v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`).
+
+The latest cut also brings three product surfaces on top of the v0.8 core:
+
+- **Streaming chat in the dashboard.** A first-class chat surface in the Next.js dashboard that streams tokens live as the team works, not just a buffered final answer.
+- **An agent store.** Browse and install featured agent bundles (Atlas, Vitriol, Sol) or build your own with a custom-agent builder, no code required.
+- **Voice and reservations (opt-in).** An optional Twilio voice adapter behind the `[voice]` extra for outbound calls and phone reservations.
 
 <p align="center">
   <img src="assets/screenshots/landing.png" alt="horus-os unified marketing and demo site" width="90%">
   <br><sub>One front door: the marketing landing and the live demo, in a single site.</sub>
 </p>
+
+v0.7 (shipped 2026-06-02) shipped the Command Center: a polished Next.js dashboard, a seeded five-agent starter team, an opt-in Discord control bot, an opt-in Supabase sync loop, and a cron scheduler with an always-on service. v0.6 (Contribution Gate) was never tagged, so v0.7.0 follows v0.5.0 directly in the tag history.
 
 Earlier milestones shipped the foundation: the agent runtime and two providers (v0.1), multi-agent delegation and streaming (v0.2), the adapter ecosystem (v0.3), observability (v0.4), and the plugin system (v0.5). See [CHANGELOG.md](CHANGELOG.md) and [ROADMAP.md](ROADMAP.md).
 
@@ -201,7 +215,7 @@ None of this gives up the core promise. It all runs on your machine, against you
 
 ## Status and how to get involved
 
-**horus-os is in solo development mode.** It was open-sourced out of a working private command center that runs against real data on a real machine, so the contribution flow opens only once an internal supply-chain readiness gate is met. That gate is the **v0.6 Contribution Gate** milestone, now in active development. Until it lands, outside pull requests are acknowledged and closed unreviewed, and issue-claim comments are not honored. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
+**horus-os is in solo development mode.** It was open-sourced out of a working private command center that runs against real data on a real machine. v0.8 is the latest shipped release. The contribution flow opens only once an internal supply-chain readiness gate is met; until then, outside pull requests are acknowledged and closed unreviewed, and issue-claim comments are not honored. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
 
 You can still help right now, and this feedback is the single most valuable contribution today:
 

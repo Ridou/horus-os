@@ -7,11 +7,11 @@ description: "Connect horus-os to a Discord bot for mention and DM replies, plus
 
 The Discord integration connects horus-os to a Discord bot. The base adapter listens for mentions in guild channels and direct messages, runs your configured agent profile, and replies in-channel. It uses the gateway connection from `discord.py`, not webhooks.
 
-A control-bot extension adds guild-scoped slash commands, a dedicated set of control channels, thread-based task dispatch, status cards (rich embeds), and reaction-based feedback. The control-bot features require two extra environment variables on top of the bot token.
+A control-bot extension adds guild-scoped slash commands, a managed set of control channels, thread-based task dispatch, status cards (rich embeds), and reaction-based feedback. The control-bot features require two extra environment variables on top of the bot token.
 
-For how integrations fit together, see [Integrations overview](/integrations/overview/).
+This guide takes you from zero to an agent answering you in your own server. Follow the steps in order. For how integrations fit together, see [Integrations overview](/integrations/overview/).
 
-## Prerequisites
+## 1. Install the optional extra
 
 The Discord SDK is not a core dependency. Install the optional extra:
 
@@ -21,42 +21,42 @@ pip install 'horus-os[discord]'
 
 This pulls in `discord.py>=2.4`. The adapter module loads even without this extra, but `start` then records a clear "discord.py is not installed" error in the adapter registry and the adapter stays offline. Other adapters continue to run.
 
-## Create a Discord application and bot
+## 2. Create a Discord application and bot
 
 1. Sign in at https://discord.com/developers/applications
 2. Click "New Application", give it a name (for example, `horus-os-bot`), and accept the developer terms.
-3. In the left sidebar select "Bot".
-4. Click "Reset Token" and copy the token. Treat it like a password. You paste it into an environment variable later, and the value must never land in source control.
+3. From the application's "Overview" page, copy the "Application ID". You need it in step 4 to build the invite URL.
+4. In the left sidebar select "Bot".
+5. Click "Reset Token" and copy the token. Treat it like a password. You paste it into an environment variable later, and the value must never land in source control.
 
 > [!WARNING]
 > The bot token is the only credential the integration needs. Treat it like a password and never commit it. If it leaks, reset it in the Developer Portal (Bot tab, Reset Token).
 
-## Enable the Message Content intent
+## 3. Enable the Privileged Gateway Intents
 
-In the "Bot" tab, scroll to "Privileged Gateway Intents" and toggle on:
+The adapter requests four gateway intents in code: `guilds`, `guild_messages`, `dm_messages`, and `message_content`. Each earns its place:
 
-- "Message Content Intent"
-- "Server Members Intent" (optional, only if you want member metadata)
+- `guilds` lets the bot see the servers it is in and their channels, which `/horus-setup` needs to find or create the managed channels.
+- `guild_messages` delivers the message events that the `#horus` thread-dispatch flow listens for.
+- `dm_messages` delivers direct messages so the base adapter can answer you in a DM.
+- `message_content` is the privileged one. Without it the bot connects and shows as online, but every inbound `message.content` is an empty string, so it will not respond to anything you type. This is the single most common gotcha.
 
-The adapter sets `intents.message_content = True` in code, but that is a necessary condition, not a sufficient one. You must also toggle the intent in the Developer Portal:
+The first three intents are not privileged and need no portal toggle. The `message_content` intent is privileged, so even though the adapter sets `intents.message_content = True` in code, you must also turn it on by hand:
 
 1. Go to https://discord.com/developers/applications
 2. Select your application.
 3. In the left sidebar, select "Bot".
 4. Scroll to "Privileged Gateway Intents".
 5. Toggle on "Message Content Intent".
-6. Save changes.
-
-Without this portal toggle, the bot connects and appears online, but every inbound `message.content` is an empty string, and the bot will not respond to any message. This is the single most common gotcha.
+6. (Optional) Toggle on "Server Members Intent" only if you want member metadata. The adapter does not require it.
+7. Save changes.
 
 > [!IMPORTANT]
 > Discord caches intent state per-connection. After toggling the Message Content Intent, restart `horus-os serve` so the bot reconnects and picks up the new setting.
 
-The adapter also requests the `guilds`, `guild_messages`, and `dm_messages` intents. Those are not privileged and need no portal toggle.
+## 4. Build the OAuth2 invite URL
 
-## Generate a minimal-permission invite
-
-The bot needs only the permissions required to read and reply, manage threads, and add reactions. Do not grant Administrator.
+The bot needs enough permission to read messages, reply, manage the control channels, and post in threads, so it can act as a channel admin for the layout it manages. Do not grant Administrator.
 
 The permission integer for the full control-bot feature set is `292057869376`. It covers:
 
@@ -71,20 +71,22 @@ The permission integer for the full control-bot feature set is `292057869376`. I
 | Create Public Threads | `1 << 34` |
 | Send Messages in Threads | `1 << 38` |
 
-The safest approach is to construct the invite URL manually with this integer:
+The fastest way is to build the URL by hand with the integer already set:
 
 ```text
 https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot+applications.commands&permissions=292057869376
 ```
 
-Replace `YOUR_CLIENT_ID` with the Application ID from your Developer Portal Overview page. The `applications.commands` scope is required for slash command registration. The token stays the only credential; `applications.commands` is a scope, not a separate key.
+Replace `YOUR_CLIENT_ID` with the Application ID you copied in step 2. The `applications.commands` scope is required for slash command registration. The token stays the only credential; `applications.commands` is a scope, not a separate key.
 
-Open the URL in a browser, pick a server you own, and authorize. The bot then appears in the server member list and can be mentioned in any channel where it has read and write access.
+If you prefer the portal, select "OAuth2" then "URL Generator" in the left sidebar, check `bot` and `applications.commands` under "Scopes", and check View Channels, Send Messages, Read Message History, Add Reactions, Embed Links, Manage Messages, Create Public Threads, and Send Messages in Threads under "Bot Permissions". Copy the generated URL at the bottom.
+
+Either way, open the URL in a browser, pick a server you own, and authorize. The bot then appears in the server member list and can be mentioned in any channel where it has read and write access.
 
 > [!WARNING]
-> Never grant the Administrator permission (`1 << 3`, integer `8`). It gives the bot full control over the server. If the token is ever compromised, an attacker gains complete server admin access. The minimal integer above covers everything the control bot needs.
+> Never grant the Administrator permission (`1 << 3`, integer `8`). It gives the bot full control over the server. If the token is ever compromised, an attacker gains complete server admin access. The minimal integer above already covers everything the control bot needs, including managing the control channels.
 
-## Configure environment variables
+## 5. Configure environment variables
 
 Set these on the machine that runs `horus-os serve`.
 
@@ -113,16 +115,16 @@ Optional settings:
 # Name of the control category created by /horus-setup. Defaults to "horus-os".
 export HORUS_OS_DISCORD_CATEGORY=horus-os
 
-# Which agent profile to use. Defaults to "default".
-export HORUS_OS_DISCORD_AGENT_PROFILE=writer
+# Which agent profile answers. Defaults to "default". See "Choosing which agent answers" below.
+export HORUS_OS_DISCORD_AGENT_PROFILE=Atlas
 ```
+
+To find IDs, enable Developer Mode in Discord under Settings > Advanced > Developer Mode. You can then right-click a server, role, or channel and copy its numeric ID.
 
 > [!CAUTION]
 > Never commit a real token or ID. Use a `.env` file that your deploy excludes from git, or your platform's secrets manager.
 
-To find IDs, enable Developer Mode in Discord under Settings > Advanced > Developer Mode. You can then right-click a server, role, or channel and copy its numeric ID.
-
-## Run and verify
+## 6. Run the server
 
 Start the server:
 
@@ -132,28 +134,55 @@ horus-os serve
 
 The bot should show as online in your server's member list. The first request after server start fires the FastAPI lifespan, which calls the adapter's `start` and opens the gateway connection.
 
-In a guild channel where the bot can see messages:
-
-```text
-@your-bot-name hello
-```
-
-In a direct message to the bot, send any message at all. The bot replies in the same channel or DM. For responses longer than 2000 characters, the adapter splits the reply into multiple sequential messages.
-
 You can confirm adapter status without leaving Discord by hitting `GET /api/adapters` on the local dashboard. The `discord` entry shows `status: running` and a recent `last_activity_at`.
 
-## The control channels and thread dispatch
+## 7. Bootstrap the channel layout with /horus-setup
 
-After you run `/horus-setup` (see [Slash commands](#slash-commands)), the bot creates, or confirms the existence of, three text channels inside a `horus-os` category: `#horus`, `#horus-tasks`, and `#horus-activity`. The category name is configurable via `HORUS_OS_DISCORD_CATEGORY`. The thread-dispatch flow described below runs from the `#horus` channel.
+In your server, run the slash command:
 
-The thread-dispatch flow:
+```text
+/horus-setup
+```
 
-1. A guild member types a prompt in `#horus` as a plain message, with no mention required.
-2. The bot creates a public thread named after the first few words of the prompt.
-3. The agent runs inside `asyncio.to_thread`, so it does not block the gateway.
-4. When the run completes, the bot posts a status card (an embed) into the thread. The embed has three fields: the status, the agent (the provider name, or `unknown` if none is set), and the result.
-5. Guild members react with thumbs-up or thumbs-down to record feedback.
-6. The bot reads raw reaction events (`on_raw_reaction_add`), so feedback works even after the internal message cache expires.
+Only a member who holds the role you set in `HORUS_OS_DISCORD_ADMIN_ROLE_ID` can run it. Anyone else gets an ephemeral "You do not have the required admin role" reply.
+
+The command is an idempotent, create-only bootstrap. It finds or creates a category (named `horus-os` by default, or whatever you set in `HORUS_OS_DISCORD_CATEGORY`) and then creates these channels if they are absent: `#horus` (the control channel for thread dispatch), `#horus-tasks`, and `#horus-activity`. It only creates channels that do not already exist and never deletes any channel, so it is safe to run again at any time.
+
+## 8. Talk to the agent in #horus
+
+Type a prompt in `#horus` as a plain message, with no mention required:
+
+```text
+Plan a two-day trip to Kyoto.
+```
+
+The bot then:
+
+1. Creates a public thread named after the first few words of your prompt.
+2. Posts a "Processing..." placeholder in the thread.
+3. Runs the agent inside `asyncio.to_thread`, so it does not block the gateway.
+4. Edits the placeholder into a status card (an embed) with three fields: the status, the agent (the provider name, or `unknown` if none is set), and the result.
+5. Records your thumbs-up or thumbs-down reaction as feedback. The bot reads raw reaction events (`on_raw_reaction_add`), so feedback works even after the internal message cache expires.
+
+You can also mention the bot in any channel it can read, or send it a direct message, to use the base mention and DM path. For replies longer than 2000 characters, the adapter splits the message into multiple sequential posts.
+
+## Choosing which agent answers
+
+`HORUS_OS_DISCORD_AGENT_PROFILE` selects which agent profile answers. On each turn the adapter loads the profile by that exact name and uses its system prompt and recommended model. If the value is unset it defaults to `default`, and a missing profile is non-fatal: the agent still runs with the runtime defaults.
+
+Point it at an installed store agent to give the bot a persona. The store ships three featured agents: Atlas (a travel planner), Vitriol, and Sol (a reflective companion). Installing a bundle creates a database profile keyed by its display name, so once you install Atlas you set:
+
+```bash
+export HORUS_OS_DISCORD_AGENT_PROFILE=Atlas
+```
+
+The value must match the profile name exactly (for example `Atlas`, not `atlas`). Restart `horus-os serve` after changing it so the new value is in the server process environment.
+
+## Running more than one agent
+
+Today one profile answers per configured instance. The value of `HORUS_OS_DISCORD_AGENT_PROFILE` applies to every message that instance handles, whether it arrives in `#horus`, as a mention, or as a DM.
+
+If you want a second persona, run a second horus-os instance with a different `HORUS_OS_DISCORD_AGENT_PROFILE` (and typically its own bot token and channel). Per-channel routing inside a single instance, where different channels map to different profiles, is on the roadmap and not available yet.
 
 ## Slash commands
 
@@ -171,7 +200,7 @@ If `HORUS_OS_DISCORD_ADMIN_ROLE_ID` is not set, the adapter records an error at 
 
 ## Scope and limitations
 
-The base adapter does not do per-channel agent routing (a single profile applies to all channels), token-by-token streaming (the full response is awaited then chunked), or voice channels and file uploads. The control-bot extension adds slash commands, reaction-based feedback, and outbound status cards posted into dispatch threads.
+The base adapter does not do per-channel agent routing (a single profile applies to every channel the bot handles), token-by-token streaming (the full response is awaited then chunked), or voice channels and file uploads. The control-bot extension adds slash commands, reaction-based feedback, and outbound status cards posted into dispatch threads.
 
 ## Troubleshooting
 
@@ -182,6 +211,10 @@ The Message Content Intent is off. Toggle it on in the Developer Portal under Bo
 ### The bot does not respond at all
 
 Check that the bot has "Send Messages" permission in the channel. Right-click the channel, choose Edit Channel, then Permissions. If a permission overwrite denies the bot's role, the gateway event still fires but the reply send fails silently, because the adapter suppresses the exception to keep the connection open.
+
+### /horus-setup says I lack the admin role
+
+The caller must hold the role whose ID is in `HORUS_OS_DISCORD_ADMIN_ROLE_ID`. Confirm the env var holds the numeric role ID (not the role name) and that your account has that role assigned.
 
 ### 401 Unauthorized on connect
 
@@ -198,6 +231,14 @@ You installed `horus-os` without the `discord` extra. Run `pip install 'horus-os
 ### Adapter status stays at error: HORUS_OS_DISCORD_TOKEN is not set
 
 The env var is empty or unset in the process that started `horus-os serve`. If you exported it after launching the server, the existing process did not inherit it. Restart the server.
+
+### Adapter status stays at error: HORUS_OS_DISCORD_GUILD_ID is not set
+
+The control-bot path needs a numeric guild ID. Set `HORUS_OS_DISCORD_GUILD_ID` to your server's snowflake and restart. Without it the v0.7 control bot stays offline, though the base mention and DM path still works.
+
+### Adapter status stays at error: HORUS_OS_DISCORD_ADMIN_ROLE_ID is not set
+
+The control-bot path also needs a numeric admin role ID to gate `/horus-setup`. Set `HORUS_OS_DISCORD_ADMIN_ROLE_ID` and restart. A non-numeric value is treated as deny-all and also records an error.
 
 ## See also
 

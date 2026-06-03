@@ -1,10 +1,9 @@
 # Architecture
 
 This document describes the actual shape of `horus-os` on the `main`
-branch heading into v0.3.0. For project intent and what is out of
-scope, see `PROJECT.md`. For the v0.1 to v0.2 upgrade path, see
-`docs/MIGRATION-v0.1-to-v0.2.md`. For the v0.2 to v0.3 upgrade path,
-see `docs/MIGRATION-v0.2-to-v0.3.md`.
+branch heading into v0.8.0. For project intent and what is out of
+scope, see `PROJECT.md`. For upgrade paths, see the `docs/MIGRATION-*`
+guides; the latest is `docs/MIGRATION-v0.7-to-v0.8.md`.
 
 ## Top-level shape
 
@@ -76,6 +75,25 @@ see `docs/MIGRATION-v0.2-to-v0.3.md`.
                 |  SlackAdapter              |
                 |  EmailAdapter              |
                 |  CalendarAdapter (tools)   |
+                |  OtelAdapter               |
+                |  SupabaseAdapter           |
+                |  SchedulerAdapter          |
+                |  MCP client (LifecycleAd.) |
+                |  VoiceAdapter (Twilio)     |
+                +----------------------------+
+
+                +----------------------------+
+                |  v0.8 capability layer     |
+                |  (all opt-in via extras)   |
+                |  Local LLM provider        |
+                |   (OpenAI-compatible)      |
+                |  Vector memory             |
+                |   (ONNX + sqlite-vec)      |
+                |  Web search + fetch        |
+                |  Vision + PDF tools        |
+                |  Deep Research orchestrator|
+                |  Skills (use_skill)        |
+                |  Gated shell (shell_exec)  |
                 +----------------------------+
 ```
 
@@ -411,13 +429,31 @@ new provider."
    entry point. The core never needs to learn about them at build
    time, and a broken adapter cannot break the core dashboard.
 
-## What is not in v0.3
+## Extension points
 
-- **Vector search.** Notes search is keyword-based. A vector store
-  remains on the post-v0.3 list.
+horus-os is designed to grow without forking the core. The explicit
+extension surfaces are:
+
+- **Agents.** Named profiles in SQLite, each with a `SOUL.md`
+  persona. The dashboard ships an agent store where you browse and
+  install featured agent bundles (Atlas, Vitriol, Sol) or build your
+  own with a custom-agent builder.
+- **Tools.** Register any callable on the shared `ToolRegistry`.
+  Builtins, adapter-provided tools, MCP-discovered tools, and skills
+  all land in the same namespace.
+- **Adapters.** Inbound channels declared via the
+  `horus_os.adapters` entry-point group and discovered at startup.
+- **Plugins.** Third-party packages that ship a `horus-plugin.toml`
+  manifest and contribute tools and/or adapters under default-deny
+  capability grants.
+- **Skills.** Reusable, TOML-defined agent behaviors discovered from
+  `<data_dir>/skills/` and composed at runtime via `use_skill`.
+
+## What is not in v0.8
+
 - **Authentication on the dashboard.** Bind to `127.0.0.1` only.
-- **Retry, rate-limit handling, cost tracking.** Deferred to the
-  v0.4 observability milestone.
+  There is no auth layer yet; local-only binding is the security
+  model.
 - **In-stream tool dispatch.** `run_agent_stream` surfaces tool
   requests as events; it does not execute them. Callers that need
   tool execution use `run_agent_loop`.
@@ -427,8 +463,12 @@ new provider."
 - **Profile editing in the dashboard.** The Agents tab is
   read-only; CRUD stays on the CLI and JSON API.
 - **Provider-per-profile.** A sub-agent inherits the coordinator's
-  provider. Mixing Anthropic and Gemini in one delegation tree is
-  on the post-v0.3 list.
+  provider. Mixing Anthropic, Gemini, and the local LLM provider in
+  one delegation tree is on the post-v0.8 list.
+- **Structured memory and a knowledge graph.** Vector memory adds
+  on-device KNN search over the vault, but structured fact
+  extraction, deduplication rollups, and a traversable knowledge
+  graph remain on the roadmap.
 - **Socket Mode for Slack.** The Slack adapter ships with the
   HTTP Events API path only. Socket Mode (over a WebSocket) is a
   future option for operators behind NAT.
@@ -436,10 +476,6 @@ new provider."
   produces `calendar-token.json` is documented in
   `docs/adapters/CALENDAR.md` but not yet wrapped as a
   `horus-os calendar oauth` subcommand.
-- **Write-tool merge into the chat path.** Tools registered by
-  adapters (Calendar today) land on `app.state.tool_registry`.
-  Merging that registry into `/api/chat` so the dashboard agent
-  picks up adapter-provided tools out of the box is a follow-up.
 - **Soft-disable middleware for bind-only adapters.** Toggle
   routes operate on lifecycle adapters today; bind-only adapters
   (Slack, Calendar) show `supports_toggle: false` and require a

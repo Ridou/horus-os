@@ -27,6 +27,7 @@ export const NAV: NavSection[] = [
       { title: "Introduction", slug: "getting-started/introduction" },
       { title: "Installation", slug: "getting-started/installation" },
       { title: "Quickstart", slug: "getting-started/quickstart" },
+      { title: "Chat", slug: "getting-started/chat" },
       { title: "Your first team run", slug: "getting-started/first-team-run" },
       { title: "Configuration", slug: "getting-started/configuration" },
     ],
@@ -48,6 +49,7 @@ export const NAV: NavSection[] = [
     items: [
       { title: "Using the CLI", slug: "guides/cli" },
       { title: "Using the dashboard", slug: "guides/dashboard" },
+      { title: "Agent store", slug: "guides/agent-store" },
       { title: "Editing your vault", slug: "guides/editing-your-vault" },
       { title: "Autonomous research", slug: "guides/autonomous-research" },
       { title: "Scheduling agents", slug: "guides/scheduling-agents" },
@@ -64,6 +66,7 @@ export const NAV: NavSection[] = [
       { title: "Slack", slug: "integrations/slack" },
       { title: "Email", slug: "integrations/email" },
       { title: "Calendar", slug: "integrations/calendar" },
+      { title: "Voice", slug: "integrations/voice" },
       { title: "MCP servers", slug: "integrations/mcp" },
       { title: "Web access", slug: "integrations/web-access" },
       { title: "GitHub", slug: "integrations/github" },

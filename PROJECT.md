@@ -21,19 +21,19 @@ An open-source, self-hosted autonomous AI command center.
 - Production-scale Kubernetes operators.
 - Any feature that requires a paid third-party account beyond optional AI API keys.
 
-## Architecture sketch (subject to revision)
+## Architecture sketch
 
 | Layer | Default choice | Notes |
 |-------|----------------|-------|
-| Agent runtime | Python + Anthropic SDK + Google Gemini SDK | Synchronous and async paths both supported |
+| Agent runtime | Python + Anthropic SDK + Google Gemini SDK, plus an optional OpenAI-compatible local LLM provider | Synchronous and async paths both supported |
 | Persistence | SQLite (WAL mode) | Single file; trivially portable |
-| Vector store | Local Chroma or duckdb-vss | Embedding backend pluggable |
-| Knowledge base | Local markdown files + indexed search | Edit in any markdown editor, including Obsidian |
-| Dashboard | Next.js, served locally | Optional; CLI works without it |
-| Chat surface | CLI first; web chat next; third-party (Discord, Slack) via opt-in adapters | |
-| Process manager | Native OS service file (systemd unit, launchd plist, Windows scheduled task) | One reference recipe per OS |
+| Vector store | On-device ONNX embeddings + sqlite-vec KNN (opt-in via `[local-memory]`) | Off by default; zero network egress on memory writes |
+| Knowledge base | Local markdown files + keyword and optional vector search | Edit in any markdown editor, including Obsidian |
+| Dashboard | Next.js, served locally, with a streaming chat surface and an agent store | Optional; CLI works without it |
+| Chat surface | CLI and the dashboard chat, plus opt-in Discord, Slack, Email, Calendar, and Twilio voice adapters | |
+| Process manager | Native OS service file (systemd unit, launchd plist, Windows NSSM service) | One reference recipe per OS |
 
-This table is a starting point. The first phase decides which of these to actually pick for v0.1.
+This table reflects the choices made through v0.8. See `ARCHITECTURE.md` for the implemented shape and `ROADMAP.md` for what comes next.
 
 ## What this project is not
 
@@ -48,4 +48,4 @@ The goal is a personal command center for one person, running locally, with full
 
 ## Status
 
-Alpha, v0.1.0 (2026-05-23). See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases).
+Alpha, v0.8.0 (2026-06-02), "Local-first and Autonomous Research." See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases) for the full history.

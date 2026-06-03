@@ -6,6 +6,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard streaming chat surface.** A first-class chat surface in
+  the Next.js dashboard that streams tokens live as the team works,
+  rendering each token as it arrives over the existing
+  `POST /api/chat/stream` SSE path instead of waiting for a buffered
+  final answer. Tool-call and done frames surface inline so the user
+  watches delegation unfold in real time.
+- **Agent store and custom-agent builder.** A dashboard surface to
+  browse and install featured agent bundles (Atlas, Vitriol, Sol) and
+  a no-code custom-agent builder. Installing a bundle or saving a
+  custom agent writes an `agent_profiles` row via the existing
+  `POST /api/agents` path; installs are additive and never overwrite an
+  existing profile (a duplicate name returns 409). Profiles can be
+  exported back to a shareable bundle via `GET /api/agents/{name}/export`.
+- **Voice and reservations adapter (opt-in).** A new optional
+  `[voice]` extra (`twilio>=9.0`) adds a `VoiceAdapter` for outbound
+  calls and phone reservations through the Twilio REST API. The
+  `twilio` SDK is imported lazily inside `bind()` and the tool
+  handlers, so a bare install imports the adapter module without
+  pulling the client. The live two-way audio bridge additionally
+  needs a public URL and a realtime voice provider; see
+  `docs/adapters/VOICE.md`.
+
 ## [0.8.0] - 2026-06-02
 
 Eighth alpha, "Local-first and Autonomous Research." horus-os gains a

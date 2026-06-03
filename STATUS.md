@@ -8,19 +8,18 @@ yet?" question has a clear, dated answer.
 For the deep planning detail, read `ROADMAP.md` and `.planning/`.
 For release contents, read `CHANGELOG.md`.
 
-**Last updated:** 2026-05-31.
+**Last updated:** 2026-06-03.
 
 ## TL;DR
 
-- horus-os is in **solo development mode**, with two milestones in
-  active development: **v0.6 Contribution Gate** and **v0.7 Look and
-  Feel + Starter Team**.
+- horus-os is in **solo development mode**. v0.1 through v0.8 have
+  shipped. v0.6 (Contribution Gate) was never tagged; v0.7 and v0.8
+  shipped on 2026-06-02. See `CHANGELOG.md` for what is in each release.
 - Outside pull requests are **not being merged yet**. Issue claim
   comments ("on it", "claim this", "assign to me") are **not honored
   yet**.
 - The project opens for outside contributions once an internal
-  supply-chain readiness gate is met. That gate is the **v0.6**
-  milestone, now in active development. Not promised, not scheduled.
+  supply-chain readiness gate is met. Not promised, not scheduled.
 - You can, and this is the most valuable input right now: file bug
   reports, open Discussions, star or watch the repo, and run
   horus-os locally and report what worked.
@@ -36,39 +35,64 @@ For release contents, read `CHANGELOG.md`.
 | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
 | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
 | v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPED** | `v0.5.0` | 2026-05-27 |
-| v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, release-gate extended to 13 checks. The readiness gate for opening outside contributions. | **IN DEVELOPMENT** | TBD | TBD |
-| v0.7 Look and Feel + Starter Team | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, and a unified marketing and demo site. | **IN DEVELOPMENT** | TBD | TBD |
+| v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, release-gate extended to 13 checks. The readiness gate for opening outside contributions. | **SHIPPED** | never tagged (skipped; v0.7.0 follows v0.5.0) | 2026-06-02 |
+| v0.7 Command Center | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, a unified marketing and demo site, a Discord control bot, a Supabase sync loop, a cron scheduler with an always-on service, and a Vercel deploy path. | **SHIPPED** | `v0.7.0` | 2026-06-02 |
+| v0.8 Local-first and Autonomous Research | Local LLM provider, on-device vector memory via `sqlite-vec`, MCP client, web access and search, vision and PDF analysis, a Deep Research flagship workflow, a skills system, gated shell execution, the `[research]` meta-extra, plus a streaming dashboard chat surface, an agent store, and an opt-in Twilio voice adapter. | **SHIPPED** | `v0.8.0` | 2026-06-02 |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
 **IN DEVELOPMENT** means the roadmap is committed and phases are
 executing, but it is not tagged yet. **NOT PLANNED** means scope is
 sketched with no commitment and no schedule.
 
-## Currently working on
+## Recently shipped
 
-Two milestones are in active development.
+**v0.8 Local-first and Autonomous Research (shipped 2026-06-02)**
+introduces a full local-first capability layer plus a flagship Deep
+Research workflow. All pieces are opt-in: a bare `pip install horus-os`
+still starts with only an LLM key and activates none of the new
+features. Each capability lives behind its own optional extra.
 
-**v0.6 Contribution Gate** is rehearsal-ready. It builds the trust
-and supply-chain substrate that makes "outside PRs welcome" safe:
-keyless sigstore signing on wheels, sdists, SBOMs, and tags;
-CycloneDX 1.6 SBOMs generated against a fresh install-from-wheel
-venv; pip-audit on every PR; Dependabot for pip and GitHub Actions;
-every action `uses:` pinned to a commit SHA; `pull_request_target`
-forbidden by default; refreshed contributor docs and a SECURITY
-disclosure flow; and the release gate extended from 8 to 13 checks.
-This is the readiness gate that opening outside contributions
-depends on.
+- Local LLM provider (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter)
+  via the `[local-llm]` extra and a single `base_url` override.
+- On-device ONNX vector embeddings and a `sqlite-vec` KNN index via
+  the `[local-memory]` extra, with zero network egress on memory
+  writes; off by default until you run `horus-os memory download-model`.
+- MCP client via the `[mcp]` extra; servers activate only through
+  `<data_dir>/mcp.toml`.
+- Web search (bring-your-own: SearXNG, Brave, Tavily) and an
+  SSRF-guarded fetch via the `[web]` extra.
+- Vision (image resize and format conversion) via the `[vision]`
+  extra and pure-Python PDF text extraction via the `[pdf]` extra.
+- Deep Research coordinator workflow: takes a question, delegates to
+  a Researcher sub-agent with the web tools, and synthesizes a
+  structured Markdown report with citations.
+- Skills system: reusable, TOML-defined agent behaviors discovered
+  from `<data_dir>/skills/`.
+- Gated shell execution: `shell_exec` registers only when both
+  `HORUS_OS_SHELL_ENABLED=true` AND the agent profile explicitly
+  lists it in `allowed_tools`.
+- `[research]` meta-extra: installs the full local-first stack at once.
 
-**v0.7 Look and Feel + Starter Team** makes horus-os feel like a
-product on first run. It adds a real Next.js dashboard (team org
-view, memory browser, activity timeline, traces explorer, and a
-costs and observability page) static-exported and bundled into the
-wheel so it runs with no Node; a seeded five-agent starter team
-(Coordinator, Engineer, Researcher, Writer, Operator) with
-`SOUL.md` personas, an example vault, and a demo trace on first
-`init`; the eye-of-Horus brand and design system; and a unified
-marketing and demo site with a guided Get Started flow. Try the
-live demo at https://horus-os-demo.vercel.app.
+The latest cut also adds three product surfaces on top of the v0.8
+core: a streaming chat surface in the dashboard that streams tokens
+live as the team works; an agent store with featured bundles (Atlas,
+Vitriol, Sol) and a custom-agent builder; and an optional Twilio
+voice and reservations adapter behind the `[voice]` extra.
+
+The SQLite schema advanced from v12 to v13 (additive and idempotent):
+two new tables (`skills`, `shell_invocations`). v0.7 databases load
+cleanly under v13. See `docs/MIGRATION-v0.7-to-v0.8.md` for upgrade
+notes.
+
+**v0.7 Command Center (shipped 2026-06-02)** turned horus-os from a
+single-page vanilla-JS dashboard into a polished Next.js command
+center with a design system, a Setup-and-Verify integrations surface,
+an opt-in Discord control bot, an opt-in Supabase sync loop, a cron
+scheduler with an always-on service, and an opt-in Vercel deploy
+path. It also seeds a five-agent starter team (Coordinator, Engineer,
+Researcher, Writer, Operator) with `SOUL.md` personas, an example
+vault, and a demo trace on first `init`. v0.6 (Contribution Gate) was
+never tagged, so v0.7.0 follows v0.5.0 directly in the tag history.
 
 For the live phase pointer, read `.planning/STATE.md`. For the
 phase breakdown, read `.planning/ROADMAP.md`. For the requirement
@@ -87,8 +111,7 @@ list, read `.planning/REQUIREMENTS.md`.
 ## When collaboration opens
 
 The project opens for outside contributions once an internal
-supply-chain readiness gate is met. **That gate is the v0.6
-milestone, now in active development.** When it lands, this page
+supply-chain readiness gate is met. When that gate is met, this page
 flips first, and the pinned Discussion gets a follow-up reply.
 `CONTRIBUTING.md` already documents the full standards and the
 day-to-day flow that will apply, so you can read them in advance.

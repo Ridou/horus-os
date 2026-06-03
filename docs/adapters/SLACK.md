@@ -7,6 +7,19 @@ Discord adapter, this one uses HTTP webhooks rather than a
 persistent gateway connection, so the machine running `horus-os
 serve` must be reachable from Slack at a public URL.
 
+This is a complete walkthrough. Follow the steps in order. By the
+end, an installed horus-os agent replies when you `@mention` it in
+a Slack channel, send it a direct message, or invoke a slash
+command. The adapter exposes two routes:
+
+- `POST /api/adapters/slack/events` for Slack's Events API
+  (mentions and DMs)
+- `POST /api/adapters/slack/commands` for slash commands
+
+Both routes verify every inbound request with Slack's
+signing-secret HMAC-SHA256 scheme, so a correct signing secret is
+mandatory for any traffic to get through.
+
 ## 1. Install the optional extra
 
 The Slack SDK is not a core dependency. Install the extra:
@@ -30,14 +43,22 @@ body, and the adapter's registry status stays at `error`.
 
 ## 3. Add bot scopes
 
-In the left sidebar, open "OAuth and Permissions" and add the
-following Bot Token Scopes under "Scopes":
+In the left sidebar, open "OAuth and Permissions" and scroll to
+"Scopes". Under "Bot Token Scopes" click "Add an OAuth Scope" and
+add each of the following:
 
-- `chat:write` (post messages back as the bot)
-- `app_mentions:read` (receive `app_mention` events)
-- `im:history` (read DM message bodies)
-- `im:read` (see DM channels exist)
-- `commands` (only if you plan to register slash commands)
+- `app_mentions:read` (receive `app_mention` events when someone
+  `@mentions` the bot)
+- `chat:write` (post the agent's reply back into the channel or
+  DM as the bot)
+- `commands` (register and receive slash commands; add this if you
+  plan to use the `/api/adapters/slack/commands` route in step 8)
+- `im:history` (read the text of direct messages sent to the bot)
+- `im:read` (see that DM channels with the bot exist)
+
+`app_mentions:read` and `chat:write` are the minimum for the
+mention flow. Add `im:history` and `im:read` for direct messages,
+and `commands` for slash commands.
 
 Without `chat:write` the adapter can receive events but every
 reply call fails. The adapter suppresses post failures so the
@@ -60,11 +81,23 @@ step 7.
 ## 6. Expose horus-os on a public URL
 
 Slack's Events API delivers events over HTTP, so `horus-os serve`
-must be reachable from the internet on HTTPS. For local
-development, `ngrok http 8000` gives you a public
-`https://xxxx.ngrok.app`. For a server deployment, put the
-process behind a reverse proxy that terminates TLS (Caddy,
-nginx, Cloudflare Tunnel).
+must be reachable from the internet on HTTPS. Slack will not
+accept an `http://` or a `localhost` request URL.
+
+1. Start the server locally so the tunnel has something to point
+   at: `horus-os serve`. Note the port it listens on (8000 by
+   default).
+2. For local development, open a tunnel to that port. With ngrok:
+   `ngrok http 8000`. Copy the `https://xxxx.ngrok.app` address it
+   prints; that is your public host for steps 7 and 8.
+3. For a server deployment instead, put the process behind a
+   reverse proxy that terminates TLS (Caddy, nginx, or Cloudflare
+   Tunnel) and use its public hostname.
+
+Slack signs the raw request body. Configure any reverse proxy to
+pass the body through untouched. Middleware that JSON-parses and
+re-serializes the body breaks the HMAC signature check (see the
+troubleshooting section).
 
 ## 7. Enable Events API and subscribe to events
 
@@ -111,9 +144,23 @@ export HORUS_OS_SLACK_SIGNING_SECRET=your-signing-secret
 Optional:
 
 ```
-# Which agent profile to use; defaults to "default".
-export HORUS_OS_SLACK_AGENT_PROFILE=scribe
+# Which installed agent answers Slack traffic. Defaults to "default".
+export HORUS_OS_SLACK_AGENT_PROFILE=atlas
 ```
+
+`HORUS_OS_SLACK_AGENT_PROFILE` is the name of an agent profile in
+your horus-os database. The adapter loads that profile on every
+inbound message and runs the agent with its `system_prompt` and
+`default_model`. List the profiles you have installed with
+`horus-os agents list`, and create one with `horus-os agents
+create <name> --system-prompt "..."`. Set this variable to the
+profile name you want answering Slack.
+
+If you leave it unset the adapter uses the profile named
+`default`. If the named profile does not exist, that is
+non-fatal: the adapter falls back to the server's default model
+with no custom system prompt, so the bot still replies as a plain
+agent.
 
 Never commit a real token or signing secret. Use a `.env` file
 the deploy excludes from git, or your platform's secrets manager.
@@ -129,17 +176,26 @@ horus-os serve
 Hit `GET /api/adapters` on the dashboard URL to confirm the
 `slack` entry shows `status: running`.
 
-## 11. Verify
+## 11. Talk to the agent
+
+You are wired up. Now hold a conversation with the agent from
+Slack:
 
 - Invite the bot to a channel (`/invite @your-bot-name`), then
-  `@your-bot hello`. The bot should reply in the same channel
-- Open a direct message with the bot and send any text. The bot
-  should reply in the DM
+  `@your-bot hello`. The agent selected by
+  `HORUS_OS_SLACK_AGENT_PROFILE` runs your prompt and replies in
+  the same channel. Replies land in a thread when you mention the
+  bot inside an existing thread
+- Open a direct message with the bot and send any text. No mention
+  is needed in a DM; the agent replies in the DM
 - If you registered a slash command, run `/horus what time is it`
-  in any channel the bot is in. The bot replies inline
+  in any channel the bot is in. The agent replies inline
 
-You can confirm the adapter's `last_activity_at` is bumped via
-`GET /api/adapters` after each interaction.
+The adapter strips the leading `<@bot-id>` mention token before
+handing your text to the agent, so the agent sees just the
+natural-language prompt. You can confirm the adapter's
+`last_activity_at` is bumped via `GET /api/adapters` after each
+interaction.
 
 ## Troubleshooting
 
