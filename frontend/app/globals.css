@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+/*
+ * SINGLE CANONICAL TOKEN SOURCE - DESIGN-01 / D-04 / D-05
+ *
+ * This file is the single canonical Tailwind v4 token source for the
+ * horus-os dashboard. All color, typography, radius, and animation tokens
+ * are defined here and ONLY here. Do not declare token values in component
+ * files or inline styles. Dark is the only theme in v0.7 (D-05).
+ *
+ * Reference tokens via CSS variables (var(--token-name)) in inline styles,
+ * or via Tailwind v4 utilities (bg-bg-primary, text-text-secondary, etc.)
+ * in className props.
+ *
+ * horus-os design system. Dark, cyan-on-near-black. Dark is the only theme.
+ *
+ * Tokens are declared twice on purpose:
+ *  1. As raw CSS custom properties on :root (consumed by inline style={{}}).
+ *  2. As Tailwind v4 @theme tokens (so utilities like bg-bg-primary,
+ *     text-text-secondary, border-border-subtle, text-accent-cyan exist).
+ */
+
+@theme {
+  /* Backgrounds */
+  --color-bg-primary: #0a0b0f;
+  --color-bg-secondary: #12131a;
+  --color-bg-elevated: #1a1b24;
+
+  /* Text */
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+
+  /* Accent */
+  --color-accent-cyan: #00d4ff;
+
+  /* Borders */
+  --color-border-subtle: #2a2b35;
+
+  /* Semantic */
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+
+  /* Aliases so shadcn-style utilities (bg-background, text-foreground, etc.)
+     still resolve to the horus palette. */
+  --color-background: #0a0b0f;
+  --color-foreground: #e0e0e0;
+  --color-card: #12131a;
+  --color-muted: #1a1b24;
+  --color-muted-foreground: #9ca3af;
+  --color-accent: #1a1b24;
+  --color-accent-foreground: #e0e0e0;
+  --color-border: #2a2b35;
+  --color-primary: #00d4ff;
+  --color-primary-foreground: #0a0b0f;
+
+  /* Monospace UI font stack */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Square-ish radii for the cyber look */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+}
+
+:root {
+  color-scheme: dark;
+
+  --bg-primary: #0a0b0f;
+  --bg-secondary: #12131a;
+  --bg-elevated: #1a1b24;
+
+  --text-primary: #e0e0e0;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --accent-cyan: #00d4ff;
+  --accent: #00d4ff;
+
+  --border-subtle: #2a2b35;
+  --border: #2a2b35;
+
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+
+  --background: #0a0b0f;
+  --foreground: #e0e0e0;
+}
+
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    height: 100%;
+  }
+
+  body {
+    height: 100%;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Subtle radial dot-grid page background. */
+    background-image: radial-gradient(rgba(0, 212, 255, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+}
+
+/* Selection highlight, cyan. */
+::selection {
+  background: rgba(0, 212, 255, 0.25);
+  color: var(--foreground);
+}
+
+/* Focus ring, cyan. */
+:focus-visible {
+  outline: 1px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+/* Scrollbars, cyber. */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a3b45;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Glow utilities. */
+.glow-cyan {
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.15), 0 0 4px rgba(0, 212, 255, 0.1);
+}
+.border-glow:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.08);
+}
+.gradient-cyber {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.08) 0%,
+    rgba(0, 212, 255, 0.02) 50%,
+    transparent 100%
+  );
+}
+
+/* Status pulse for running indicators. */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 12px currentColor; }
+}
+.status-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Fade in. */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+/* Markdown content styling. */
+.markdown-content {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.7rem 0;
+}
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+.markdown-content th {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.markdown-content blockquote {
+  margin-left: 0;
+  padding-left: 0.95rem;
+  border-left: 0.24rem solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+/* Reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

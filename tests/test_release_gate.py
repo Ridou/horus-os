@@ -155,7 +155,11 @@ def test_main_exit_zero_when_all_checks_pass(
     monkeypatch.setenv("HORUS_OS_RELEASE_GATE_SKIP_BUILD", "1")
     monkeypatch.setenv("HORUS_OS_PRICING_PATH_OVERRIDE", str(pricing))
     monkeypatch.setenv("HORUS_OS_CI_YML_PATH_OVERRIDE", str(ci))
-    exit_code = mod.main([])
+    # --allow-offline skips the network pip-audit scan so this aggregation
+    # test stays hermetic: a vulnerable package preinstalled on a CI runner
+    # (outside horus-os's dependency closure) must not fail the gate's unit
+    # tests. The live OSV scan runs in the real release-gate invocation.
+    exit_code = mod.main(["--allow-offline"])
     assert exit_code == 0
 
 
@@ -194,5 +198,9 @@ def test_pricing_threshold_overridable_via_env(
     monkeypatch.setenv("HORUS_OS_RELEASE_GATE_SKIP_BUILD", "1")
     monkeypatch.setenv("HORUS_OS_PRICING_PATH_OVERRIDE", str(pricing))
     monkeypatch.setenv("HORUS_OS_CI_YML_PATH_OVERRIDE", str(ci))
-    exit_code = mod.main([])
+    # --allow-offline skips the network pip-audit scan so this aggregation
+    # test stays hermetic: a vulnerable package preinstalled on a CI runner
+    # (outside horus-os's dependency closure) must not fail the gate's unit
+    # tests. The live OSV scan runs in the real release-gate invocation.
+    exit_code = mod.main(["--allow-offline"])
     assert exit_code == 0

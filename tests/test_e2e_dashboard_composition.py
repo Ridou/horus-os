@@ -155,7 +155,7 @@ def test_v01_database_on_disk_renders_through_dashboard(tmp_path: Path) -> None:
     # Sanity: the migration bumped the schema.
     with sqlite3.connect(str(db_path)) as conn:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert version == 6
+        assert version == 12
 
     client = TestClient(create_app(data_dir=tmp_path))
     response = client.get("/api/traces")

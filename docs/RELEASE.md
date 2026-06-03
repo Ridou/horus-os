@@ -162,6 +162,36 @@ The full sequence:
 9. Confirm the release is visible at
    `https://github.com/Ridou/horus-os/releases/tag/vN.M.P`.
 
+### v0.7.0 cut (staged, awaiting owner go-ahead)
+
+The v0.7.0 release is STAGED and validated locally; the remote
+actions are not performed by the planner or executor and await
+explicit owner confirmation. The staging is complete:
+
+- Step 3 (version bump to `0.7.0` in `pyproject.toml` and
+  `src/horus_os/__init__.py`) is done.
+- Step 4 (CHANGELOG `[Unreleased]` promoted to
+  `[0.7.0] - 2026-06-02`, fresh empty `[Unreleased]` stub left on
+  top) is done.
+- A migration note lives at `docs/MIGRATION-v0.5-to-v0.7.md`
+  (the upgrade is v0.5 to v0.7 because v0.6 was never tagged).
+- A DRAFTED GitHub Release body lives at
+  `docs/RELEASE-NOTES-v0.7.0.md`. It carries the CHANGELOG
+  summary, a link to the migration note, and the optional-extras
+  documentation. Hand it to step 8 with
+  `gh release create v0.7.0 --title "v0.7.0 - Command Center"
+  --notes-file docs/RELEASE-NOTES-v0.7.0.md`.
+
+STOP-BEFORE-TAG boundary (owner-confirmed only): the following are
+NOT run autonomously by the planner or executor and require the
+owner's explicit go-ahead, in order: `git push` of the release
+commits, the `gitsign` confirmation (step 6.5), the annotated tag
+and its push (step 7, `git push origin v0.7.0`), the GitHub Release
+publish (step 8), and any merge to `main`. The three-OS hard gate
+green is a post-push CI result the owner triggers by pushing; it
+cannot be produced before the push. CLAUDE.md is explicit: do not
+push to any remote without explicit confirmation.
+
 ## Post-release
 
 - Update `.planning/STATE.md`:

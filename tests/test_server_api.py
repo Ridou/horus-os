@@ -28,9 +28,17 @@ def _client(tmp_path: Path) -> TestClient:
 
 
 def test_health_endpoint(tmp_path: Path) -> None:
+    # v0.7: /api/health degrades to a cheap 200 liveness probe with zero
+    # counts when the database does not yet exist.
     response = _client(tmp_path).get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": __version__}
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["version"] == __version__
+    assert payload["db_size_bytes"] == 0
+    assert payload["trace_count"] == 0
+    assert payload["note_count"] == 0
+    assert payload["agent_count"] == 0
 
 
 def test_traces_endpoint_returns_empty(tmp_path: Path) -> None:

@@ -66,10 +66,10 @@ Out of scope:
 
 The maintainer practices coordinated disclosure. Once a fix is ready, we will publish the advisory, release a patched version, and credit the reporter unless the reporter prefers to remain anonymous.
 
-<!-- PHASE-59-FLIP: when contributions open, delete the "Contributor-pipeline security (not active yet)" section below; the live pre-review process replaces it. -->
+<!-- PHASE-59-FLIP: when contributions open, delete the "Contributor-pipeline security (not active yet)" section below; the live contribution flow replaces it. -->
 ## Contributor-pipeline security (not active yet)
 
-`horus-os` is in a solo development phase and **does not currently accept outside pull requests** (see `CONTRIBUTING.md` for the full notice). When the project opens for contributions, every incoming PR will pass through a private pre-review process before any human review. Until then, treat the existing surface area as single-maintainer code with no third-party PR exposure.
+`horus-os` is in a solo development phase and **does not currently accept outside pull requests** (see `CONTRIBUTING.md` for the full notice). When the project opens for contributions, every incoming PR will run the full public CI and supply-chain checks before any human review, and forked-PR builds run with restricted tokens that never see repository secrets. Until then, treat the existing surface area as single-maintainer code with no third-party PR exposure.
 
 ## Operational security guidance for users
 

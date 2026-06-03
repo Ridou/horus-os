@@ -8,20 +8,23 @@ yet?" question has a clear, dated answer.
 For the deep planning detail, read `ROADMAP.md` and `.planning/`.
 For release contents, read `CHANGELOG.md`.
 
-**Last updated:** 2026-05-27.
+**Last updated:** 2026-05-31.
 
 ## TL;DR
 
-- horus-os is in **solo development mode**.
-- Outside pull requests are **not being merged**. Issue claim
-  comments ("on it", "claim this", "assign to me") are **not
-  honored**.
+- horus-os is in **solo development mode**, with two milestones in
+  active development: **v0.6 Contribution Gate** and **v0.7 Look and
+  Feel + Starter Team**.
+- Outside pull requests are **not being merged yet**. Issue claim
+  comments ("on it", "claim this", "assign to me") are **not honored
+  yet**.
 - The project opens for outside contributions once an internal
-  readiness gate is met. Earliest milestone: **v0.6**. Not
-  promised. Not scheduled.
-- You can: file bug reports, open Discussions, star or watch the
-  repo, run horus-os locally and report what worked.
-- You cannot yet: open PRs from a fork, claim issues, get assigned
+  supply-chain readiness gate is met. That gate is the **v0.6**
+  milestone, now in active development. Not promised, not scheduled.
+- You can, and this is the most valuable input right now: file bug
+  reports, open Discussions, star or watch the repo, and run
+  horus-os locally and report what worked.
+- You cannot yet: open PRs from a fork, claim issues, or get assigned
   to work.
 
 ## Milestone timeline
@@ -33,44 +36,39 @@ For release contents, read `CHANGELOG.md`.
 | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
 | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
 | v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPED** | `v0.5.0` | 2026-05-27 |
-| v0.6+ Contribution gate | Earliest possible window for opening outside contributions. Tied to internal readiness. | **NOT PLANNED** | TBD | TBD |
+| v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, release-gate extended to 13 checks. The readiness gate for opening outside contributions. | **IN DEVELOPMENT** | TBD | TBD |
+| v0.7 Look and Feel + Starter Team | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, and a unified marketing and demo site. | **IN DEVELOPMENT** | TBD | TBD |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
-**PLANNING** means roadmap drafted, plan or execution in progress.
-**NOT PLANNED** means scope is sketched but no commitment, no
-schedule.
+**IN DEVELOPMENT** means the roadmap is committed and phases are
+executing, but it is not tagged yet. **NOT PLANNED** means scope is
+sketched with no commitment and no schedule.
 
 ## Currently working on
 
-**v0.5 Plugin System** shipped 2026-05-27 as `v0.5.0`. All 11
-phases (40-50) complete; 1011 tests pass on `main` across the
-3-OS × 2-Python matrix. All 8 release-gate checks green at tag
-time. The full 6-job install-smoke-plugin matrix (macOS / Ubuntu /
-Windows × Python 3.11 / 3.12) is required and green.
+Two milestones are in active development.
 
-v0.5 introduces:
-- TOML manifest contract (`horus-plugin.toml`) with pydantic-backed
-  schema validation, capability declarations, and PEP 440 compat
-  ranges.
-- Discovery via Python entry points (`horus_os.plugins` group) plus
-  a `~/.horus-os/plugins/` filesystem path for dev plugins.
-- Default-deny capability grants (filesystem.read/write, net.outbound,
-  secrets.read) keyed on `(plugin_name, plugin_version, capability)`
-  and tied to a manifest hash so upgrades that widen requested
-  capabilities re-prompt instead of silently inheriting.
-- Two-phase installer (`horus-os plugins install <spec>` — download,
-  validate, grant prompt, install) that refuses sdists, wheels with
-  `.pth` files, and any spec that would downgrade runtime deps.
-- Bounded `asyncio.wait_for(timeout=2.0)` on plugin lifecycle hooks
-  so a hung `start()` cannot block server boot.
-- `/plugins` dashboard tab plus per-plugin observability rollups
-  on top of v0.4's `ObservationBus` (new `plugin_name` column on
-  `llm_calls` and `tool_invocations`).
-- Reference plugin (`examples/horus-os-example-plugin/`) shipping
-  as a separate package, with a ruff custom rule pinning the
-  public API surface to `horus_os.plugins.api` only.
-- v5→v6 additive SQLite schema migration; v0.4 databases continue
-  to read.
+**v0.6 Contribution Gate** is rehearsal-ready. It builds the trust
+and supply-chain substrate that makes "outside PRs welcome" safe:
+keyless sigstore signing on wheels, sdists, SBOMs, and tags;
+CycloneDX 1.6 SBOMs generated against a fresh install-from-wheel
+venv; pip-audit on every PR; Dependabot for pip and GitHub Actions;
+every action `uses:` pinned to a commit SHA; `pull_request_target`
+forbidden by default; refreshed contributor docs and a SECURITY
+disclosure flow; and the release gate extended from 8 to 13 checks.
+This is the readiness gate that opening outside contributions
+depends on.
+
+**v0.7 Look and Feel + Starter Team** makes horus-os feel like a
+product on first run. It adds a real Next.js dashboard (team org
+view, memory browser, activity timeline, traces explorer, and a
+costs and observability page) static-exported and bundled into the
+wheel so it runs with no Node; a seeded five-agent starter team
+(Coordinator, Engineer, Researcher, Writer, Operator) with
+`SOUL.md` personas, an example vault, and a demo trace on first
+`init`; the eye-of-Horus brand and design system; and a unified
+marketing and demo site with a guided Get Started flow. Try the
+live demo at https://horus-os-demo.vercel.app.
 
 For the live phase pointer, read `.planning/STATE.md`. For the
 phase breakdown, read `.planning/ROADMAP.md`. For the requirement
@@ -89,10 +87,11 @@ list, read `.planning/REQUIREMENTS.md`.
 ## When collaboration opens
 
 The project opens for outside contributions once an internal
-readiness gate is met. **Earliest milestone for this: v0.6.**
-Possibly later. Not scheduled, not promised. When it ships, this
-page flips first, and the pinned Discussion gets a follow-up
-reply.
+supply-chain readiness gate is met. **That gate is the v0.6
+milestone, now in active development.** When it lands, this page
+flips first, and the pinned Discussion gets a follow-up reply.
+`CONTRIBUTING.md` already documents the full standards and the
+day-to-day flow that will apply, so you can read them in advance.
 
 Why the gate exists: horus-os was open-sourced from a working
 private command center that runs against the maintainer's real
@@ -137,10 +136,10 @@ section of `ROADMAP.md`. Highlights below.
 - Reference plugin (`examples/horus-os-example-plugin/`) shipped as
   a separate package, with a ruff custom rule pinning the public API
   surface to `horus_os.plugins.api` only.
-- 1011 tests across the 3-OS × 2-Python matrix; three-OS
+- 1011 tests across the 3-OS x 2-Python matrix; three-OS
   install-smoke (including the new plugin-install variant driven
   by `scripts/install_smoke_plugin.py`) green on all 6 combos.
-- v5→v6 additive SQLite schema migration; v0.4 databases continue
+- v5 to v6 additive SQLite schema migration; v0.4 databases continue
   to read.
 - See `docs/PLUGINS.md`, `docs/PLUGIN-SECURITY.md`,
   `docs/MIGRATION-v0.4-to-v0.5.md`.

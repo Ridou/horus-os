@@ -6,6 +6,108 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-02
+
+The Command Center milestone. v0.7.0 turns horus-os from a single-page
+vanilla-JS dashboard into a polished Next.js command center with a
+design system, a Setup-and-Verify integrations surface, an opt-in
+Discord control bot, an opt-in Supabase sync loop, a cron scheduler
+with an always-on service, and an opt-in Vercel deploy path. v0.6
+(Contribution Gate) was never tagged, so 0.7.0 follows 0.5.0 directly
+in the tag history.
+
+This release adds no removals and no deprecations. Every v0.5 surface
+keeps working byte-identical, `pip install horus-os` (no extras) still
+starts and runs the local runtime fully, and the SQLite schema upgrade
+is additive and idempotent.
+
+See `docs/MIGRATION-v0.5-to-v0.7.md` for upgrade notes from v0.5.
+
+### Added
+
+- **Design system and layout shell (Phase 60).** Tailwind v4 token
+  source in `globals.css`, Radix-backed `Modal` and `Stepper`
+  primitives, a four-state pulsing `StatusDot`, and an `AppShell`
+  with a locked ten-item sidebar (Home, Team, Memory, Tasks, Activity,
+  Traces, Costs, Integrations, Settings, About). The CI em-dash and
+  reserved-private-name guards land here, scoped to the changed-file
+  diff.
+- **Integrations surface and read-only API (Phase 61).** A ten-card
+  Integrations page with per-integration walkthroughs (Modal plus
+  Stepper, read-only in demo mode), a readiness summary, and a
+  read-only `GET /api/integrations` route sourced from an
+  `INTEGRATION_REGISTRY` that never echoes secret values. The
+  get-started flow gains a step that links straight to the surface.
+- **Key-write endpoint and verification engine (Phase 62).** A
+  loopback-guarded `POST /api/integrations/{name}/keys` plus a
+  `POST /verify` probe that never echoes the key value, refuses in
+  demo mode (403), writes `.env` with `chmod 600`, and invalidates a
+  saved verification when the key hash changes. The credential
+  management UI lands on `/settings` with masked display and a
+  restart banner.
+- **Tier-1 dashboard pages, starter team, and seed content
+  (Phase 63).** A `/tasks` page and a full-page `/team/[slug]` agent
+  detail route, `GET /api/tasks` plus task and trace delete routes, a
+  case-insensitive team lookup, an example-data banner and a guided
+  tour, and idempotent seed content (a starter team and demo tasks).
+- **Discord control bot (Phase 64).** The `[discord]` adapter becomes
+  a control bot: create-only, non-destructive channel bootstrap,
+  deny-by-default admin gating, slash commands, and a `#horus`
+  thread-dispatch flow. Three required env vars
+  (`HORUS_OS_DISCORD_TOKEN`, `HORUS_OS_DISCORD_GUILD_ID`,
+  `HORUS_OS_DISCORD_ADMIN_ROLE_ID`) and a minimal-permission invite.
+- **Supabase sync loop and schema migrations (Phase 65).** An opt-in
+  `[supabase]` `SupabaseAdapter` that pushes traces, agent profiles,
+  and tasks through a background sync loop, with cursors stored
+  locally so the runtime survives Supabase downtime. The service key
+  never reaches a browser-accessible route or a `NEXT_PUBLIC_*` value,
+  every synced table ships Row Level Security, and a
+  `horus-os doctor --supabase` command reports per-table RLS state
+  without printing the key. An anon-key read path lets the dashboard
+  read from Supabase when configured and fall back to the local API
+  otherwise.
+- **Cron scheduler and always-on service (Phase 66).** A
+  `SchedulerAdapter` (core-on-by-default, opt-out via
+  `HORUS_OS_DISABLE_SCHEDULER`) that fires agent profiles on cron
+  schedules with a double-fire guard and an overlap guard, a
+  `horus-os schedule` subcommand family, a cross-platform
+  `horus-os service` install path (systemd, launchd, NSSM) with
+  `horus-os doctor --service`, and a `docs/REMOTE.md` remote-access
+  guide.
+- **Vercel deploy path, GitHub tool, and configurable API base
+  (Phase 67).** A `NEXT_PUBLIC_API_BASE` abstraction so the static
+  export can point at a remote API origin, an opt-in `[vercel]` deploy
+  path, and an opt-in read-only `github_read` agent tool behind the
+  `[github]` extra that never echoes `GITHUB_TOKEN`.
+- **New optional extras.** Four opt-in integration extras join the
+  package: `[discord]`, `[supabase]`, `[vercel]`, and `[github]`. Each
+  is installed explicitly (for example
+  `pip install 'horus-os[supabase]'`) and all four are EXCLUDED from
+  `[all]`, so neither `pip install horus-os` nor
+  `pip install 'horus-os[all]'` pulls any of them. An install-smoke
+  test pins this exclusion invariant.
+
+### Changed
+
+- **SQLite schema bump (v6 to v12, additive and idempotent).** v0.5
+  ships schema version 6, so a v0.5 database advances to v12 on first
+  v0.7 startup. The v0.7 phases add five tables across the milestone:
+  `integration_verification_state` (Phase 62), `tasks` (Phase 63),
+  `discord_feedback` (Phase 64), `sync_cursors` (Phase 65), and
+  `schedules` (Phase 66), plus three nullable `agent_profiles` columns
+  for the starter team. Every migration is additive and idempotent,
+  runs automatically on first startup, and leaves pre-v0.7 rows
+  byte-identical. The schema advanced to v12; query the
+  `schema_version` table to confirm, as the migration note documents.
+- **New environment variables.** The integration suite introduces
+  `HORUS_OS_DISCORD_TOKEN`, `HORUS_OS_DISCORD_GUILD_ID`,
+  `HORUS_OS_DISCORD_ADMIN_ROLE_ID`, `SUPABASE_URL`,
+  `SUPABASE_SERVICE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `HORUS_OS_VERCEL_TOKEN`,
+  `GITHUB_TOKEN`, `HORUS_OS_DISABLE_SCHEDULER`, `HORUS_TZ`, and
+  `NEXT_PUBLIC_API_BASE`. All are optional; the local runtime starts
+  with none of them set.
+
 ## [0.5.0] - 2026-05-27
 
 Fifth alpha. Adds a third-party plugin system on top of the v0.4
@@ -39,7 +141,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   `pip install --no-deps --no-build-isolation` against the wheel.
   Any failure post-Phase-D rolls back via `pip uninstall -y` plus
   a `DELETE FROM plugins`. The single `subprocess.run` chokepoint
-  inside `run_pip` is the only audit point — a grep for the literal
+  inside `run_pip` is the only audit point - a grep for the literal
   invocation token returns 1.
 - **Default-deny capability grants.** Four-capability v1 catalog:
   `filesystem.read`, `filesystem.write`, `net.outbound`,
@@ -92,7 +194,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   tool (`lookup_secret_tool` via `@require_capability(SECRETS_READ)`,
   returns `None` on missing key), bounded-lifecycle adapter
   (`ExampleAdapter` with `asyncio.create_task(asyncio.sleep(0))` +
-  cancel/await — well inside Phase 43's
+  cancel/await - well inside Phase 43's
   `asyncio.wait_for(timeout=2.0)` ceiling), and a single
   `horus-plugin.toml` registering both tools AND the adapter through
   `[[contributions.*]]` arrays. Shipped as the canonical starting
@@ -118,7 +220,7 @@ See `docs/MIGRATION-v0.4-to-v0.5.md` for upgrade notes from v0.4.
   export. `packaging>=24.0` powers PEP 440 `horus_os_compat` parsing
   via `SpecifierSet` and `Requires-Dist` parsing via
   `Requirement`. Both are pure-Python wheels with universal install
-  surface — no 3-OS install-smoke impact.
+  surface - no 3-OS install-smoke impact.
 
 ### Migration
 

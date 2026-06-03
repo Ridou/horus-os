@@ -42,14 +42,18 @@ V5_TABLES = {
 ROW_PRESERVED_TABLES = (
     "traces",
     "note_writes",
-    "agent_profiles",
 )
-# Tables with a new plugin_name column added in v6 — preservation is
+# Tables with a new plugin_name column added in v6 - preservation is
 # verified via SELECT of every column EXCEPT plugin_name.
 ROW_PRESERVED_TABLES_EXCEPT_PLUGIN_NAME = (
     "llm_calls",
     "tool_invocations",
 )
+# agent_profiles gained color / description / soul_path in the later v6 -> v7
+# upgrade. Since init() runs every migration, those columns are present after
+# the call here. Preservation of the pre-existing values is verified via SELECT
+# of every column EXCEPT the v7 additions.
+V7_AGENT_PROFILE_COLUMNS = ("color", "description", "soul_path")
 
 
 def _hash_rows(conn: sqlite3.Connection, table: str, exclude_cols: tuple[str, ...] = ()) -> str:
@@ -83,8 +87,11 @@ def upgraded_db(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         for tbl in ROW_PRESERVED_TABLES:
             pre_hashes[tbl] = _hash_rows(conn, tbl)
         for tbl in ROW_PRESERVED_TABLES_EXCEPT_PLUGIN_NAME:
-            # No plugin_name to exclude pre-upgrade — same hash with empty exclude.
+            # No plugin_name to exclude pre-upgrade - same hash with empty exclude.
             pre_hashes[tbl] = _hash_rows(conn, tbl)
+        # agent_profiles has no v7 columns pre-upgrade, so excluding them is a
+        # no-op here; the post-upgrade comparison excludes them on both sides.
+        pre_hashes["agent_profiles"] = _hash_rows(conn, "agent_profiles")
 
     # Upgrade.
     db = Database(dest)
@@ -96,15 +103,15 @@ def upgraded_db(tmp_path: Path) -> tuple[Path, dict[str, str]]:
 # --- Sanity / shape --------------------------------------------------------
 
 
-def test_schema_version_constant_is_six() -> None:
-    assert SCHEMA_VERSION == 6
+def test_schema_version_constant_is_nine() -> None:
+    assert SCHEMA_VERSION == 12
 
 
 def test_fixture_upgrades_cleanly(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db_path, _ = upgraded_db
     with sqlite3.connect(str(db_path)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 6
+        assert v == 12
 
 
 def test_new_tables_exist(upgraded_db: tuple[Path, dict[str, str]]) -> None:
@@ -200,6 +207,12 @@ def test_existing_rows_preserved_byte_identical(upgraded_db: tuple[Path, dict[st
             assert post_hash == pre_hashes[tbl], (
                 f"{tbl} pre-existing column values changed during v5 -> v6 migration"
             )
+        # agent_profiles: exclude the v7 columns added by a later migration so
+        # the pre-existing v5 column values are compared fairly.
+        post_hash = _hash_rows(conn, "agent_profiles", exclude_cols=V7_AGENT_PROFILE_COLUMNS)
+        assert post_hash == pre_hashes["agent_profiles"], (
+            "agent_profiles pre-existing column values changed during migration"
+        )
 
 
 def test_plugin_name_is_null_on_pre_migration_rows(
@@ -225,7 +238,7 @@ def test_idempotent_replay(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 6
+        assert v == 12
         # No spurious rows in any of the new tables.
         for tbl in ("plugins", "plugin_capabilities", "plugin_status"):
             n = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
@@ -239,13 +252,13 @@ def test_idempotent_replay(upgraded_db: tuple[Path, dict[str, str]]) -> None:
 
 
 def test_fresh_database_initializes_at_v6(tmp_path: Path) -> None:
-    """A fresh DB (no schema_version row) lands at v6 directly via SCHEMA_SQL."""
+    """A fresh DB (no schema_version row) lands at the current version via SCHEMA_SQL."""
     fresh = tmp_path / "fresh.sqlite3"
     db = Database(fresh)
     db.init()
     with sqlite3.connect(str(fresh)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 6
+        assert v == 12
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }

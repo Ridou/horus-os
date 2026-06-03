@@ -103,3 +103,6 @@ class AgentProfile:
     memory_scope: str | None = None  # opaque, deferred to Phase 13
     created_at: str = ""  # ISO-8601 UTC, set by Database methods
     updated_at: str = ""  # ISO-8601 UTC, set by Database methods
+    color: str | None = None  # hex accent for the dashboard, e.g. "#00d4ff"
+    description: str | None = None  # one-line summary of what the agent does
+    soul_path: str | None = None  # notes_dir-relative path to the SOUL.md persona

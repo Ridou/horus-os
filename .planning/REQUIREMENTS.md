@@ -220,9 +220,9 @@
 |----|-------------|--------|-------|
 | DASH-4-01 | New `/observability` tab with three panels: cost-by-agent, latency p50/p95, tool reliability | active | 36 |
 | DASH-4-02 | Window selector (24h / 7d / 30d, default 7d) drives all panels | active | 36 |
-| DASH-4-03 | Percentile cells with n < 10 samples render as "—", not as a number | active | 36 |
+| DASH-4-03 | Percentile cells with n < 10 samples render as "-", not as a number | active | 36 |
 | DASH-4-04 | Existing `/agents` tab gains cost + latency columns from rollups | active | 35 |
-| DASH-4-05 | Pre-v0.4 trace rows render "—" for new columns with hover "no cost data captured before v0.4" | active | 36 |
+| DASH-4-05 | Pre-v0.4 trace rows render "-" for new columns with hover "no cost data captured before v0.4" | active | 36 |
 
 ### Usage CLI (USAGE)
 
@@ -364,7 +364,7 @@
 | TEST-16 | Three-tier test fixtures shipped: tier 1 in-process unit tests against `PluginSpec` objects; tier 2 `fake_plugin_entry_points` monkeypatch fixture; tier 3 `clean_venv` fixture (opt-in via `@pytest.mark.installer_e2e`) for real `pip install` E2E | complete | 46 |
 | TEST-17 | `tests/test_plugin_pitfalls/` directory contains one regression test per documented pitfall in `.planning/research/PITFALLS.md` (minimum 12 tests); test names map 1:1 to pitfall numbers | complete | 46 |
 | TEST-18 | Cold-start benchmark: full discovery + validation + load pass with zero installed plugins completes in <100ms wall clock on Ubuntu CI runner; regression fails CI | complete | 42 |
-| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter — each must surface as `status="error"` without crashing the host | complete | 42, 43 |
+| TEST-19 | Broken-plugin fixtures verify ISOLATE-01: synthetic plugins with invalid TOML, schema-failing manifest, import-raising module, `start()`-raising adapter, `start()`-hanging adapter - each must surface as `status="error"` without crashing the host | complete | 42, 43 |
 | TEST-20 | Three-OS install-smoke job (macOS + Ubuntu + Windows × Python 3.11 + 3.12) installs `examples/horus-os-example-plugin` via `pip install -e ./examples/horus-os-example-plugin` and asserts plugin appears in `/api/plugins` with `status="running"` | complete | 49 |
 | TEST-21 | Reference plugin CI lint rejects any `from horus_os` import that doesn't come from `horus_os.plugins.api` (the single public API surface); enforced by ruff `flake8-tidy-imports.banned-api` (layer 1) + pytest source-tree backstop at `tests/plugins/test_reference_plugin_public_api_only.py` (layer 2) | complete | 48 |
 
@@ -484,6 +484,152 @@
 | REL-14 | `scripts/release_gate.py` extended from 8 to 13 checks (5 new): `release-workflow-signing-present` (grep for sigstore-python + attest-build-provenance literals), `release-workflow-sbom-present` (grep for cyclonedx-py + attest-sbom), `audit-workflow-present` (grep for pip-audit + dependency-review-action), `local-pip-audit-clean` (`pip-audit -s osv` exits 0), `actions-pinned-by-sha` (regex asserts every `uses:` is `@<40-hex>`); `--check` enum APPENDED, existing 8 values byte-identical | active | 57 |
 | REL-15 | Two-tier release-gate execution: tier 1 (pre-merge, local, <10s) covers the grep-only checks + lint; tier 2 (pre-release, network, ~60s) adds `pip-audit` network call + sigstore-verify on the built wheel; tier choice via `--tier {local,release}` CLI flag (default `release`); offline mode short-circuits tier-2 with explicit `--allow-offline` flag plus warning | active | 57 |
 
+## v0.7 Command Center
+
+Polished local-first dashboard plus a full OPTIONAL integration suite (Discord, Supabase, Vercel, Tailscale, GitHub, AI providers, existing adapters) connectable through guided in-dashboard walkthroughs with green-light verification and in-app key management. Every integration is optional; horus-os runs fully locally with only an LLM key. Phase column is TBD until the roadmap maps each requirement.
+
+### Design system and layout shell (DESIGN)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DESIGN-01 | Dashboard renders against a single Tailwind v4 design-token theme (background, text, accent, border, and semantic tokens) defined in one place | active | 60 |
+| DESIGN-02 | A reusable Modal primitive (portal-mounted, backdrop, Escape to close, focus trap) is available to every page | active | 60 |
+| DESIGN-03 | A reusable multi-step Stepper primitive (numbered progress, back/continue/done, per-step validation) is available | active | 60 |
+| DESIGN-04 | The dashboard uses a persistent sidebar navigation shell listing all pages, with a dark default theme | active | 60 |
+| DESIGN-05 | A shared UI kit (empty state, loading skeleton, status dot/badge, metric card, markdown renderer) is used consistently across pages | active | 60 |
+
+### Tier-1 dashboard pages (PAGES)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| PAGES-01 | User can view the agent roster at /team with status filter tabs, live counts, and a list vs org-chart view toggle | active | 63 |
+| PAGES-02 | User can open a single agent at /team/[agent] and see its persona, color, domain, model, and recent session activity | active | 63 |
+| PAGES-03 | User can browse the markdown vault at /memory with a folder tree, content viewer, debounced search, and time-ago timestamps | active | 63 |
+| PAGES-04 | User can view the task queue at /tasks (pending, running, completed) and retry or cancel a task | active | 63 |
+| PAGES-05 | User can watch a live timeline of agent actions at /activity | active | 63 |
+| PAGES-06 | The existing /traces view is redesigned against the new design system | active | 63 |
+| PAGES-07 | The existing observability view is redesigned as /costs with Recharts-based charts | active | 63 |
+| PAGES-08 | User can read /about explaining what horus-os is, the running version, and where to get help | active | 63 |
+
+### Starter agent team (TEAM)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEAM-01 | `horus-os init` auto-creates five generic starter agents (Coordinator, Engineer, Researcher, Writer, Operator), each with a name, color, domain, and default model | active | 63 |
+| TEAM-02 | Each starter agent ships a SOUL.md persona (YAML frontmatter plus Identity, Principles, Voice, Boundaries, Workflow sections) with a user-name template placeholder | active | 63 |
+| TEAM-03 | The Coordinator can delegate work to the other starter agents via the existing delegate_to_agent tool | active | 63 |
+
+### Seed content and first-run (SEED)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SEED-01 | First run seeds an example vault of generic sample notes so /memory is not empty, clearly labeled as example data | active | 63 |
+| SEED-02 | A demo trace is seeded on init so /traces and /activity are not empty, with an example-data banner and a way to clear it | active | 63 |
+| SEED-03 | A first-run onboarding tour overlay highlights the core pages in turn and can be dismissed and replayed | active | 63 |
+
+### Integrations surface and guided setup (SETUP)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SETUP-01 | An Integrations page lists every connector (Anthropic, Gemini, Discord, Slack, Email, Calendar, GitHub, Supabase, Vercel, Tailscale) as a card with a status indicator | active | 61 |
+| SETUP-02 | GET /api/integrations returns each integration's metadata and live configured/verified status without returning any secret value | active | 61 |
+| SETUP-03 | Each integration card opens a guided multi-step popup walkthrough explaining what it unlocks, where to get the credential (with a portal deep-link), and the exact env var or command | active | 61 |
+| SETUP-04 | Walkthrough steps can display an optional screenshot or image asset bundled with the dashboard | active | 61 |
+| SETUP-05 | The get-started page launches the same guided setup, replacing the reserved placeholder | active | 61 |
+| SETUP-06 | In demo mode the walkthroughs degrade to instructional-only with no writes | active | 61 |
+
+### Verification and green-light readiness (VERIFY)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| VERIFY-01 | Each integration exposes a server-side verification probe that tests the configured credential and returns pass or fail without echoing the secret | active | 62 |
+| VERIFY-02 | The Integrations surface shows a per-integration readiness state (verified, configured-but-unverified, missing, error) as a green-light indicator | active | 61 |
+| VERIFY-03 | Changing or rotating a credential invalidates a previously verified state via key-hash change detection | active | 62 |
+| VERIFY-04 | A readiness summary tells the user which integrations are ready, and never blocks local-only operation on any optional integration | active | 61 |
+
+### In-app key management (KEYS)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| KEYS-01 | A real /settings page lets the user see which credentials are set (masked) and adjust or replace them per integration | active | 62 |
+| KEYS-02 | A secret-aware key-write endpoint persists an allowlisted credential to the local data_dir .env at chmod 600 and to the running process, and never echoes the value back | active | 62 |
+| KEYS-03 | The key-write endpoint refuses non-loopback clients and returns an error in demo mode | active | 62 |
+| KEYS-04 | After a credential change the UI tells the user whether a restart is needed and surfaces the new verification state | active | 62 |
+
+### Discord control bot (DISC, continued from v0.3)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| DISC-05 | An opt-in setup creates the bot's channel and category layout idempotently and never deletes channels it does not own | active | 64 |
+| DISC-06 | Typing in the control channel opens a thread, submits the message to the orchestrator, and posts the result back in that thread | active | 64 |
+| DISC-07 | Guild-scoped slash commands are registered for the core actions, with stale global-command cleanup | active | 64 |
+| DISC-08 | Task progress is posted as status cards and reactions provide approve and feedback signals | active | 64 |
+| DISC-09 | Privileged-command authorization uses a configurable admin role rather than a hardcoded name, and the Message Content privileged-intent requirement is documented | active | 64 |
+| DISC-10 | The Discord setup guide and the in-dashboard walkthrough cover full-admin bot creation, intents, and the invite URL | active | 64 |
+
+### Always-live mission control: Supabase (SUPA)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| SUPA-01 | An opt-in background loop incrementally syncs local SQLite rows to Supabase using an updated-at cursor and push-only upserts | active | 65 |
+| SUPA-02 | Supabase writes use a server-side service key only; the service key never reaches the browser or the static bundle | active | 65 |
+| SUPA-03 | Versioned Supabase schema migrations create the mirrored tables with row-level security enabled | active | 65 |
+| SUPA-04 | When configured, the dashboard can read from Supabase directly with the anon key so a deployed dashboard stays current without redeploys | active | 65 |
+| SUPA-05 | The runtime starts and runs fully with zero Supabase configuration; Supabase lives behind an optional [supabase] extra | active | 65 |
+
+### Deploy your own dashboard: Vercel (VERCEL)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| VERCEL-01 | The dashboard build honors a configurable API base URL so a Vercel-hosted copy can target a reachable backend, defaulting to same-origin locally | active | 67 |
+| VERCEL-02 | A walkthrough documents deploying your own dashboard to Vercel (root directory, environment variables, build) | active | 67 |
+| VERCEL-03 | An observe-only Vercel client reports deploy status using a user-supplied token, behind an optional [vercel] extra | active | 67 |
+| VERCEL-04 | Any guidance that exposes the dashboard beyond localhost carries a prominent warning that /api has no authentication layer | active | 67 |
+
+### Remote access and 24/7 operation (REMOTE)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REMOTE-01 | Mutating endpoints (including the key-write endpoint) are guarded to loopback by default, and starlette is pinned to a version without the host-header bypass | active | 62 |
+| REMOTE-02 | `horus-os serve --host` is documented alongside the localhost default and its security implications | active | 66 |
+| REMOTE-03 | A remote-access guide covers reaching the dashboard over Tailscale (serve or Funnel), gated on adding an authentication layer first | active | 66 |
+| REMOTE-04 | `horus-os service install` registers an always-on service cross-platform (systemd, launchd, Windows) with restart-on-failure | active | 66 |
+| REMOTE-05 | An in-process cron scheduler runs recurring agent routines from a schedules table so routines fire 24/7, with a catch-up policy for missed runs | active | 66 |
+
+### GitHub integration (GH)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| GH-01 | GitHub appears in the Integrations surface with a token-based connect walkthrough and a verification probe | active | 61 |
+| GH-02 | An optional GitHub tool lets an agent read repository data (issues, pull requests, files) using the configured token, behind an opt-in extra | active | 67 |
+
+### Migration (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| MIG-06 | The SQLite schema migration that adds v0.7 tables (schedules, integration verification state, sync cursors) is additive and idempotent | active | 62 |
+
+### Test and CI (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| TEST-27 | Regression tests cover the new endpoints (integrations list, verification probe, key-write) including the loopback guard and demo-mode refusal | active | 62 |
+| TEST-28 | A test asserts the Discord channel bootstrap is idempotent and never deletes channels outside its managed set | active | 64 |
+| TEST-29 | A test asserts the Supabase service key never appears in any browser-exposed value or the static bundle | active | 65 |
+| TEST-30 | Cross-OS tests cover the always-on service install path on macOS, Ubuntu, and Windows | active | 66 |
+| TEST-31 | Three-OS install-smoke remains green with the new optional extras | active | 67 |
+
+### Release (continued from v0.6)
+
+| ID | Requirement | Status | Phase |
+|----|-------------|--------|-------|
+| REL-16 | v0.7.0 ships behind the three-OS hard gate (macOS, Ubuntu, Windows; Python 3.11 and 3.12) | active | 68 |
+| REL-17 | The new optional extras ([supabase], [vercel]) are excluded from [all] and documented | active | 68 |
+
+### Deferred to a later milestone (v0.7 context)
+
+These are intentionally out of v0.7 scope: Tier-2 dashboard pages (/inbox, /approvals, /goals, /schedules UI, /health, /terminal), the memory intelligence pipeline (fact extraction, consolidation, vault drift, working vs long-term split, likely a v0.8 milestone), voice features via a paid SDK, OAuth-based connect flows (token or API key is sufficient for v0.7), and any personal-data domains.
+
 ## Coverage summary
 
 | Category | Total | Active | Validated |
@@ -525,7 +671,7 @@
 
 "Validated" means the requirement is covered by a shipped phase. v0.1 and v0.2 shipped 2026-05-23 (tags `v0.1.0`, `v0.2.0`); v0.3 shipped 2026-05-24 (tag `v0.3.0`); v0.4 shipped 2026-05-26 (tag `v0.4.0`). v0.5 requirements stay unvalidated until their phases ship.
 
-## Traceability — v0.5 Plugin System
+## Traceability - v0.5 Plugin System
 
 Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth: the Phase column in each category table above. Where a requirement's Phase column lists two numbers (ISOLATE-01 "42, 43" and TEST-19 "42, 43"), the owning phase is the one carrying the bulk of the work; the other phase consumes its substrate.
 
@@ -573,7 +719,7 @@ Single-phase mapping for every v0.5 requirement (Phases 40-50). Source-of-truth:
 
 **Coverage:** 39 v0.5 requirements, 39 mapped, 0 orphans, 0 duplicates. Multi-phase entries (ISOLATE-01: 42, 43 and TEST-19: 42, 43) resolved to owning phase per "bulk of the work" rule; consumer phase relationship preserved via the Depends-on notes in ROADMAP.md.
 
-## Traceability — v0.6 Contribution Gate
+## Traceability - v0.6 Contribution Gate
 
 Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth: the Phase column in each category table above. Mirrors v0.5 traceability shape.
 
@@ -627,3 +773,75 @@ Single-phase mapping for every v0.6 requirement (Phases 51-59). Source-of-truth:
 | REL-13 | 59 | Pending |
 
 **Coverage:** 46 v0.6 requirements, 46 mapped, 0 orphans, 0 duplicates. Phase 52 (fork-PR CI split) consolidated into Phase 51 per research SUMMARY recommendation (v0.5 tests use recorded provider responses; no live-secret fork-CI path needed in v0.6). Result: 9-phase shape (51-59) instead of 10.
+
+## Traceability - v0.7 Command Center
+
+Single-phase mapping for every v0.7 requirement (Phases 60-68). Source-of-truth: the Phase column in each category table above.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DESIGN-01 | 60 | Complete |
+| DESIGN-02 | 60 | Complete |
+| DESIGN-03 | 60 | Complete |
+| DESIGN-04 | 60 | Complete |
+| DESIGN-05 | 60 | Complete |
+| SETUP-01 | 61 | Complete |
+| SETUP-02 | 61 | Complete |
+| SETUP-03 | 61 | Complete |
+| SETUP-04 | 61 | Complete |
+| SETUP-05 | 61 | Complete |
+| SETUP-06 | 61 | Complete |
+| VERIFY-02 | 61 | Complete |
+| VERIFY-04 | 61 | Complete |
+| GH-01 | 61 | Complete |
+| KEYS-01 | 62 | Complete |
+| KEYS-02 | 62 | Complete |
+| KEYS-03 | 62 | Complete |
+| KEYS-04 | 62 | Complete |
+| VERIFY-01 | 62 | Complete |
+| VERIFY-03 | 62 | Complete |
+| REMOTE-01 | 62 | Complete |
+| MIG-06 | 62 | Complete |
+| TEST-27 | 62 | Complete |
+| PAGES-01 | 63 | Complete |
+| PAGES-02 | 63 | Complete |
+| PAGES-03 | 63 | Complete |
+| PAGES-04 | 63 | Complete |
+| PAGES-05 | 63 | Complete |
+| PAGES-06 | 63 | Complete |
+| PAGES-07 | 63 | Complete |
+| PAGES-08 | 63 | Complete |
+| TEAM-01 | 63 | Complete |
+| TEAM-02 | 63 | Complete |
+| TEAM-03 | 63 | Complete |
+| SEED-01 | 63 | Complete |
+| SEED-02 | 63 | Complete |
+| SEED-03 | 63 | Complete |
+| DISC-05 | 64 | Complete |
+| DISC-06 | 64 | Complete |
+| DISC-07 | 64 | Complete |
+| DISC-08 | 64 | Complete |
+| DISC-09 | 64 | Complete |
+| DISC-10 | 64 | Complete |
+| TEST-28 | 64 | Complete |
+| SUPA-01 | 65 | Complete |
+| SUPA-02 | 65 | Complete |
+| SUPA-03 | 65 | Complete |
+| SUPA-04 | 65 | Complete |
+| SUPA-05 | 65 | Complete |
+| TEST-29 | 65 | Complete |
+| REMOTE-02 | 66 | Complete |
+| REMOTE-03 | 66 | Complete |
+| REMOTE-04 | 66 | Complete |
+| REMOTE-05 | 66 | Complete |
+| TEST-30 | 66 | Complete |
+| VERCEL-01 | 67 | Complete |
+| VERCEL-02 | 67 | Complete |
+| VERCEL-03 | 67 | Complete |
+| VERCEL-04 | 67 | Complete |
+| GH-02 | 67 | Complete |
+| TEST-31 | 67 | Complete |
+| REL-16 | 68 | Complete |
+| REL-17 | 68 | Complete |
+
+**Coverage:** 63 v0.7 requirements, 63 mapped, 0 orphans, 0 duplicates. VERIFY-01 and VERIFY-03 (server-side probes, key-hash detection) land in Phase 62 with the key-write security substrate; VERIFY-02 and VERIFY-04 (UI status indicators, readiness summary) land in Phase 61 with the read-only integrations surface. REMOTE-01 (starlette pin + loopback guard) lands in Phase 62 as a BLOCKING security prerequisite; REMOTE-02..05 (docs, service install, cron) land in Phase 66. GH-01 (integrations card + verify probe) lands in Phase 61; GH-02 (GitHub tool behind extra) lands in Phase 67. TEST-27..31 each land in the phase that owns the code they exercise.

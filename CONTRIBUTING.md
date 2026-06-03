@@ -1,14 +1,16 @@
+<p align="center"><img src="assets/horus-eye.svg" alt="" width="64"></p>
+
 # Contributing to horus-os
 
 <!-- PHASE-59-FLIP: when contributions open, replace the entire Status block (next H2 below) with "Status: open for contributions" and delete the "Future contribution flow (not active yet)" section. The "Future contribution flow (active after v0.6 gate flip)" section becomes the current flow. -->
 ## Status: not currently accepting outside contributions
 
-`horus-os` is in a solo development phase as of v0.3.0. The project
-was open-sourced out of a working private command center, and the
-maintainer is still moving fast through the early milestones (v0.4
-Observability is in planning right now). Outside pull requests will
-not be merged at this time, and "I want to claim this issue"
-comments will not be assigned.
+`horus-os` is in a solo development phase. The project was
+open-sourced out of a working private command center, and the
+maintainer is moving through the milestones toward the contribution
+gate. v0.6 Contribution Gate and v0.7 Look and Feel + Starter Team
+are both in active development. Outside pull requests are not merged
+yet, and "I want to claim this issue" comments are not assigned yet.
 
 This guide stays public so the standards are clear in advance, and so
 contributors can mirror them locally if they want to. **Treat
@@ -29,8 +31,8 @@ What is not currently accepted:
 - Scope-expansion proposals via PR. Use Discussions instead.
 
 The maintainer will update this banner once the internal
-readiness gate is met. Most likely milestone for that is **v0.6
-or later**; not promised, not scheduled.
+supply-chain readiness gate is met. That gate is the **v0.6**
+milestone, now in active development; not promised, not scheduled.
 
 If anything in this guide is wrong, unclear, or out of date, open an
 issue.
@@ -43,9 +45,10 @@ When the project opens up, every incoming PR will go through:
    prior public work. First-time contributors get a small intro task
    (typo fix, doc tweak) before any code review on substantive
    changes.
-2. **Automated review.** Incoming PRs go through a private
-   pre-review process before any human review. Details are
-   intentionally not published.
+2. **Automated checks.** Incoming PRs run the full CI suite first:
+   lint, the test matrix across macOS, Ubuntu, and Windows on Python
+   3.11 and 3.12, the install-smoke jobs, and the supply-chain scans.
+   Human review starts only after CI is green.
 3. **Sandboxed CI.** Forked-PR CI runs with restricted tokens. No
    repository secrets are exposed to fork builds.
 4. **Maintainer review.** Human review only after the above gates

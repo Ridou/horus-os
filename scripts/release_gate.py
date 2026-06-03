@@ -47,7 +47,7 @@ appended after. The 8 v0.4/v0.5 enum values remain byte-identical to v0.5
    migration with the three plugin tables, two plugin_name columns,
    and the ``idx_tool_invocations_plugin`` index present, and a
    second ``init()`` call is idempotent. T-49-01 mitigation: the
-   committed fixture is NEVER mutated — the check copies to a
+   committed fixture is NEVER mutated - the check copies to a
    tempfile and unlinks in a finally block.
 
 Exit semantics: 0 only when all enabled checks pass; 1 when any
@@ -372,7 +372,7 @@ def check_docs_manifest_schema_drift(
     """Pass when docs/manifest-v1.schema.json matches MANIFEST_V1_SCHEMA.
 
     The runtime pydantic schema is dumped via
-    ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` —
+    ``json.dumps(schema, indent=2, sort_keys=True) + '\\n'`` -
     byte-identical to the serializer in
     ``scripts/build_manifest_schema.py:44`` so a maintainer running the
     build script to fix drift produces a file the gate accepts.
@@ -443,7 +443,7 @@ def check_docs_manifest_schema_drift(
 def check_plugin_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
     """Pass when ci.yml literally contains 'install-smoke-plugin'.
 
-    Single grep — same shape as check_ci_two_variant_smoke_present but
+    Single grep - same shape as check_ci_two_variant_smoke_present but
     for the Phase 49 TEST-20 contract. The job name MUST appear in the
     YAML; if a future maintainer drops the matrix to "speed up CI," the
     gate catches it before tagging.
@@ -807,9 +807,16 @@ def check_local_pip_audit_clean(allow_offline: bool = False) -> CheckResult:
                 "see .github/pip-audit-ignore.txt header for required format"
             ),
         )
+    # pip-audit has no file-based ignore flag; it takes one repeatable
+    # --ignore-vuln ID. Translate each non-comment, non-blank line of the
+    # ignore file (already format-validated above) into its own flag. An
+    # empty ignore list yields no flags, so the scan runs unfiltered.
     ignore_file_arg: list[str] = []
     if DEFAULT_PIP_AUDIT_IGNORE_PATH.is_file():
-        ignore_file_arg = ["--ignore-vulns-file", str(DEFAULT_PIP_AUDIT_IGNORE_PATH)]
+        for raw_line in DEFAULT_PIP_AUDIT_IGNORE_PATH.read_text(encoding="utf-8").splitlines():
+            entry = raw_line.strip()
+            if entry and not entry.startswith("#"):
+                ignore_file_arg += ["--ignore-vuln", entry]
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pip_audit", "-s", "osv", *ignore_file_arg],

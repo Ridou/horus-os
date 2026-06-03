@@ -23,6 +23,16 @@ def _init_installation(tmp_path: Path) -> None:
     _runcli(["init", "--data-dir", str(tmp_path)])
 
 
+def _real_traces(db: object) -> list:
+    """Traces a run actually recorded, excluding the seeded demo trace.
+
+    A fresh init seeds one example trace (provider == "example") so the
+    dashboard is not empty. These run tests assert on the traces a command
+    produced, so the seed is filtered out.
+    """
+    return [t for t in db.list_traces() if t.provider != "example"]
+
+
 def test_run_requires_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _init_installation(tmp_path)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -91,7 +101,7 @@ def test_run_happy_path_records_trace(tmp_path: Path, monkeypatch: pytest.Monkey
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    traces = _real_traces(db)
     assert len(traces) == 1
     assert traces[0].prompt == "hi"
 
@@ -112,7 +122,7 @@ def test_run_no_record_skips_trace(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    assert db.list_traces() == []
+    assert _real_traces(db) == []
 
 
 def test_run_error_path_records_error_trace(
@@ -132,7 +142,7 @@ def test_run_error_path_records_error_trace(
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    traces = _real_traces(db)
     assert len(traces) == 1
     assert traces[0].status == "error"
     assert "provider down" in (traces[0].error_message or "")
@@ -228,7 +238,7 @@ def test_run_streams_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    traces = _real_traces(db)
     assert len(traces) == 1
     assert traces[0].response_text == "Hello, world"
     assert traces[0].agent_profile_name is None
@@ -303,7 +313,7 @@ def test_run_with_agent_loads_system_prompt(
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    traces = _real_traces(db)
     assert traces[0].agent_profile_name == "terse"
 
 
@@ -379,7 +389,7 @@ def test_run_streaming_records_error_trace(tmp_path: Path, monkeypatch: pytest.M
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    traces = db.list_traces()
+    traces = _real_traces(db)
     assert len(traces) == 1
     assert traces[0].status == "error"
     assert "stream broke" in (traces[0].error_message or "")
@@ -404,7 +414,7 @@ def test_run_streaming_no_record_skips_trace(
     from horus_os import Database
 
     db = Database(tmp_path / "horus.sqlite")
-    assert db.list_traces() == []
+    assert _real_traces(db) == []
 
 
 def test_run_streaming_surfaces_tool_call_event(

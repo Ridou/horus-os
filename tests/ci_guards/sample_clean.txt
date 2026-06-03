@@ -1,0 +1,3 @@
+This file contains only plain ASCII prose - no em-dashes, no reserved names.
+Use hyphens for ranges: Monday-Friday, version 0.7, step-by-step guide.
+All checks against this file should pass cleanly with zero matches.
