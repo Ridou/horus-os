@@ -26,12 +26,13 @@ import { Sidebar } from "../Sidebar";
 const { usePathname } = await import("next/navigation") as { usePathname: ReturnType<typeof vi.fn> };
 
 describe("Sidebar", () => {
-  it("renders exactly 11 nav links with the locked labels and no Get started", () => {
+  it("renders exactly 12 nav links with the locked labels and no Get started", () => {
     (usePathname as ReturnType<typeof vi.fn>).mockReturnValue("/");
     render(<Sidebar />);
 
     const expectedLabels = [
       "Home",
+      "Chat",
       "Team",
       "Memory",
       "Tasks",
@@ -52,11 +53,11 @@ describe("Sidebar", () => {
     // Get started must NOT appear
     expect(screen.queryByText("Get started")).not.toBeInTheDocument();
 
-    // Exactly 11 nav links (anchors inside <nav>)
+    // Exactly 12 nav links (anchors inside <nav>)
     const nav = document.querySelector("nav");
     expect(nav).toBeInTheDocument();
     const navLinks = nav!.querySelectorAll("a");
-    expect(navLinks).toHaveLength(11);
+    expect(navLinks).toHaveLength(12);
   });
 
   it("marks the Integrations link as active when pathname is /integrations", () => {

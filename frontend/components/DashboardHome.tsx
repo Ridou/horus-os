@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Users, Brain, Network, DollarSign, ArrowRight } from "lucide-react";
+import {
+  Users,
+  Brain,
+  Network,
+  DollarSign,
+  ArrowRight,
+  MessageSquare,
+} from "lucide-react";
 import { useHealth, useTeam } from "@/lib/hooks";
 import { agentSlug } from "@/lib/api";
 import { formatBytes } from "@/lib/time";
@@ -33,6 +40,27 @@ export function DashboardHome() {
         title="Welcome to horus-os"
         description="Your self-hosted autonomous AI command center. Here is the state of your team at a glance."
       />
+
+      {/* Primary action: talk to the team. The command center is, first, a
+          place to give your agents work. */}
+      <Link
+        href="/chat"
+        className="group mb-6 flex items-center justify-between gap-4 border border-accent-cyan/30 bg-accent-cyan/5 px-4 py-4 transition-colors hover:bg-accent-cyan/10"
+      >
+        <div className="flex items-center gap-3">
+          <MessageSquare className="h-5 w-5 shrink-0 text-accent-cyan" />
+          <div>
+            <p className="text-sm font-bold text-text-primary">
+              Chat with your team
+            </p>
+            <p className="text-xs text-text-muted">
+              Send a prompt or hand a task to any agent and watch the reply
+              stream.
+            </p>
+          </div>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-accent-cyan transition-transform group-hover:translate-x-0.5" />
+      </Link>
 
       {healthLoading ? (
         <PageSkeleton variant="dashboard" />

@@ -12,6 +12,14 @@ export function useTeam() {
   });
 }
 
+/** GET /api/agents: the agent profiles available to chat with. */
+export function useAgents() {
+  return useQuery({
+    queryKey: queryKeys.agents(),
+    queryFn: () => api.agents(),
+  });
+}
+
 /** GET /api/team/{name}. Disabled until a name is selected. */
 export function useAgent(name: string | null) {
   return useQuery({

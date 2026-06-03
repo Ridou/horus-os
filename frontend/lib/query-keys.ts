@@ -1,6 +1,7 @@
 /** Stable React Query cache keys for the dashboard. */
 export const queryKeys = {
   team: () => ["team"] as const,
+  agents: () => ["agents"] as const,
   agent: (name: string) => ["agent", name] as const,
   memory: (query: string) => ["memory", query] as const,
   memoryNote: (path: string) => ["memory-note", path] as const,

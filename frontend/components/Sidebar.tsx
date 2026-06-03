@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
+  MessageSquare,
   Users,
   Brain,
   CheckSquare,
@@ -28,6 +29,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/team", label: "Team", icon: Users },
   { href: "/memory", label: "Memory", icon: Brain },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },

@@ -15,6 +15,9 @@
 import type {
   ActivityResponse,
   AgentDetailResponse,
+  ChatAgentsResponse,
+  ChatStreamEvent,
+  ChatStreamRequest,
   CostByAgentResponse,
   CostByModelResponse,
   HealthResponse,
@@ -233,6 +236,62 @@ function fallbackMemoryNote(path: string): MemoryNoteDetail {
 export const api = {
   team(): Promise<TeamResponse> {
     return getJson<TeamResponse>("/team", () => team);
+  },
+
+  /**
+   * GET /api/agents: the agent profiles you can chat with. Falls back to the
+   * team fixture (mapped to the lighter agents shape) so the chat picker still
+   * lists the starter team in demo mode and when no backend is reachable.
+   */
+  agents(): Promise<ChatAgentsResponse> {
+    return getJson<ChatAgentsResponse>("/agents", () => ({
+      agents: team.agents.map((a) => ({
+        name: a.name,
+        default_model: a.default_model,
+      })),
+    }));
+  },
+
+  /**
+   * POST /api/chat/stream: send a prompt and stream the reply as Server-Sent
+   * Events. Each parsed frame (token, tool_call, done, error) is delivered to
+   * onEvent. Mutating and backend-only, so it throws in demo mode. Pass an
+   * AbortSignal to stop the run mid-stream.
+   */
+  async chatStream(
+    body: ChatStreamRequest,
+    onEvent: (event: ChatStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (DEMO) throw new Error("chat is disabled in demo mode");
+    const res = await fetch(`${API_BASE}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE frames are delimited by a blank line. Keep the trailing partial.
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data:")) continue;
+        const json = line.slice(line.indexOf(":") + 1).trim();
+        try {
+          onEvent(JSON.parse(json) as ChatStreamEvent);
+        } catch {
+          // Skip a malformed frame rather than abort the whole stream.
+        }
+      }
+    }
   },
 
   agent(name: string): Promise<AgentDetailResponse> {

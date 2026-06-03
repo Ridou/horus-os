@@ -317,3 +317,45 @@ export interface ResearchReport {
   trace_id: string | null;
   report: string;
 }
+
+/**
+ * One agent profile row from GET /api/agents. The endpoint returns more
+ * fields (cost and latency rollups); the chat picker only needs these two.
+ */
+export interface ChatAgent {
+  name: string;
+  default_model: string | null;
+}
+
+/** GET /api/agents */
+export interface ChatAgentsResponse {
+  agents: ChatAgent[];
+}
+
+/** Request body for POST /api/chat/stream. */
+export interface ChatStreamRequest {
+  prompt: string;
+  /** Optional agent profile name; the server loads its system prompt. */
+  agent?: string;
+  provider?: string;
+  model?: string;
+  max_iterations?: number;
+}
+
+/**
+ * One Server-Sent Event frame emitted by POST /api/chat/stream.
+ *
+ *  - token: an incremental chunk of the reply (text).
+ *  - tool_call: the model invoked a tool (name + input).
+ *  - done: the run finished (trace_id + latency_ms).
+ *  - error: the run failed mid-stream (message + optional trace_id).
+ */
+export interface ChatStreamEvent {
+  type: "token" | "tool_call" | "done" | "error";
+  text?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  trace_id?: string | null;
+  latency_ms?: number;
+  message?: string;
+}
