@@ -1,9 +1,10 @@
 """Pre-tag release-quality gate for horus-os (Phase 39 + Phase 49 + Phase 57 + Phase 53-followup).
 
-Runs FOURTEEN checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5 + 5 v0.6
-Phase 57 + 1 v0.6 Phase 53-followup SBOM-03 wheel-vs-SBOM diff). The 5 Phase 57
-v0.6 checks are APPENDED to the existing v0.5 enum; the SBOM-03 diff check is
-appended after. The 8 v0.4/v0.5 enum values remain byte-identical to v0.5
+Runs FIFTEEN checks before the maintainer cuts a tag (4 v0.4 + 4 v0.5 + 5 v0.6
+Phase 57 + 1 v0.6 Phase 53-followup SBOM-03 wheel-vs-SBOM diff + 1 v0.8 Phase 76
+v0-8-install-smoke-ci grep). The 5 Phase 57 v0.6 checks are APPENDED to the
+existing v0.5 enum; the SBOM-03 diff check is appended after; the v0.8 check is
+appended last. The 8 v0.4/v0.5 enum values remain byte-identical to v0.5
 (load-bearing constraint #3 from .planning/STATE.md).
 
 1. pricing-freshness: src/horus_os/observability/pricing.json
@@ -135,6 +136,10 @@ DEFAULT_MAX_AGE_DAYS = 14
 CI_LITERAL_NO_OTEL = "install-smoke-no-otel"
 CI_LITERAL_WITH_OTEL = "install-smoke-with-otel"
 CI_LITERAL_PLUGIN_INSTALL_SMOKE = "install-smoke-plugin"
+
+# v0.8 (Phase 76) install-smoke job-name literals greppped by the new check.
+CI_LITERAL_V0_8_LOCAL_MEMORY = "install-smoke-local-memory"
+CI_LITERAL_V0_8_EXTRAS = "install-smoke-v0-8-extras"
 
 PRICING_WHEEL_MEMBER_SUFFIX = "horus_os/observability/pricing.json"
 
@@ -467,6 +472,44 @@ def check_plugin_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
         name="plugin-install-smoke-ci",
         ok=True,
         diagnostic="install-smoke-plugin job present",
+    )
+
+
+def check_v0_8_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
+    """Pass when ci.yml contains BOTH v0.8 install-smoke job names.
+
+    Same single-grep shape as check_plugin_install_smoke_ci_present but for
+    the Phase 76 TEST-38 + REL-18 contract. Both literals MUST appear in the
+    YAML: install-smoke-local-memory (resolves the onnxruntime <1.19.0 Intel
+    macOS pin on every OS) and install-smoke-v0-8-extras (imports every v0.8
+    module with no cloud key). If a future maintainer drops either job to
+    "speed up CI," the gate catches it before tagging.
+    """
+    if not ci_yml_path.exists():
+        return CheckResult(
+            name="v0-8-install-smoke-ci",
+            ok=False,
+            diagnostic=f"ci.yml not found at {ci_yml_path}",
+        )
+    text = ci_yml_path.read_text(encoding="utf-8")
+    missing: list[str] = []
+    if CI_LITERAL_V0_8_LOCAL_MEMORY not in text:
+        missing.append(CI_LITERAL_V0_8_LOCAL_MEMORY)
+    if CI_LITERAL_V0_8_EXTRAS not in text:
+        missing.append(CI_LITERAL_V0_8_EXTRAS)
+    if missing:
+        return CheckResult(
+            name="v0-8-install-smoke-ci",
+            ok=False,
+            diagnostic=(
+                f"v0.8 install-smoke jobs missing from {ci_yml_path}: "
+                f"{', '.join(missing)}; Phase 76 TEST-38/REL-18 contract violated"
+            ),
+        )
+    return CheckResult(
+        name="v0-8-install-smoke-ci",
+        ok=True,
+        diagnostic="install-smoke-local-memory and install-smoke-v0-8-extras present",
     )
 
 
@@ -1133,7 +1176,7 @@ def _resolved_v0_4_fixture_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the fourteen release-gate checks. Return 0 on full pass, 1 on any fail."""
+    """Run the fifteen release-gate checks. Return 0 on full pass, 1 on any fail."""
     parser = argparse.ArgumentParser(
         description="Pre-tag release-quality gate for horus-os.",
     )
@@ -1154,6 +1197,7 @@ def main(argv: list[str] | None = None) -> int:
             "local-pip-audit-clean",
             "actions-pinned-by-sha",
             "sbom-matches-wheel",
+            "v0-8-install-smoke-ci",
         ),
         default=None,
         help="Run only the named check.",
@@ -1253,6 +1297,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if selected in (None, "plugin-install"):
         results.append(check_plugin_install_smoke_ci_present(ci_yml_path))
+
+    # v0.8 (Phase 76) ci-presence check: both new install-smoke job names.
+    if selected in (None, "v0-8-install-smoke-ci"):
+        results.append(check_v0_8_install_smoke_ci_present(ci_yml_path))
 
     if selected in (None, "reference-manifest"):
         results.append(check_reference_plugin_manifest_valid(reference_plugin_manifest_path))

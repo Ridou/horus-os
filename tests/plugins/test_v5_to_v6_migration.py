@@ -104,14 +104,14 @@ def upgraded_db(tmp_path: Path) -> tuple[Path, dict[str, str]]:
 
 
 def test_schema_version_constant_is_nine() -> None:
-    assert SCHEMA_VERSION == 12
+    assert SCHEMA_VERSION == 13
 
 
 def test_fixture_upgrades_cleanly(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db_path, _ = upgraded_db
     with sqlite3.connect(str(db_path)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 12
+        assert v == 13
 
 
 def test_new_tables_exist(upgraded_db: tuple[Path, dict[str, str]]) -> None:
@@ -238,7 +238,7 @@ def test_idempotent_replay(upgraded_db: tuple[Path, dict[str, str]]) -> None:
     db.init()
     with sqlite3.connect(str(db_path)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 12
+        assert v == 13
         # No spurious rows in any of the new tables.
         for tbl in ("plugins", "plugin_capabilities", "plugin_status"):
             n = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
@@ -258,7 +258,7 @@ def test_fresh_database_initializes_at_v6(tmp_path: Path) -> None:
     db.init()
     with sqlite3.connect(str(fresh)) as conn:
         v = conn.execute("SELECT version FROM schema_version").fetchone()[0]
-        assert v == 12
+        assert v == 13
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }

@@ -12,11 +12,13 @@ from horus_os.cli import (
     run_agents,
     run_doctor,
     run_init,
+    run_memory,
     run_plugins,
     run_run,
     run_schedule,
     run_serve,
     run_service,
+    run_skills,
     run_traces,
     run_usage,
 )
@@ -333,6 +335,38 @@ def build_parser() -> argparse.ArgumentParser:
     _build_schedule_parser(sub)
     _build_service_parser(sub)
 
+    skills_p = sub.add_parser("skills", help="List and show discoverable skills")
+    skills_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_p.set_defaults(func=run_skills)
+
+    skills_sub = skills_p.add_subparsers(dest="skills_command", metavar="<operation>")
+
+    skills_list_p = skills_sub.add_parser("list", help="List all discoverable skills")
+    skills_list_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_list_p.set_defaults(func=run_skills, skills_command="list")
+
+    skills_show_p = skills_sub.add_parser(
+        "show", help="Show one skill in detail, including its body"
+    )
+    skills_show_p.add_argument("name", help="Skill name")
+    skills_show_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    skills_show_p.set_defaults(func=run_skills, skills_command="show")
+
     plugins_p = sub.add_parser("plugins", help="Manage installed plugins")
     plugins_p.add_argument(
         "--data-dir",
@@ -563,12 +597,67 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report whether the always-on service is registered and running.",
     )
     doctor_p.add_argument(
+        "--local",
+        action="store_true",
+        help="Probe the configured local LLM endpoint and validate its base URL.",
+    )
+    doctor_p.add_argument(
+        "--memory",
+        action="store_true",
+        help="Report on-device vector-memory model and index status (no download).",
+    )
+    doctor_p.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Report configured MCP servers (opt-in via mcp.toml).",
+    )
+    doctor_p.add_argument(
+        "--shell",
+        action="store_true",
+        help="Report gated shell execution state and the safe working directory.",
+    )
+    doctor_p.add_argument(
         "--data-dir",
         type=Path,
         default=None,
         help="Override the platform default data directory.",
     )
     doctor_p.set_defaults(func=run_doctor)
+
+    memory_p = sub.add_parser("memory", help="Manage on-device vector memory")
+    memory_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    # A bare `horus-os memory` prints the usage block listing the operations.
+    memory_p.set_defaults(func=run_memory)
+    memory_sub = memory_p.add_subparsers(dest="memory_command", metavar="<operation>")
+
+    mem_download = memory_sub.add_parser(
+        "download-model",
+        help="Download the on-device embedding model (one-time, the only download trigger).",
+    )
+    mem_download.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    mem_download.set_defaults(func=run_memory, memory_command="download-model")
+
+    mem_reindex = memory_sub.add_parser(
+        "reindex",
+        help="Rebuild the vector index from existing notes (reads files only).",
+    )
+    mem_reindex.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override the platform default data directory.",
+    )
+    mem_reindex.set_defaults(func=run_memory, memory_command="reindex")
 
     return parser
 

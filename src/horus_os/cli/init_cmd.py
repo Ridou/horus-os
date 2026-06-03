@@ -13,6 +13,26 @@ from horus_os.seed import STARTER_TEAM, USER_NAME_PLACEHOLDER, read_soul, soul_r
 from horus_os.storage import Database, TaskRecord
 from horus_os.types import AgentProfile, AgentResult
 
+# Phase 74 (SKILL-01): the one example skill seeded at init. It is a
+# prompt-template skill (the safe default, no code), with the frontmatter keys
+# SkillStore parses (name, description, tags, kind) and a short instructional
+# body so SkillStore discovers exactly one skill on a fresh install.
+EXAMPLE_SKILL_MARKDOWN = """---
+name: summarize
+description: Summarize a block of text into a few clear bullet points.
+tags: [writing, productivity]
+kind: prompt-template
+---
+
+# Summarize
+
+Read the provided text and produce a short summary:
+
+1. Identify the main points.
+2. Write three to five concise bullet points, one idea each.
+3. Keep the original meaning; do not add new claims.
+"""
+
 
 def _seed_starter_content(config: Config) -> tuple[list[str], int]:
     """Seed the starter team, example vault notes, and one demo trace.
@@ -27,6 +47,16 @@ def _seed_starter_content(config: Config) -> tuple[list[str], int]:
         if not target.exists():
             target.write_text(content, encoding="utf-8")
             notes_seeded += 1
+
+    # Seed one example skill so the skills folder is not empty and the user has
+    # a working template to copy (SKILL-01). Never overwrite an existing file,
+    # matching the never-overwrite seeding convention above. Ensure the skills
+    # directory exists first, mirroring the agents soul subdir handling below,
+    # so direct callers do not have to create it ahead of time.
+    config.skills_dir.mkdir(parents=True, exist_ok=True)
+    example_skill = config.skills_dir / "example-summarize.md"
+    if not example_skill.exists():
+        example_skill.write_text(EXAMPLE_SKILL_MARKDOWN, encoding="utf-8")
 
     for entry in STARTER_TEAM:
         name = entry["name"]
@@ -148,6 +178,7 @@ def run_init(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int
 
     config.data_dir.mkdir(parents=True, exist_ok=True)
     config.notes_dir.mkdir(parents=True, exist_ok=True)
+    config.skills_dir.mkdir(parents=True, exist_ok=True)
     Database(config.db_path).init()
 
     # Seed the starter team and example content only on a genuinely fresh
@@ -167,6 +198,7 @@ def run_init(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int
         f"  data dir:   {config.data_dir}\n"
         f"  database:   {config.db_path}\n"
         f"  notes dir:  {config.notes_dir}\n"
+        f"  skills dir: {config.skills_dir}\n"
         f"  config:     {config_path}\n"
         f"  provider:   {config.default_provider} ({config.anthropic_model})\n"
     )

@@ -6,11 +6,12 @@ import argparse
 import asyncio
 import os
 import time
+import uuid
 from typing import TextIO
 
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
-from horus_os.memory import NotesStore
+from horus_os.memory import NotesStore, build_vector_index
 from horus_os.memory.tools import (
     append_note_tool,
     create_note_tool,
@@ -18,13 +19,20 @@ from horus_os.memory.tools import (
     read_note_tool,
     search_notes_tool,
 )
+from horus_os.skills import SkillStore, register_use_skill
 from horus_os.storage import Database
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
+from horus_os.tools.delegation import IterationBudget
+from horus_os.tools.shell import register_shell_if_gated
 from horus_os.types import AgentProfile, AgentResult, ToolCallEvent, ToolResult
 
 ENV_KEY_FOR = {
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    # Phase 69: the local provider needs no cloud key. This entry only
+    # feeds the error-hint path; _api_key_for("local") always resolves a
+    # non-None value, so the no-key guard never fires for local.
+    "local": "HORUS_OS_LOCAL_BASE_URL",
 }
 
 
@@ -71,8 +79,31 @@ def run_run(args: argparse.Namespace, *, stdout: TextIO, stderr: TextIO) -> int:
     record: bool = not getattr(args, "no_record", False)
     no_stream: bool = getattr(args, "no_stream", False)
 
-    notes_store = NotesStore(config.notes_dir, on_write=lambda w: _record_note_write(db, w))
-    registry = _build_default_registry(config, notes_store)
+    # Phase 70: attach the optional vector index when vector memory is enabled
+    # and the model is present. The factory returns None offline so search
+    # degrades to keyword-only without blocking the run (MEM-06).
+    notes_store = NotesStore(
+        config.notes_dir,
+        on_write=lambda w: _record_note_write(db, w),
+        vector_index=build_vector_index(config),
+    )
+    # Phase 74: a shared budget and trace_id let a use_skill sub-loop run under
+    # the run-level budget (so a skill cannot escape it) and trace its
+    # invocation under the same trace_id as the run (SKILL-02 "traced"). The
+    # profile's allowed_tools is the SK-3 security floor for any skill sub-tool
+    # call; the MVP grant set is empty so code skills are denied by default.
+    budget = IterationBudget(max_iterations)
+    trace_id = uuid.uuid4().hex
+    registry = _build_default_registry(
+        config,
+        notes_store,
+        db=db,
+        agent_allowed_tools=profile.allowed_tools if profile else None,
+        granted_capabilities=set(),
+        provider=provider,
+        trace_id=trace_id,
+        budget=budget,
+    )
 
     if no_stream:
         return _run_buffered(
@@ -242,16 +273,33 @@ async def _consume_stream(
 def _api_key_for(provider: str) -> str | None:
     if provider == "anthropic":
         return os.environ.get("ANTHROPIC_API_KEY")
+    if provider == "local":
+        # Phase 69: the local provider needs no cloud key. Return the
+        # configured override or a non-None placeholder so the CLI no-key
+        # guard is not triggered for local.
+        return os.environ.get("HORUS_OS_LOCAL_API_KEY") or "horus-local"
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
 
 def _model_for(config: Config, provider: str) -> str:
     if provider == "anthropic":
         return config.anthropic_model
+    if provider == "local":
+        return config.local_model
     return config.gemini_model
 
 
-def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegistry:
+def _build_default_registry(
+    config: Config,
+    notes_store: NotesStore,
+    *,
+    db: Database | None = None,
+    agent_allowed_tools: list[str] | None = None,
+    granted_capabilities: set[str] | None = None,
+    provider: str = "anthropic",
+    trace_id: str | None = None,
+    budget: IterationBudget | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(read_file_tool(base_dir=config.notes_dir))
     registry.register(list_notes_tool(notes_store))
@@ -260,6 +308,31 @@ def _build_default_registry(config: Config, notes_store: NotesStore) -> ToolRegi
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
     registry.register(make_github_read_tool())
+    # Phase 74 (SKILL-02): register use_skill ONLY when a skill exists, so an
+    # install with no skills is byte-identical to before. The MVP grant set is
+    # empty, so code-bearing skills are denied by default (SK-1). SK-2: a skill
+    # whose name collides with a builtin is refused inside register_use_skill.
+    register_use_skill(
+        registry,
+        store=SkillStore(config.skills_dir),
+        agent_allowed_tools=agent_allowed_tools,
+        granted_capabilities=granted_capabilities if granted_capabilities is not None else set(),
+        provider=provider,
+        parent_trace_id=trace_id,
+        budget=budget,
+    )
+    # Phase 75 (SHELL-01, TEST-36): register shell_exec ONLY when BOTH gates are
+    # open at this single chokepoint: HORUS_OS_SHELL_ENABLED=="true" AND this
+    # profile's allowed_tools explicitly names shell_exec. An unrestricted (None)
+    # profile never gains shell (SE-1). The tool is added to the per-profile
+    # registry, never a shared master, so it cannot leak to other agents.
+    if db is not None:
+        register_shell_if_gated(
+            registry,
+            config,
+            db,
+            profile_allowed_tools=agent_allowed_tools,
+        )
     return registry
 
 

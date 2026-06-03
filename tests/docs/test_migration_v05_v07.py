@@ -158,10 +158,19 @@ def test_migration_doc_has_no_reserved_private_name(migration_text: str) -> None
 
 
 def test_schema_version_matches_verification_command() -> None:
-    """horus_os.storage.SCHEMA_VERSION matches the migration doc's expected output."""
-    assert SCHEMA_VERSION == 12, (
+    """horus_os.storage.SCHEMA_VERSION is at or above the migration doc's v0.7 endpoint.
+
+    The v0.5-to-v0.7 doc documents `12` as the schema version current at v0.7 and
+    states that a value above `12` is also healthy, because later releases bump
+    the number as they add additive tables. v0.8 lands skills and
+    shell_invocations at `13`, so the live constant is at or above the documented
+    v0.7 endpoint.
+    """
+    assert SCHEMA_VERSION >= 12, (
         f"horus_os.storage.SCHEMA_VERSION is {SCHEMA_VERSION}; the migration "
-        "doc states `PRAGMA user_version` returns 12. If the schema bumped, "
-        "update both the constant and docs/MIGRATION-v0.5-to-v0.7.md so the "
-        "user's verification command produces the documented output."
+        "doc states the v0.7 schema_version verification command returns 12 and "
+        "that a value above 12 is also healthy. If the schema dropped below the "
+        "documented v0.7 endpoint, update both the constant and "
+        "docs/MIGRATION-v0.5-to-v0.7.md so the user's verification command "
+        "produces the documented output."
     )

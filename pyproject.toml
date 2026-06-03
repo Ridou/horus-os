@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "horus-os"
-version = "0.7.0"
+version = "0.8.0"
 description = "An open-source, self-hosted autonomous AI command center."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,7 +36,15 @@ dependencies = [
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
 gemini = ["google-genai>=0.3"]
-dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30"]
+# Phase 69 (REL-18): local/OpenAI-compatible LLM provider. The openai SDK
+# points at any local server (Ollama, llama.cpp, LM Studio, vLLM) via a
+# base_url override. MIT, pure Python, cross-OS. Kept optional so a bare
+# install pulls no LLM client beyond the configured key provider.
+local-llm = ["openai>=2.40.0"]
+# python-multipart is required by FastAPI to build any route that accepts
+# file uploads or form data; the dashboard ships POST /api/uploads (Phase 72),
+# so the app cannot be constructed without it.
+dashboard = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9"]
 discord = ["discord.py>=2.4"]
 supabase = ["httpx>=0.27"]
 vercel = ["httpx>=0.27"]
@@ -50,19 +58,78 @@ otel = [
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
 ]
+# Phase 71 (MCP-01..MCP-04): the official Anthropic Model Context Protocol
+# SDK. Kept fully optional so a bare install imports the mcp_client package
+# without the SDK present (Pitfall MC-1 opt-in trust gate; the client lazy
+# imports mcp inside start()). Pure-Python and cross-OS.
+mcp = ["mcp>=1.27.2"]
+# Phase 70 (MEM-05/MEM-06): on-device hybrid vector memory. Kept fully
+# optional so a bare install still imports without onnxruntime (Pitfall
+# EM-2). It is also deliberately excluded from [all] (see the [all] note
+# below) because its native deps need the Intel-macOS onnxruntime pin and
+# get their own dedicated install-smoke variant.
+local-memory = [
+    "fastembed>=0.8.0",
+    # The onnxruntime upper pin keeps universal2 wheels available for Intel
+    # macOS until Microsoft restores Intel coverage (1.19+ dropped them).
+    "onnxruntime>=1.17.0,<1.19.0",
+    "sqlite-vec>=0.1.9",
+]
+# Phase 72 (WEB-01/WEB-03): the BYO web fetch/search tools. readability-lxml
+# extracts the main article text from noisy HTML for the Deep Research
+# web-fetch step; httpx is already transitive via openai/supabase but is
+# listed explicitly so the [web] extra is self-describing and web access
+# stays optional (no new required base dependency).
+web = [
+    "readability-lxml>=0.8.4.1",
+    "httpx>=0.27.0",
+]
+# Phase 72 (vision/PDF, consumed by plan 72-02's vision tool): pypdf is a
+# pure-Python, BSD-3-Clause, cross-OS PDF text extractor with no native build.
+# Kept optional so a bare install reads images and notes without it.
+pdf = ["pypdf>=6.12.2"]
+# Phase 72 (vision): Pillow resizes and reformats images before they are
+# base64-encoded into a provider multimodal message. Optional because the
+# basic vision path encodes files with stdlib base64 alone.
+vision = ["Pillow>=10.0"]
+# Phase 76 (REL-18): convenience meta-extra that installs the full v0.8
+# infrastructure layer (local LLM, local vector memory, MCP client, web
+# access, PDF, vision) in one command for users who want Deep Research and
+# the local-first stack without naming each extra. Self-referential so it
+# inherits every pin (including the local-memory onnxruntime Intel pin)
+# without duplicating version strings.
+research = [
+    "horus-os[local-llm,local-memory,mcp,web,pdf,vision]",
+]
 all = [
+    # The local-memory extra (fastembed, onnxruntime, sqlite-vec) is
+    # intentionally NOT aggregated here, mirroring the REL-17 exclusion of
+    # [supabase] and [vercel]: its native onnxruntime wheels need the
+    # Intel-macOS pin and are not universally available, so it stays an
+    # explicit opt-in exercised by its own [local-memory] install-smoke
+    # variant (Pitfall EM-2). The light cross-OS-wheel v0.8 extras
+    # (local-llm, mcp, web, pdf, vision) ARE aggregated here so the existing
+    # install-smoke job exercises them.
     "anthropic>=0.40",
     "google-genai>=0.3",
+    "openai>=2.40.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
     "slack-sdk>=3.27",
     "google-api-python-client>=2.110",
     "google-auth-oauthlib>=1.2",
     "opentelemetry-sdk>=1.42,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2.0",
+    "mcp>=1.27.2",
+    "readability-lxml>=0.8.4.1",
+    "httpx>=0.27.0",
+    "pypdf>=6.12.2",
+    "Pillow>=10.0",
 ]
 dev = [
     "fastapi>=0.110",
+    "python-multipart>=0.0.9",
     "httpx>=0.27",
     "pip-audit>=2.10,<3",
     "pytest>=8.0",

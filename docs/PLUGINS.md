@@ -71,6 +71,9 @@ Every capability a plugin can request is a member of the closed `Capability` enu
 | `filesystem.write` | Create, modify, and delete files at disk paths the plugin declares. Implies read access to the same paths. |
 | `net.outbound` | Open outbound network connections to hosts the plugin declares. Does NOT permit inbound listeners or connections to third-party hosts the manifest did not list. |
 | `secrets.read` | Read secret values (API keys, tokens) the plugin declares by key name. Does NOT permit listing all secrets or writing new ones. |
+| `skill.exec` | Run the embedded steps of a code-bearing skill. Prompt-template skills never need this; only a skill marked kind=code is gated on it. |
+| `shell.exec` | Run shell commands as a structured argument list inside the configured safe working directory. Commands may not use shell metacharacters and may not escape the working directory. |
+| `code.exec` | Run code snippets through the same gated subprocess path as shell commands, inside the configured safe working directory with the same metacharacter and working-directory boundary checks. |
 
 Adding a new capability is a coordinated change: add the `Capability` enum member, add the `DESCRIPTIONS` entry (the module-level assert refuses to import otherwise), wire enforcement at the `CapabilityGuard` shim layer, and re-run `python scripts/build_manifest_schema.py` to refresh the JSON-Schema mirror.
 
@@ -88,7 +91,7 @@ A plugin's adapter contributions may implement an async `start(ctx)` and/or `sto
 
 ### Bounded lifecycle (`asyncio.wait_for(timeout=2.0)`)
 
-Both hooks are wrapped in `asyncio.wait_for(..., timeout=2.0)` per ISOLATE-02. A hung `start(ctx)` becomes a load-time `PluginLoadError`, never a 60-second startup stall — the same shape the v0.4 `OtelAdapter` uses for its bounded shutdown. Plugins that need a long-running task should fire-and-forget it (`asyncio.create_task(...)`) inside `start`, not block the hook.
+Both hooks are wrapped in `asyncio.wait_for(..., timeout=2.0)` per ISOLATE-02. A hung `start(ctx)` becomes a load-time `PluginLoadError`, never a 60-second startup stall - the same shape the v0.4 `OtelAdapter` uses for its bounded shutdown. Plugins that need a long-running task should fire-and-forget it (`asyncio.create_task(...)`) inside `start`, not block the hook.
 
 ## Testing your plugin
 
@@ -100,7 +103,7 @@ In-process plugin synthesis. Returns a `PluginSpec` with the requested capabilit
 
 ### Tier 2: `fake_plugin_entry_points`
 
-Discovery-walk monkeypatch. Patches `importlib.metadata.entry_points` so `discover_plugins()` walks a fabricated entry-point set without a real `pip install`. Use this tier for tests of the discovery + loader pipeline, registry-status transitions, and adapter lifecycle hooks. Still fast — no subprocess — but exercises the entry-point seam end-to-end.
+Discovery-walk monkeypatch. Patches `importlib.metadata.entry_points` so `discover_plugins()` walks a fabricated entry-point set without a real `pip install`. Use this tier for tests of the discovery + loader pipeline, registry-status transitions, and adapter lifecycle hooks. Still fast - no subprocess - but exercises the entry-point seam end-to-end.
 
 ### Tier 3: `clean_venv` (gated)
 
@@ -150,6 +153,6 @@ The two-phase installer runs: `pip download --no-deps` into a tmpdir; manifest v
 
 ### Local filesystem (in-tree plugins)
 
-Drop a `horus-plugin.toml` plus the Python module under `~/.horus-os/plugins/<plugin_name>/`. Restart `horus-os` to pick up the new filesystem plugin — `v0.5` does not ship a hot-reload command; the `enable`/`disable` subcommands toggle a discovered plugin between active and inactive without removing it.
+Drop a `horus-plugin.toml` plus the Python module under `~/.horus-os/plugins/<plugin_name>/`. Restart `horus-os` to pick up the new filesystem plugin - `v0.5` does not ship a hot-reload command; the `enable`/`disable` subcommands toggle a discovered plugin between active and inactive without removing it.
 
 The dashboard `/plugins` tab and the `horus-os plugins list` CLI surface both pip-installed and filesystem plugins in the same view.

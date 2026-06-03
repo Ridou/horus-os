@@ -216,7 +216,7 @@ def test_check_handles_malformed_sbom(tmp_path: Path) -> None:
 
 
 def test_check_enum_includes_sbom_matches_wheel() -> None:
-    """The --check enum now has 14 values; sbom-matches-wheel is the new tail."""
+    """sbom-matches-wheel must remain a member of the --check enum."""
     text = RELEASE_GATE_PATH.read_text(encoding="utf-8")
     assert '"sbom-matches-wheel"' in text, (
         "sbom-matches-wheel missing from --check enum or dispatch"

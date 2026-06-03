@@ -59,7 +59,7 @@ def test_install_smoke_runs(tmp_path: Path) -> None:
 
     assert "All install-smoke checks passed." in proc.stdout, proc.stdout
     # Schema-on-disk check ran.
-    assert "schema_version==12" in proc.stdout, proc.stdout
+    assert "schema_version==13" in proc.stdout, proc.stdout
     # agents CRUD round-trip ran.
     assert "agents create smoke_test" in proc.stdout, proc.stdout
     assert "agents delete smoke_test" in proc.stdout, proc.stdout

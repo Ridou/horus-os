@@ -9,7 +9,7 @@ v0.4 to v0.5. Six substrings + one runtime cross-link must hold:
    ``pydantic>=2.7,<3`` and ``packaging>=24.0``.
 4. The rollback escape hatch is documented: ``--disable-all-plugins``.
 5. The doc states "no breaking changes" (case-insensitive).
-6. ``horus_os.storage.SCHEMA_VERSION == 12``, the verification
+6. ``horus_os.storage.SCHEMA_VERSION == 13``, the verification
    command's expected output matches reality. If a future schema
    bump happens, this test plus the migration doc both need a
    coordinated update.
@@ -80,7 +80,7 @@ def test_migration_doc_says_no_breaking_changes(migration_text: str) -> None:
 
 def test_schema_version_matches_verification_command() -> None:
     """horus_os.storage.SCHEMA_VERSION matches the migration doc's expected output."""
-    assert SCHEMA_VERSION == 12, (
+    assert SCHEMA_VERSION == 13, (
         f"horus_os.storage.SCHEMA_VERSION is {SCHEMA_VERSION}; the migration "
         f"doc states `PRAGMA user_version` returns 9. If the schema bumped, "
         f"update both the constant and docs/MIGRATION-v0.4-to-v0.5.md so "

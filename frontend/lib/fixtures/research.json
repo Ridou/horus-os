@@ -1,0 +1,30 @@
+{
+  "task_id": "demo-research-001",
+  "trace_id": "demo-trace-research-001",
+  "status": "pending",
+  "plan": {
+    "question": "What are the tradeoffs of running local LLMs for autonomous agents?",
+    "subtopics": [
+      {
+        "title": "Hardware and memory requirements",
+        "query": "local LLM hardware requirements VRAM quantization for agent workloads"
+      },
+      {
+        "title": "Latency and throughput versus hosted APIs",
+        "query": "local LLM latency throughput tokens per second compared to hosted API"
+      },
+      {
+        "title": "Privacy, cost, and offline operation",
+        "query": "local LLM privacy data residency cost offline autonomous agents"
+      }
+    ]
+  },
+  "progress": {
+    "task_id": "demo-research-001",
+    "phase": "searching",
+    "sources_found": 4,
+    "iterations_used": 2,
+    "iteration_budget": 6
+  },
+  "report": "# What are the tradeoffs of running local LLMs for autonomous agents?\n\n## Hardware and memory requirements\n\nRunning a capable model locally is bounded by available memory. A 7B-parameter model fits comfortably in consumer hardware once quantized to 4-bit, while larger models need a workstation-class GPU or unified-memory machine [1]. Quantization trades a small amount of answer quality for a large drop in memory footprint, which is usually the right call for agent loops that issue many short calls [2].\n\n## Latency and throughput versus hosted APIs\n\nLocal inference removes network round-trips, so first-token latency is often lower than a hosted API on a fast machine. Sustained throughput, however, is capped by the local accelerator, so a long fan-out research run can be slower end to end than a hosted frontier model [2]. The practical answer is to reserve the local model for cheap, high-volume steps and escalate only the hard synthesis step.\n\n## Privacy, cost, and offline operation\n\nThe strongest argument for local models is that no prompt or document ever leaves the machine, which matters for private notes and credentials [3]. Cost shifts from per-token billing to a one-time hardware purchase, and the system keeps working fully offline once the weights are downloaded [3].\n\n## References\n\n1. Quantization formats for local inference - https://example.test/quantization (fetched 2026-05-31T09:00:00Z)\n2. Benchmarking local versus hosted inference - https://example.test/benchmarks (fetched 2026-05-31T09:05:00Z)\n3. Privacy and cost of self-hosted models - https://example.test/privacy-cost (fetched 2026-05-31T09:10:00Z)\n"
+}

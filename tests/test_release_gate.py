@@ -66,11 +66,15 @@ def _write_ci_yml(
     has_no_otel: bool,
     has_with_otel: bool,
     has_plugin_install: bool = True,
+    has_v0_8_install_smoke: bool = True,
 ) -> None:
     # has_plugin_install defaults to True so the v0.5 plugin-install-smoke-ci
     # check (which now runs from the same shared ci.yml fixture) sees the
     # literal it greps for. Phase 49 added the new check; the existing tests
     # were authored before it existed.
+    # has_v0_8_install_smoke defaults to True for the same reason: Phase 76
+    # added the v0-8-install-smoke-ci check which greps this shared fixture
+    # for both v0.8 install-smoke job names.
     lines = ["name: test\n", "jobs:\n"]
     if has_no_otel:
         lines.append("  install-smoke-no-otel:\n    runs-on: ubuntu-latest\n")
@@ -78,6 +82,9 @@ def _write_ci_yml(
         lines.append("  install-smoke-with-otel:\n    runs-on: ubuntu-latest\n")
     if has_plugin_install:
         lines.append("  install-smoke-plugin:\n    runs-on: ubuntu-latest\n")
+    if has_v0_8_install_smoke:
+        lines.append("  install-smoke-local-memory:\n    runs-on: ubuntu-latest\n")
+        lines.append("  install-smoke-v0-8-extras:\n    runs-on: ubuntu-latest\n")
     path.write_text("".join(lines), encoding="utf-8")
 
 

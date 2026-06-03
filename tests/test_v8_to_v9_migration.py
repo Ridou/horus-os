@@ -74,7 +74,7 @@ class TestV8ToV9Migration:
         # Run migration.
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "tasks"), "tasks table must exist after upgrade"
         assert _row_count(db_path, "tasks") == 0, "tasks table must be empty after upgrade"
 
@@ -92,11 +92,11 @@ class TestV8ToV9Migration:
         db = Database(db_path)
 
         db.init()
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
 
         # Second call must not raise.
         db.init()
-        assert _get_version(db_path) == 12, "version must stay at current after second init()"
+        assert _get_version(db_path) == 13, "version must stay at current after second init()"
         assert _table_exists(db_path, "tasks"), "tasks table must still exist"
 
     def test_fresh_init_creates_tasks_table(self, tmp_path):
@@ -105,7 +105,7 @@ class TestV8ToV9Migration:
         db = Database(db_path)
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "tasks"), "tasks table must exist on fresh init"
         assert _row_count(db_path, "tasks") == 0
 

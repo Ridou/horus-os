@@ -5,7 +5,7 @@ Verifies that:
 - The sync_cursors table is created and is empty after upgrade.
 - Pre-existing trace rows survive the upgrade (additive, not destructive).
 - Calling init() a second time on a v11 database is a no-op (idempotent).
-- A fresh Database.init() also produces schema_version=12 with a sync_cursors table.
+- A fresh Database.init() also produces schema_version=13 with a sync_cursors table.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class TestV10ToV11Migration:
         # Run migration.
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "sync_cursors"), "sync_cursors table must exist after upgrade"
         assert _row_count(db_path, "sync_cursors") == 0, (
             "sync_cursors table must be empty after upgrade"
@@ -94,19 +94,19 @@ class TestV10ToV11Migration:
         db = Database(db_path)
 
         db.init()
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
 
         # Second call must not raise.
         db.init()
-        assert _get_version(db_path) == 12, "version must stay at 12 after second init()"
+        assert _get_version(db_path) == 13, "version must stay at 13 after second init()"
         assert _table_exists(db_path, "sync_cursors"), "sync_cursors table must still exist"
 
     def test_fresh_init_creates_sync_cursors_table(self, tmp_path):
-        """A brand-new Database.init() creates the sync_cursors table at schema_version 12."""
+        """A brand-new Database.init() creates the sync_cursors table at schema_version 13."""
         db_path = str(tmp_path / "fresh.db")
         db = Database(db_path)
         db.init()
 
-        assert _get_version(db_path) == 12
+        assert _get_version(db_path) == 13
         assert _table_exists(db_path, "sync_cursors"), "sync_cursors table must exist on fresh init"
         assert _row_count(db_path, "sync_cursors") == 0

@@ -93,6 +93,25 @@ class NoteWrite:
 
 
 @dataclass
+class ShellInvocation:
+    """A persisted record of one gated shell command execution (SHELL-02).
+
+    Mirrors the NoteWrite shape: one row per run, written on every code path
+    (clean run, metacharacter reject, boundary reject, timeout). `exit_code` is
+    None when the process was killed by the timeout. `command` is the joined
+    args list kept for display only; the structured args never reach a shell.
+    """
+
+    invocation_id: str
+    created_at: str  # ISO-8601 UTC
+    command: str  # the joined [command, *args] for display
+    exit_code: int | None  # None when killed by the timeout
+    stdout_truncated: str
+    working_directory: str
+    trace_id: str | None = None
+
+
+@dataclass
 class AgentProfile:
     """A named agent configuration stored in the database."""
 

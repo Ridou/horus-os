@@ -23,14 +23,22 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Imported here only so `from __future__ import annotations` can resolve the
+    # UploadFile annotation on the /api/uploads route. fastapi stays an optional
+    # dependency: at runtime UploadFile is bound into module globals by the lazy
+    # import inside create_app (see below) so FastAPI's get_type_hints resolves
+    # the deferred string annotation without requiring fastapi at import time.
+    from fastapi import UploadFile
 
 from horus_os import __version__
 from horus_os._providers._stream_types import _StreamUsage
 from horus_os.adapters.base import AdapterContext, AdapterRegistry, discover_adapters
 from horus_os.agent import SUPPORTED_PROVIDERS, run_agent_loop, run_agent_stream
 from horus_os.config import Config
-from horus_os.memory import NotesStore
+from horus_os.memory import NotesStore, build_vector_index
 from horus_os.memory.tools import (
     append_note_tool,
     create_note_tool,
@@ -62,14 +70,35 @@ from horus_os.plugins import (
     PluginRegistry,
     discover_plugins,
 )
+from horus_os.research.api import router as research_router
 from horus_os.server.dashboard_api import router as dashboard_router
 from horus_os.server.integrations_write import router as integrations_write_router
 from horus_os.server.plugins_api import router as plugins_router
+from horus_os.skills import SkillStore, register_use_skill
 from horus_os.storage import Database, TraceRecord
 from horus_os.tools import ToolRegistry, make_github_read_tool, read_file_tool
+from horus_os.tools.delegation import IterationBudget
+from horus_os.tools.shell import register_shell_if_gated
+from horus_os.tools.vision import _DEFAULT_MAX_BYTES, analyze_file_tool
+from horus_os.tools.web_search import web_search_tool
 from horus_os.types import AgentProfile, AgentResult, NoteWrite, ToolCallEvent, ToolResult
 
 DEFAULT_MAX_ITERATIONS = 10
+
+# Phase 72 (VIS-03): upload guards for POST /api/uploads. The size cap reuses
+# the vision tool's pre-flight ceiling so a file the route accepts is one the
+# analyze_file tool will also read (T-72-11). The content-type allowlist maps
+# each accepted type to the extension the stored uuid filename gets, so the
+# stored name is derived from the validated type and NEVER from the untrusted
+# client filename (T-72-10, T-72-12).
+UPLOAD_MAX_BYTES = _DEFAULT_MAX_BYTES
+_UPLOAD_CONTENT_TYPES: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "application/pdf": ".pdf",
+}
 
 # ISOLATE-02: bounded plugin-lifecycle timeout. Mirrors the v0.4
 # Phase 38 OtelAdapter precedent (FORCE_FLUSH_TIMEOUT_MS = 2000); a
@@ -90,10 +119,17 @@ def create_app(
     export. When None, the packaged ``server/dashboard_dist/`` directory is used
     if it exists, otherwise the legacy single-page HTML dashboard is served.
     """
-    from fastapi import Body, FastAPI, HTTPException
+    from fastapi import Body, FastAPI, File, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, Response, StreamingResponse
     from fastapi.staticfiles import StaticFiles
+
+    # Bind UploadFile into module globals so FastAPI can resolve the deferred
+    # (string) annotation on the /api/uploads route under
+    # `from __future__ import annotations`. The name is otherwise local to this
+    # factory, so get_type_hints could not see it. fastapi stays optional: this
+    # only runs once create_app is called, by which point fastapi is imported.
+    globals()["UploadFile"] = UploadFile
 
     # Discover adapters before FastAPI instantiation so the lifespan
     # context manager can close over the resolved adapter list.
@@ -254,6 +290,21 @@ def create_app(
                 _result.error or "",
             )
 
+    # Phase 71 wiring: build the MCP registry from the opt-in mcp.toml
+    # allowlist under the resolved data_dir. This runs AFTER the plugin
+    # pipeline so the builtin + plugin baseline in _app_tool_registry is
+    # complete before any mcp:{server}:{tool} name is checked for a
+    # builtin collision (MC-4). An absent mcp.toml yields an empty server
+    # list, so MCPRegistry registers ZERO tools (the MCP-03 trust gate);
+    # only a [[mcp.servers]] block activates a server. MCPRegistry is
+    # first-party code, so the lifespan drives it on the same trusted
+    # unbounded start/stop path as DiscordAdapter / EmailAdapter, NOT the
+    # bounded plugin wait_for path.
+    from horus_os.mcp_client import MCPRegistry, MCPServerConfig, default_mcp_config_path
+
+    _mcp_servers = MCPServerConfig.load(default_mcp_config_path(_resolved_data_dir))
+    _mcp_registry = MCPRegistry(_mcp_servers, _app_tool_registry)
+
     @asynccontextmanager
     async def _lifespan(_app: Any) -> AsyncGenerator[None, None]:
         # Startup: call `start(context)` on each first-party adapter.
@@ -315,9 +366,27 @@ def create_app(
                         f"{type(exc).__name__}: {exc}",
                     )
 
+        # Phase 71: start the MCP registry on the trusted first-party path
+        # (unbounded, like DiscordAdapter). An empty server list returns
+        # immediately having registered nothing (MCP-03 fast path). A
+        # failing server or a CollisionError is recorded on
+        # _mcp_registry.errors() rather than crashing the lifespan, so one
+        # bad MCP server never denies the user their other tools.
+        await _mcp_registry.start(_adapter_context)
+
         try:
             yield
         finally:
+            # Phase 71: tear the MCP registry down FIRST (reverse of start)
+            # so every stdio subprocess gets the explicit cross-OS
+            # terminate/wait/kill teardown (MCP-04) before the rest of the
+            # adapters unwind. Guarded so a bad teardown cannot block the
+            # remaining shutdown steps.
+            try:
+                await _mcp_registry.stop()
+            except Exception as exc:
+                _registry.mark_error(_mcp_registry.name, f"{type(exc).__name__}: {exc}")
+
             # Shutdown: first-party adapters in reverse, unbounded.
             for _a in reversed(_adapters):
                 _stop = getattr(_a, "stop", None)
@@ -368,6 +437,10 @@ def create_app(
     app.state.adapter_registry = _registry
     app.state.tool_registry = _app_tool_registry
     app.state.adapters = list(_adapters)
+    # Phase 71: expose the MCP registry so /doctor, the dashboard, and
+    # tests can read per-server connection status, contributed tool
+    # counts, and any recorded registration errors (errors()).
+    app.state.mcp_registry = _mcp_registry
     # Phase 45: the new plugins_api router resolves Config per-request
     # via Config.load(app.state.data_dir). Storing the resolved data_dir
     # here lets the router stay decoupled from the create_app closure
@@ -402,6 +475,13 @@ def create_app(
     # instance the CostAnnotator subscriber uses. Guards against silent
     # dual-construction; pinned by tests/test_server_pricing_status.py.
     app.state.pricing_table = _pricing_table
+    # Phase 73 (RESEARCH-02/05): per-task progress + cancel-flag state for the
+    # research router. Keyed by task_id; each entry holds the current phase,
+    # sources_found, iterations_used, the iteration budget, and a cancel flag
+    # the in-flight background run polls between delegation turns. Held on
+    # app.state so the GET /progress and POST /cancel routes share the same
+    # dict the background run writes.
+    app.state.research_progress = {}
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -691,6 +771,63 @@ def create_app(
             "is_stale": pt.is_stale(now, 30),
         }
 
+    @app.post("/api/uploads")
+    async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+        # VIS-03: accept an image or PDF, store it under <data_dir>/uploads/
+        # with a uuid-based name, and return the absolute path the agent passes
+        # to analyze_file. The stored name is derived from the validated
+        # content type, never from the client filename, so a crafted filename
+        # cannot traverse out of the uploads dir (T-72-10).
+        content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+        extension = _UPLOAD_CONTENT_TYPES.get(content_type)
+        if extension is None:
+            raise HTTPException(
+                400,
+                detail=(
+                    f"unsupported content type {content_type!r}; allowed: "
+                    f"{sorted(_UPLOAD_CONTENT_TYPES)}"
+                ),
+            )
+
+        # T-72-11: read with a running size cap so an oversized upload is
+        # refused (413) without ever being persisted. The body is bounded in
+        # memory by stopping the first chunk that crosses the ceiling.
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = await file.read(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > UPLOAD_MAX_BYTES:
+                raise HTTPException(
+                    413,
+                    detail=(
+                        f"file exceeds the {UPLOAD_MAX_BYTES}-byte upload limit; nothing was stored"
+                    ),
+                )
+            chunks.append(chunk)
+        body = b"".join(chunks)
+
+        uploads_dir = Path(app.state.data_dir) / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        stored_path = (uploads_dir / f"{uuid.uuid4().hex}{extension}").resolve()
+        # Defense in depth: assert the resolved path stays under the uploads
+        # dir using the same Path.resolve() parent check read_file_tool uses
+        # (T-72-10). With a uuid name this always holds; the assertion makes
+        # the guarantee explicit and would catch any future name source change.
+        resolved_dir = uploads_dir.resolve()
+        if resolved_dir != stored_path and resolved_dir not in stored_path.parents:
+            raise HTTPException(400, detail="resolved upload path escapes the uploads directory")
+
+        stored_path.write_bytes(body)
+        return {
+            "path": str(stored_path),
+            "filename": file.filename,
+            "content_type": content_type,
+            "size": total,
+        }
+
     @app.post("/api/chat")
     async def chat(payload: dict = Body(...)) -> dict[str, Any]:  # noqa: B008
         prompt = (payload.get("prompt") or "").strip() if isinstance(payload, dict) else ""
@@ -709,14 +846,33 @@ def create_app(
         max_iterations = int(payload.get("max_iterations") or DEFAULT_MAX_ITERATIONS)
 
         db = Database(cfg.db_path)
-        notes_store = NotesStore(cfg.notes_dir, on_write=lambda w: _persist_write(db, w))
-        registry = _build_default_registry(cfg, notes_store)
+        # Phase 70: attach the optional vector index when vector memory is
+        # enabled and the model is present. The factory returns None offline so
+        # search degrades to keyword-only without blocking the request (MEM-06).
+        notes_store = NotesStore(
+            cfg.notes_dir,
+            on_write=lambda w: _persist_write(db, w),
+            vector_index=build_vector_index(cfg),
+        )
         tool_log: list[ToolResult] = []
         # Phase 33: pre-generate the trace_id so the same id flows into
         # the LLMCallEvents published inside run_agent_loop, the traces
         # row record_trace writes, and the RunEndEvent that triggers the
         # rollup UPDATE.
         _trace_id = uuid.uuid4().hex
+        # Phase 74: a shared budget plus the run trace_id let a use_skill
+        # sub-loop run under the run-level budget and trace its invocation
+        # under the same trace_id as the run (SKILL-02 "traced"). The MVP grant
+        # set is empty so code-bearing skills are denied by default (SK-1).
+        _budget = IterationBudget(max_iterations)
+        registry = _build_default_registry(
+            cfg,
+            notes_store,
+            db=db,
+            provider=provider,
+            trace_id=_trace_id,
+            budget=_budget,
+        )
         start = time.perf_counter()
         try:
             result = run_agent_loop(
@@ -724,7 +880,7 @@ def create_app(
                 registry=registry,
                 provider=provider,
                 model=model,
-                max_iterations=max_iterations,
+                budget=_budget,
                 on_tool_result=tool_log.append,
                 trace_id=_trace_id,
             )
@@ -1025,6 +1181,12 @@ def create_app(
     # the read-only GET /api/integrations is already wired.
     app.include_router(integrations_write_router)
 
+    # Phase 73 (RESEARCH-02/05): mount the Deep Research router in the /api band,
+    # before the StaticFiles catch-all at "/", so POST /api/research, the
+    # progress / report GETs, and the cancel POST all take precedence over the
+    # dashboard static export. The router reads app.state.research_progress.
+    app.include_router(research_router)
+
     # Phase v0.7: mount the bundled Next.js static export at the root, AFTER every
     # /api route so the API always takes precedence. html=True serves index.html
     # for "/" and for each prerendered route directory (for example /team/).
@@ -1041,16 +1203,33 @@ def create_app(
 def _api_key_for(provider: str) -> str | None:
     if provider == "anthropic":
         return os.environ.get("ANTHROPIC_API_KEY")
+    if provider == "local":
+        # Phase 69: the local provider needs no cloud key. Return the
+        # configured override or a non-None placeholder so the no-key 503
+        # guard at chat / chat_stream is satisfied without a cloud key.
+        return os.environ.get("HORUS_OS_LOCAL_API_KEY") or "horus-local"
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
 
 def _model_for(cfg: Config, provider: str) -> str:
     if provider == "anthropic":
         return cfg.anthropic_model
+    if provider == "local":
+        return cfg.local_model
     return cfg.gemini_model
 
 
-def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistry:
+def _build_default_registry(
+    cfg: Config,
+    notes_store: NotesStore,
+    *,
+    db: Database | None = None,
+    agent_allowed_tools: list[str] | None = None,
+    granted_capabilities: set[str] | None = None,
+    provider: str = "anthropic",
+    trace_id: str | None = None,
+    budget: IterationBudget | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(read_file_tool(base_dir=cfg.notes_dir))
     registry.register(list_notes_tool(notes_store))
@@ -1059,6 +1238,49 @@ def _build_default_registry(cfg: Config, notes_store: NotesStore) -> ToolRegistr
     registry.register(create_note_tool(notes_store))
     registry.register(append_note_tool(notes_store))
     registry.register(make_github_read_tool())
+    # Phase 72 (VIS-03): register analyze_file scoped to <data_dir>/uploads/ so
+    # the agent can analyze a file returned by POST /api/uploads by its path.
+    # base_dir confines analyze_file to the uploads area, so it cannot be steered
+    # to read arbitrary local files (T-72-08). This is additive; the existing
+    # tools stay registered.
+    registry.register(analyze_file_tool(base_dir=cfg.data_dir / "uploads"))
+    # Phase 72 (WEB-01): register the web_search tool ONLY when a provider is
+    # configured in [tools.web_search]. With no provider the registry has no
+    # "web_search" entry (default-deny, T-72-03). The provider API key is read
+    # from HORUS_OS_WEB_SEARCH_KEY and never persisted to config.toml.
+    if cfg.web_search_provider is not None:
+        registry.register(
+            web_search_tool(
+                cfg.web_search_provider,
+                api_key=os.environ.get("HORUS_OS_WEB_SEARCH_KEY"),
+                base_url=cfg.web_search_base_url,
+            )
+        )
+    # Phase 74 (SKILL-02): register use_skill ONLY when a skill exists, so an
+    # install with no skills produces a registry byte-identical to before. The
+    # MVP grant set is empty so code-bearing skills are denied by default (SK-1);
+    # a skill whose name collides with a builtin/plugin tool is refused (SK-2).
+    register_use_skill(
+        registry,
+        store=SkillStore(cfg.skills_dir),
+        agent_allowed_tools=agent_allowed_tools,
+        granted_capabilities=granted_capabilities if granted_capabilities is not None else set(),
+        provider=provider,
+        parent_trace_id=trace_id,
+        budget=budget,
+    )
+    # Phase 75 (SHELL-01, TEST-36): register shell_exec ONLY when BOTH gates are
+    # open at this single chokepoint: HORUS_OS_SHELL_ENABLED=="true" AND this
+    # profile's allowed_tools explicitly names shell_exec. An unrestricted (None)
+    # profile never gains shell (SE-1). The tool is added to the per-profile
+    # registry, never a shared master, so it cannot leak to other agents.
+    if db is not None:
+        register_shell_if_gated(
+            registry,
+            cfg,
+            db,
+            profile_allowed_tools=agent_allowed_tools,
+        )
     return registry
 
 

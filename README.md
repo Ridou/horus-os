@@ -90,12 +90,19 @@ Need a key first? Grab one from the [Anthropic Console](https://console.anthropi
 
 ## Optional extras
 
-`pip install horus-os` (no extras) installs none of the optional extras and still runs the full local runtime: the CLI, the agent loop, SQLite storage, the vault, and traces all work without any extra. Each extra below adds one integration or provider:
+`pip install horus-os` (no extras) installs none of the optional extras and still runs the full local runtime: the CLI, the agent loop, SQLite storage, the vault, and traces all work without any extra. No optional extra activates a feature on a bare install; installing an extra only makes its dependency available, and you still turn the feature on with config or an env flag. Each extra below adds one integration or provider:
 
 | Extra | What it adds |
 |-------|--------------|
 | `anthropic` | Anthropic Claude provider SDK. |
 | `gemini` | Google Gemini provider SDK. |
+| `local-llm` | OpenAI-compatible local server (Ollama, llama.cpp, LM Studio, vLLM). |
+| `local-memory` | On-device ONNX vector memory (fastembed + sqlite-vec). |
+| `mcp` | Model Context Protocol client, opt-in via mcp.toml. |
+| `web` | Bring-your-own web search and SSRF-guarded fetch. |
+| `pdf` | Pure-Python PDF text extraction. |
+| `vision` | Image resize and format conversion for vision calls. |
+| `research` | Convenience meta-extra: the full local-first stack in one command. |
 | `dashboard` | FastAPI and uvicorn web dashboard server. |
 | `discord` | Discord control bot and adapter. |
 | `supabase` | Cloud SQLite mirror sync. |
@@ -105,7 +112,9 @@ Need a key first? Grab one from the [Anthropic Console](https://console.anthropi
 | `vercel` | Observe-only Vercel deploy client. |
 | `github` | Read-only GitHub repository tool. |
 
-`pip install 'horus-os[all]'` installs the AI providers (`anthropic`, `gemini`), the `dashboard`, `slack`, `calendar`, and `otel` extras. It deliberately EXCLUDES the four opt-in integrations: `[discord]`, `[supabase]`, `[vercel]`, and `[github]`. Install those individually when you want them, for example `pip install 'horus-os[supabase]'` or `pip install 'horus-os[vercel]'`.
+The `[research]` meta-extra installs the whole v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`) at once. The `[local-memory]` extra pins `onnxruntime>=1.17.0,<1.19.0` so a universal2 wheel is available on Intel macOS; for that reason it is kept out of `[all]` and is an explicit opt-in. See [docs/MIGRATION-v0.7-to-v0.8.md](docs/MIGRATION-v0.7-to-v0.8.md) for the full extras table and upgrade notes.
+
+`pip install 'horus-os[all]'` installs the AI providers (`anthropic`, `gemini`), the light v0.8 extras (`local-llm`, `mcp`, `web`, `pdf`, `vision`), and the `dashboard`, `slack`, `calendar`, and `otel` extras. It deliberately EXCLUDES `[local-memory]` (its native onnxruntime wheels need the Intel-macOS pin) and the four opt-in integrations: `[discord]`, `[supabase]`, `[vercel]`, and `[github]`. Install those individually when you want them, for example `pip install 'horus-os[supabase]'` or `pip install 'horus-os[local-memory]'`.
 
 ## Your starter team
 

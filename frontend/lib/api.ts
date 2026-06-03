@@ -22,6 +22,9 @@ import type {
   LatencyResponse,
   MemoryNoteDetail,
   MemoryResponse,
+  ResearchProgress,
+  ResearchReport,
+  ResearchStartResponse,
   SettingsResponse,
   TasksResponse,
   TeamResponse,
@@ -41,6 +44,7 @@ import tracesFixture from "./fixtures/traces.json";
 import observabilityFixture from "./fixtures/observability.json";
 import integrationsFixture from "./fixtures/integrations.json";
 import tasksFixture from "./fixtures/tasks.json";
+import researchFixture from "./fixtures/research.json";
 
 const DEMO =
   typeof process !== "undefined" &&
@@ -86,6 +90,21 @@ interface ObservabilityFixture {
   tools: ToolReliabilityResponse;
 }
 const observability = observabilityFixture as ObservabilityFixture;
+
+/**
+ * Bundled Deep Research demo data. One representative plan, a mid-run progress
+ * snapshot, and a finished cited report so the /research page renders fully in
+ * demo mode and when no backend is reachable.
+ */
+interface ResearchFixture {
+  task_id: string;
+  trace_id: string;
+  status: "pending" | "running";
+  plan: ResearchStartResponse["plan"];
+  progress: ResearchProgress;
+  report: string;
+}
+const research = researchFixture as ResearchFixture;
 
 /**
  * Demo-mode markdown for the curated notes. The runtime serves the real file
@@ -333,6 +352,77 @@ export const api = {
     const res = await fetch(
       `${API_BASE}/traces/${encodeURIComponent(traceId)}`,
       { method: "DELETE" },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  },
+
+  /**
+   * POST /api/research: plan a run WITHOUT spending tokens (RESEARCH-02
+   * plan-before-execute). Returns the plan + task_id; the run starts only on a
+   * later startResearchRun call. Mutating, so disabled in demo mode.
+   */
+  async startResearch(question: string): Promise<ResearchStartResponse> {
+    if (DEMO) throw new Error("research is disabled in demo mode");
+    const res = await fetch(`${API_BASE}/research`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json() as Promise<ResearchStartResponse>;
+  },
+
+  /**
+   * POST /api/research/{id}/start: confirm the reviewed plan and schedule the
+   * background run. Mutating, so disabled in demo mode.
+   */
+  async startResearchRun(taskId: string): Promise<{ status: string }> {
+    if (DEMO) throw new Error("research is disabled in demo mode");
+    const res = await fetch(
+      `${API_BASE}/research/${encodeURIComponent(taskId)}/start`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json() as Promise<{ status: string }>;
+  },
+
+  /**
+   * GET /api/research/{id}/progress: the live phase / sources / iteration
+   * counts for an in-flight run (RESEARCH-02 live progress). Falls back to the
+   * bundled progress snapshot so the panel renders without a backend.
+   */
+  researchProgress(taskId: string): Promise<ResearchProgress> {
+    return getJson<ResearchProgress>(
+      `/research/${encodeURIComponent(taskId)}/progress`,
+      () => ({ ...research.progress, task_id: taskId }),
+    );
+  },
+
+  /**
+   * GET /api/research/{id}/report: the rendered cited markdown once synthesis
+   * completes (RESEARCH-05 reviewable). Falls back to the bundled sample report
+   * so the cited render works offline and in demo mode.
+   */
+  researchReport(taskId: string): Promise<ResearchReport> {
+    return getJson<ResearchReport>(
+      `/research/${encodeURIComponent(taskId)}/report`,
+      () => ({
+        task_id: taskId,
+        trace_id: research.trace_id,
+        report: research.report,
+      }),
+    );
+  },
+
+  /**
+   * POST /api/research/{id}/cancel: cancel at the plan stage or mid-run
+   * (RESEARCH-05 cancelable). Mutating, so disabled in demo mode.
+   */
+  async cancelResearch(taskId: string): Promise<void> {
+    if (DEMO) throw new Error("research is disabled in demo mode");
+    const res = await fetch(
+      `${API_BASE}/research/${encodeURIComponent(taskId)}/cancel`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   },

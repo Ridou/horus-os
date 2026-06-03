@@ -38,6 +38,30 @@ def _tools_to_gemini(tools: list[Tool] | None) -> list[dict[str, Any]] | None:
     ]
 
 
+def _blocks_to_gemini_parts(content: list[dict[str, Any]]) -> list[Any]:
+    """Translate provider-neutral content blocks into Gemini SDK parts.
+
+    A neutral text block ``{"type":"text","text":...}`` maps to
+    ``Part(text=...)``. A neutral image block
+    ``{"type":"image","media_type":...,"data_b64":...}`` maps to an inline-data
+    part built from the decoded base64 bytes via ``Part.from_bytes``. The
+    plain-string send path stays byte-identical; only this multimodal branch
+    decodes image bytes.
+    """
+    import base64
+
+    from google.genai import types as genai_types
+
+    parts: list[Any] = []
+    for block in content:
+        if block.get("type") == "image":
+            raw = base64.b64decode(block["data_b64"])
+            parts.append(genai_types.Part.from_bytes(data=raw, mime_type=block["media_type"]))
+        else:
+            parts.append(genai_types.Part(text=block.get("text", "")))
+    return parts
+
+
 def _parse_gemini_response(response: Any, provider: str, model: str) -> AgentResult:
     text_parts: list[str] = []
     tool_uses: list[ToolUse] = []
@@ -220,20 +244,33 @@ class Conversation:
         self,
         *,
         prompt: str | None = None,
+        content: list[dict[str, Any]] | None = None,
         tool_results: list[ToolResult] | None = None,
         tools: list[Tool] | None = None,
         **kwargs: Any,
     ) -> AgentResult:
         from google.genai import types as genai_types
 
-        if prompt is None and tool_results is None:
-            raise ValueError("Conversation.send requires either prompt or tool_results")
-        if prompt is not None and tool_results is not None:
-            raise ValueError("Conversation.send accepts prompt or tool_results, not both")
+        provided = [x for x in (prompt, content, tool_results) if x is not None]
+        if not provided:
+            raise ValueError(
+                "Conversation.send requires either prompt or tool_results (or content)"
+            )
+        if len(provided) > 1:
+            raise ValueError(
+                "Conversation.send accepts prompt or tool_results or content, not more than one"
+            )
 
         if prompt is not None:
             self._contents.append(
                 genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])
+            )
+        elif content is not None:
+            # Multimodal user turn: a text Part plus inline-data image Parts.
+            # The plain-string path above is untouched so prompt-only callers
+            # stay byte-identical.
+            self._contents.append(
+                genai_types.Content(role="user", parts=_blocks_to_gemini_parts(content))
             )
         else:
             assert tool_results is not None

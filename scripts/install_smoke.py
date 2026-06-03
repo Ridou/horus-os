@@ -36,7 +36,7 @@ from pathlib import Path
 
 CLI = "horus-os"
 
-SCHEMA_VERSION_EXPECTED = 12
+SCHEMA_VERSION_EXPECTED = 13
 DEFAULT_PROFILE_NAME = "default"
 
 PUBLIC_SURFACE_IMPORT_SNIPPET = (
@@ -115,6 +115,77 @@ API_TESTCLIENT_SNIPPET = (
     "    bogus = client.post('/api/adapters/does_not_exist_xyz/disable')\n"
     "    assert bogus.status_code == 404, (bogus.status_code, bogus.text)\n"
     "print('API_TESTCLIENT_OK adapters=' + str(len(entries)))\n"
+)
+
+# v0.8 surface (Phase 76, TEST-38 + REL-18 + REL-19). The light-extras and
+# local-memory install-smoke jobs install the v0.8 capability modules; the
+# legacy `.[all]` install-smoke job does NOT pull the heavy [local-memory]
+# deps (onnxruntime, fastembed, sqlite-vec) by the REL-17 [all]-exclusion
+# contract, so the v0.8 block below is guarded by a capability probe and
+# skips cleanly when a v0.8 module is absent. The probe import names are the
+# real module paths created in Phases 69-75.
+V0_8_PROBE_SNIPPET = (
+    "import importlib.util\n"
+    "names = [\n"
+    "    'horus_os._providers._openai_compat',\n"
+    "    'horus_os.memory.vector',\n"
+    "    'horus_os.mcp_client',\n"
+    "    'horus_os.tools.web_search',\n"
+    "    'horus_os.tools.vision',\n"
+    "    'horus_os.tools.shell',\n"
+    "    'horus_os.research',\n"
+    "    'horus_os.skills',\n"
+    "]\n"
+    "missing = [n for n in names if importlib.util.find_spec(n) is None]\n"
+    "print('V0_8_PRESENT' if not missing else 'V0_8_SURFACE_SKIPPED ' + ','.join(missing))\n"
+)
+
+# Every v0.8 capability module imports cleanly. These are pure-Python module
+# imports that must NOT require a cloud key, an MCP server, or a search
+# provider to be importable. Run only when the V0_8_PROBE_SNIPPET reports
+# the modules are present.
+V0_8_IMPORT_SNIPPET = (
+    "import horus_os._providers._openai_compat  # noqa: F401\n"
+    "import horus_os.memory.vector  # noqa: F401\n"
+    "import horus_os.mcp_client  # noqa: F401\n"
+    "import horus_os.tools.web_search  # noqa: F401\n"
+    "import horus_os.tools.vision  # noqa: F401\n"
+    "import horus_os.tools.shell  # noqa: F401\n"
+    "import horus_os.research  # noqa: F401\n"
+    "import horus_os.skills  # noqa: F401\n"
+    "print('V0_8_IMPORT_OK')\n"
+)
+
+# REL-19 "no feature activates silently on install": build the default
+# ToolRegistry for a freshly initialised install with ZERO v0.8 config and
+# assert the untrusted-by-default v0.8 tools are absent. This is the
+# install-smoke-level guard backing the default-deny postures established in
+# their owning phases:
+#   * web_search (WEB-01): absent until a search provider is configured.
+#   * shell_exec (SHELL-01): absent unless BOTH the env gate and an explicit
+#     allowed_tools grant are present (the double gate).
+#   * any mcp:* tool (MCP-03): absent until an MCP server is opted in.
+# The registry is built through the real CLI builder so the assertion targets
+# the same chokepoint the running agent uses.
+V0_8_TOOL_ABSENCE_SNIPPET = (
+    "import tempfile\n"
+    "from pathlib import Path\n"
+    "from horus_os.config import Config\n"
+    "from horus_os.storage import Database\n"
+    "from horus_os.memory import NotesStore\n"
+    "from horus_os.cli.run_cmd import _build_default_registry\n"
+    "data_dir = Path(tempfile.mkdtemp(prefix='horus-os-v0-8-absence-'))\n"
+    "cfg = Config.with_defaults(data_dir)\n"
+    "cfg.notes_dir.mkdir(parents=True, exist_ok=True)\n"
+    "db = Database(cfg.db_path)\n"
+    "db.init()\n"
+    "registry = _build_default_registry(cfg, NotesStore(cfg.notes_dir), db=db)\n"
+    "names = [t.name for t in registry.list()]\n"
+    "assert 'web_search' not in registry, ('web_search auto-registered', names)\n"
+    "assert 'shell_exec' not in registry, ('shell_exec auto-registered', names)\n"
+    "mcp_tools = [n for n in names if n.startswith('mcp:')]\n"
+    "assert not mcp_tools, ('mcp tool auto-registered', mcp_tools)\n"
+    "print('V0_8_TOOL_ABSENCE_OK tools=' + str(len(names)))\n"
 )
 
 
@@ -446,6 +517,47 @@ def main() -> int:
         # and the CI log can assert on it directly (the child stdout above is
         # captured, not echoed).
         print("GITHUB_TOOL_IMPORT_OK")
+
+        # ------------------------------------------------------------------
+        # v0.8 surface (Phase 76, TEST-38 + REL-18 + REL-19).
+        # ------------------------------------------------------------------
+        # The v0.8 capability modules are installed only by the light-extras
+        # and local-memory install-smoke jobs. The legacy `.[all]` job does
+        # NOT pull them (REL-17 [all]-exclusion contract), so we probe first
+        # and skip cleanly when the surface is absent rather than failing on
+        # a missing module.
+
+        # 17. Probe whether the v0.8 capability modules are importable.
+        probe = run_python(V0_8_PROBE_SNIPPET)
+        if probe.returncode != 0:
+            _fail(
+                "v0.8 capability probe",
+                probe,
+                f"probe snippet exited {probe.returncode}",
+            )
+        if "V0_8_PRESENT" not in probe.stdout:
+            print(f"SKIP v0.8 surface: {probe.stdout.strip()}")
+        else:
+            # 18. Every installed v0.8 capability module imports cleanly with
+            #     no cloud key, MCP server, or search provider configured.
+            v0_8_import = run_python(V0_8_IMPORT_SNIPPET)
+            expect(
+                "v0.8 capability modules import",
+                v0_8_import,
+                code=0,
+                in_stdout=["V0_8_IMPORT_OK"],
+            )
+
+            # 19. No v0.8 tool (web_search, shell_exec, mcp:*) auto-registers
+            #     on a zero-config install (REL-19 "no feature activates
+            #     silently on install").
+            v0_8_absence = run_python(V0_8_TOOL_ABSENCE_SNIPPET)
+            expect(
+                "v0.8 tools absent with zero config (web/shell/mcp)",
+                v0_8_absence,
+                code=0,
+                in_stdout=["V0_8_TOOL_ABSENCE_OK"],
+            )
 
         print("\nAll install-smoke checks passed.")
         return 0

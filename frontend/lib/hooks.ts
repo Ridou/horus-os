@@ -126,3 +126,35 @@ export function useTasks(status = "") {
     queryFn: () => api.tasks(status),
   });
 }
+
+/** Phases that mean the run has stopped; once reached, polling halts. */
+const TERMINAL_PHASES = new Set(["done", "cancelled", "error"]);
+
+/**
+ * GET /api/research/{id}/progress. Disabled until a task id exists; while the
+ * run is in flight it polls every two seconds and stops once the phase is
+ * terminal (done / cancelled / error). Powers the live progress panel.
+ */
+export function useResearchProgress(taskId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.researchProgress(taskId ?? ""),
+    queryFn: () => api.researchProgress(taskId as string),
+    enabled: !!taskId,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.phase;
+      return phase && TERMINAL_PHASES.has(phase) ? false : 2000;
+    },
+  });
+}
+
+/**
+ * GET /api/research/{id}/report. Enabled only once the run has completed, so
+ * the report (404/409 until done) is never fetched early.
+ */
+export function useResearchReport(taskId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.researchReport(taskId ?? ""),
+    queryFn: () => api.researchReport(taskId as string),
+    enabled: !!taskId && enabled,
+  });
+}
