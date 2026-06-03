@@ -170,7 +170,7 @@ v0.7, "Look and Feel + Starter Team," is the milestone that makes horus-os feel 
 - **A real dashboard.** A Next.js 16 interface with the team org view, memory browser, activity timeline, traces explorer, and a costs and observability page with charts. Static-exported and bundled in the wheel, so it still runs with no Node.
 - **A starter team, seeded on install.** Five agents with `SOUL.md` personas, a dozen example notes, and a demo trace, so nothing is empty the first time you open it.
 - **An identity.** The eye-of-Horus mark and a cyan-on-near-black design system shared by the dashboard and the docs.
-- **A front door.** A unified marketing and demo site with a guided [Get Started](https://horus-demo.com/get-started) flow. [Try it live.](https://horus-demo.com)
+- **A front door.** A unified marketing and demo site with a guided [Get Started](https://horus-demo.com/get-started) flow ([try it live](https://horus-demo.com)), plus a full documentation site at [docs.horus-demo.com](https://docs.horus-demo.com).
 
 <p align="center">
   <img src="assets/screenshots/landing.png" alt="horus-os unified marketing and demo site" width="90%">
@@ -213,6 +213,10 @@ You can still help right now, and this feedback is the single most valuable cont
 [CONTRIBUTING.md](CONTRIBUTING.md) documents the dev setup, workflow, and code style that will apply once contributions open.
 
 ## Documentation
+
+**The official documentation site is [docs.horus-demo.com](https://docs.horus-demo.com).** Start there: installation, a quickstart, guides for the CLI, dashboard, vault (including editing in Obsidian), autonomous research, scheduling, and every integration, plus a complete CLI, configuration, and environment reference. It is fully searchable.
+
+The docs site source lives in [`docs-site/`](docs-site/) (a static Next.js app deployed to Vercel; see [docs-site/DEPLOY.md](docs-site/DEPLOY.md)). The underlying reference material also lives as markdown in the repo:
 
 - [PROJECT.md](PROJECT.md), project intent, core values, and scope
 - [ARCHITECTURE.md](ARCHITECTURE.md), technical shape
