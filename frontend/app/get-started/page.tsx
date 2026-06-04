@@ -164,6 +164,18 @@ export default function GetStartedPage() {
               That is the whole setup. Want to see what it looks like first?
               Explore the live demo with sample data, no install required.
             </p>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-secondary">
+              Stuck on a step? Ask in the{" "}
+              <a
+                href="https://discord.gg/vwX9WvwQhp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-cyan hover:underline"
+              >
+                community Discord
+              </a>
+              . The #help forum is a searchable Q&amp;A.
+            </p>
           </div>
         </div>
         <Link

@@ -72,6 +72,20 @@ reviewable. The agents do the work. The eye is yours.
 > horus-os is open source under the Apache 2.0 license. The source lives at
 > [github.com/Ridou/horus-os](https://github.com/Ridou/horus-os).
 
+## Community and support
+
+Questions, ideas, or stuck on setup? Join the [community Discord](https://discord.gg/vwX9WvwQhp).
+The `#help` channel is a forum that works as a searchable Q&A: each question
+becomes its own thread, so a good answer stays findable for the next person
+instead of scrolling away. There are also channels for self-hosting, agents and
+models, showcase, and an automated feed of new releases.
+
+This is the project's community server, which is a separate thing from the
+opt-in [Discord adapter](/integrations/discord/) that connects horus-os to a
+server you run. GitHub stays the source of truth for
+[bugs](https://github.com/Ridou/horus-os/issues) and
+[design discussion](https://github.com/Ridou/horus-os/discussions).
+
 ## Where to go next
 
 - [Installation](/getting-started/installation/) installs horus-os and its

@@ -11,6 +11,9 @@ A control-bot extension adds guild-scoped slash commands, a managed set of contr
 
 This guide takes you from zero to an agent answering you in your own server. Follow the steps in order. For how integrations fit together, see [Integrations overview](/integrations/overview/).
 
+> [!NOTE]
+> This is the opt-in adapter that connects horus-os to a Discord server you run. For project help and discussion, join the [community Discord](https://discord.gg/vwX9WvwQhp), where `#help` is a searchable forum.
+
 ## 1. Install the optional extra
 
 The Discord SDK is not a core dependency. Install the optional extra:

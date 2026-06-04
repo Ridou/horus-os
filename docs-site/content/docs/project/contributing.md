@@ -143,6 +143,7 @@ Changes that align with an open phase or a clearly stated roadmap item get revie
 
 - **Bugs and concrete proposals:** GitHub issues.
 - **Design questions and longer-form discussion:** GitHub Discussions (enabled on the repo).
+- **Questions, help, and casual discussion:** the [community Discord](https://discord.gg/vwX9WvwQhp), where `#help` is a searchable forum.
 - **Security reports:** see the [security policy](/project/security-policy/).
 
 ## See also

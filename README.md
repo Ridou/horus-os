@@ -12,11 +12,13 @@
   <img src="https://img.shields.io/badge/python-3.11+-00d4ff.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/providers-Anthropic%20%2B%20Gemini-00d4ff.svg" alt="Providers">
   <img src="https://img.shields.io/badge/runs-macOS%20%7C%20Linux%20%7C%20Windows-00d4ff.svg" alt="Runs on macOS, Linux, Windows">
+  <a href="https://discord.gg/vwX9WvwQhp"><img src="https://img.shields.io/badge/Discord-join%20the%20community-00d4ff.svg?logo=discord&logoColor=white" alt="Discord community"></a>
 </p>
 
 <p align="center">
   <b><a href="https://docs.horus-demo.com">Documentation</a></b>
   &nbsp;&middot;&nbsp; <a href="https://horus-demo.com">Live demo</a>
+  &nbsp;&middot;&nbsp; <a href="https://discord.gg/vwX9WvwQhp">Discord</a>
   &nbsp;&middot;&nbsp; <a href="#quickstart">Quickstart</a>
   &nbsp;&middot;&nbsp; <a href="STATUS.md">Status</a>
   &nbsp;&middot;&nbsp; <a href="ROADMAP.md">Roadmap</a>
@@ -84,7 +86,7 @@ horus-os run --agent Researcher "Find three sources on retrieval-augmented memor
 horus-os serve        # http://127.0.0.1:8765
 ```
 
-Need a key first? Grab one from the [Anthropic Console](https://console.anthropic.com/) or [Google AI Studio](https://aistudio.google.com/apikey). A full walkthrough lives on the [Get Started page](https://horus-demo.com/get-started). horus-os needs at least one provider key, and your keys stay on your machine.
+Need a key first? Grab one from the [Anthropic Console](https://console.anthropic.com/) or [Google AI Studio](https://aistudio.google.com/apikey). A full walkthrough lives on the [Get Started page](https://horus-demo.com/get-started/). horus-os needs at least one provider key, and your keys stay on your machine.
 
 `horus-os init` is not an empty shell. On first run it seeds a five-agent team, a dozen example notes, and a demo trace, so the CLI and the dashboard have something to show immediately. It is all example data you can edit or delete.
 
@@ -224,6 +226,7 @@ You can still help right now, and this feedback is the single most valuable cont
 - **Run it against a real workload** and write up what worked and what did not, in [Discussions](https://github.com/Ridou/horus-os/discussions).
 - **File a bug** the moment you hit one, in [Issues](https://github.com/Ridou/horus-os/issues).
 - **Open a design question** in Discussions before it becomes a PR.
+- **Join the [community Discord](https://discord.gg/vwX9WvwQhp)** to ask questions, get help, and share what you built. The `#help` channel is a forum that works as a searchable Q&A, so a good answer stays findable for the next person instead of scrolling away.
 - **Star or watch** the repo to follow releases and the status flip.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) documents the dev setup, workflow, and code style that will apply once contributions open.
