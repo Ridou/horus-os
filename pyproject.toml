@@ -79,7 +79,7 @@ local-memory = [
     "fastembed>=0.8.0",
     # The onnxruntime upper pin keeps universal2 wheels available for Intel
     # macOS until Microsoft restores Intel coverage (1.19+ dropped them).
-    "onnxruntime>=1.17.0,<1.19.0",
+    "onnxruntime>=1.17.0,<1.27.0",
     "sqlite-vec>=0.1.9",
 ]
 # Phase 72 (WEB-01/WEB-03): the BYO web fetch/search tools. readability-lxml
