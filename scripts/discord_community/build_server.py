@@ -535,18 +535,28 @@ def ensure_roles(d: Discord, guild: str, existing: list) -> dict:
         print(f"   +    {name}")
         if res:
             ids[name] = res["id"]
-    # best-effort relative ordering, all below the bot's managed role
+    # Order roles just below the bot's own highest role. Discord forbids a manager
+    # from positioning any role at or above its own top role, so we clamp under it.
     try:
-        order = [n for n, _ in SELF_ASSIGN_ROLES] + [
-            "Contributor",
-            "Maintainer",
-            "Moderator",
-            "Admin",
+        roles_now = d.req("GET", f"/guilds/{guild}/roles")
+        pos = {r["id"]: r["position"] for r in roles_now}
+        me = d.req("GET", "/users/@me")
+        member = d.req("GET", f"/guilds/{guild}/members/{me['id']}")
+        bot_top = max((pos.get(r, 0) for r in member.get("roles", [])), default=0)
+        high_to_low = ["Admin", "Moderator", "Maintainer", "Contributor"] + [
+            n for n, _ in reversed(SELF_ASSIGN_ROLES)
         ]
-        payload = [{"id": ids[n], "position": i + 1} for i, n in enumerate(order) if ids.get(n)]
-        if payload and not d.dry:
+        targets = [n for n in high_to_low if ids.get(n)]
+        if not d.dry and bot_top - 1 >= len(targets):
+            payload = [{"id": ids[n], "position": bot_top - 1 - i} for i, n in enumerate(targets)]
             d.req("PATCH", f"/guilds/{guild}/roles", mutating=True, json=payload)
-            print("   ordered role hierarchy")
+            print(f"   ordered {len(targets)} roles below the bot role (position {bot_top})")
+        elif not d.dry:
+            print(
+                f"   warn: the Horus bot role sits too low (position {bot_top}) to order "
+                f"{len(targets)} roles beneath it. Drag the Horus role near the top in "
+                "Server Settings > Roles, then re-run to fix the hierarchy."
+            )
     except Exception as e:
         print(f"   warn: could not reorder roles ({e}). Drag them in Server Settings > Roles.")
     return ids
@@ -795,12 +805,13 @@ def ensure_onboarding(d: Discord, guild: str, ids: dict, chans: dict):
         counter[0] += 1
         return str(counter[0])
 
-    def opt(title, role=None, emoji=None):
+    def opt(title, role=None, channel=None, emoji=None):
+        # Discord requires every option to grant at least one role or channel.
         o = {
             "id": new_id(),
             "title": title,
             "role_ids": [ids[role]] if role and ids.get(role) else [],
-            "channel_ids": [],
+            "channel_ids": [cid(channel)] if channel and cid(channel) else [],
         }
         if emoji:  # emoji must be flat fields on create, not a nested object
             o["emoji_name"] = emoji
@@ -840,7 +851,7 @@ def ensure_onboarding(d: Discord, guild: str, ids: dict, chans: dict):
         prompt(
             "You are mainly here to...",
             [
-                opt("Use Horus-OS", emoji="✅"),
+                opt("Use Horus-OS", channel="📖-start-here", emoji="✅"),
                 opt("Help others / contribute", "can-help", "🤝"),
             ],
             single_select=True,

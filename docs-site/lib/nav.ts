@@ -55,6 +55,7 @@ export const NAV: NavSection[] = [
       { title: "Scheduling agents", slug: "guides/scheduling-agents" },
       { title: "Running as a service", slug: "guides/running-as-a-service" },
       { title: "Remote access", slug: "guides/remote-access" },
+      { title: "Your own Discord command center", slug: "guides/your-own-discord-command-center" },
     ],
   },
   {
