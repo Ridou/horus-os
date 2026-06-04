@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="horus eye">
+  <g transform="translate(0,18)" stroke="#00d4ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M12 30 C 36 12, 78 10, 100 22" />
+    <path d="M16 44 C 30 28, 72 26, 92 40" />
+    <path d="M16 44 C 34 58, 72 56, 92 40" />
+    <path d="M92 40 C 104 38, 116 34, 126 26" />
+    <path d="M40 54 C 40 68, 40 78, 37 86" />
+    <path d="M60 55 C 62 74, 76 86, 88 80 C 96 76, 94 64, 84 66" />
+  </g>
+  <circle cx="52" cy="59" r="9" fill="#00d4ff" />
+</svg>
