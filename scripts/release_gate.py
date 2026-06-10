@@ -480,7 +480,7 @@ def check_v0_8_install_smoke_ci_present(ci_yml_path: Path) -> CheckResult:
 
     Same single-grep shape as check_plugin_install_smoke_ci_present but for
     the Phase 76 TEST-38 + REL-18 contract. Both literals MUST appear in the
-    YAML: install-smoke-local-memory (resolves the onnxruntime <1.19.0 Intel
+    YAML: install-smoke-local-memory (resolves the onnxruntime <1.24.0 Intel
     macOS pin on every OS) and install-smoke-v0-8-extras (imports every v0.8
     module with no cloud key). If a future maintainer drops either job to
     "speed up CI," the gate catches it before tagging.

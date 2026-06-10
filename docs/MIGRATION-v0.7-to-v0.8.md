@@ -43,9 +43,10 @@ cache, not in the authoritative database, so it triggers no schema
 bump. `horus-os doctor --memory` reports model and index status
 without ever downloading.
 
-Intel macOS note: the `onnxruntime` pin is `>=1.17.0,<1.19.0` so a
-universal2 wheel is available on Intel macOS until Microsoft restores
-Intel coverage. This is why `[local-memory]` is intentionally NOT part
+Intel macOS note: the `onnxruntime` pin is `>=1.17.0,<1.24.0` so an
+Intel-macOS wheel is available (universal2 through 1.22.x, explicit
+x86_64 in 1.23.x; 1.24.1+ ships arm64 only). This is why
+`[local-memory]` is intentionally NOT part
 of the `[all]` extra: it keeps a fresh `.[all]` install cross-OS
 clean, and the extra gets its own dedicated install-smoke variant in
 CI.
@@ -119,7 +120,7 @@ on.
 | Extra | pip install | Pins |
 |-------|-------------|------|
 | `local-llm` | `pip install 'horus-os[local-llm]'` | `openai>=2.40.0` |
-| `local-memory` | `pip install 'horus-os[local-memory]'` | `fastembed>=0.8.0`, `onnxruntime>=1.17.0,<1.19.0`, `sqlite-vec>=0.1.9` |
+| `local-memory` | `pip install 'horus-os[local-memory]'` | `fastembed>=0.8.0`, `onnxruntime>=1.17.0,<1.24.0`, `sqlite-vec>=0.1.9` |
 | `mcp` | `pip install 'horus-os[mcp]'` | `mcp>=1.27.2` |
 | `web` | `pip install 'horus-os[web]'` | `readability-lxml>=0.8.4.1`, `httpx>=0.27.0` |
 | `pdf` | `pip install 'horus-os[pdf]'` | `pypdf>=6.12.2` |

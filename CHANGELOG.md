@@ -30,6 +30,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   needs a public URL and a realtime voice provider; see
   `docs/adapters/VOICE.md`.
 
+### Changed
+
+- **`[local-memory]` onnxruntime cap raised from `<1.19.0` to
+  `<1.24.0`.** The original cap assumed 1.19.0+ had no Intel-macOS
+  wheel; PyPI now ships universal2 wheels through 1.22.x and explicit
+  x86_64 wheels in 1.23.x, with Intel coverage truly ending at 1.24.1
+  (arm64 only). The new cap picks up four minor versions of onnxruntime
+  fixes while still guaranteeing Intel macOS users a binary install.
+  The CI install-smoke gate and REL-18 guard tests now enforce the
+  `<1.24.0` ceiling, and Dependabot ignores onnxruntime bumps past the
+  cap so it stops proposing Intel-breaking updates.
+
 ## [0.8.0] - 2026-06-03
 
 Eighth alpha, "Local-first and Autonomous Research." horus-os gains a

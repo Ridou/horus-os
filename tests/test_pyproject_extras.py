@@ -29,7 +29,7 @@ EXPECTED_EXTRA_PINS = {
     "local-llm": ["openai>=2.40.0"],
     "local-memory": [
         "fastembed>=0.8.0",
-        "onnxruntime>=1.17.0,<1.19.0",
+        "onnxruntime>=1.17.0,<1.24.0",
         "sqlite-vec>=0.1.9",
     ],
     "mcp": ["mcp>=1.27.2"],
@@ -96,7 +96,7 @@ def test_v0_8_extras_declared() -> None:
 def test_local_memory_onnxruntime_intel_pin() -> None:
     data = _load_pyproject(PYPROJECT_PATH)
     local_memory = data["project"]["optional-dependencies"]["local-memory"]
-    assert "onnxruntime>=1.17.0,<1.19.0" in local_memory, (
+    assert "onnxruntime>=1.17.0,<1.24.0" in local_memory, (
         "REL-18: the Intel-macOS onnxruntime pin must live verbatim in [local-memory]; "
         f"got {local_memory}"
     )
