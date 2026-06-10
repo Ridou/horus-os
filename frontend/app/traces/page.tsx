@@ -243,7 +243,7 @@ export default function TracesPage() {
           message="No traces yet. Runs will show up here as your agents work."
         />
       ) : (
-        <div className="space-y-2">
+        <div data-tour-step="7" className="space-y-2">
           {hasDemoTrace && (
             <ExampleDataBanner
               showClear
