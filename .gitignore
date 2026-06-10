@@ -35,3 +35,5 @@ htmlcov/
 # prebuilt assets so end users need no Node to run `horus-os serve`.
 /src/horus_os/server/dashboard_dist/
 /frontend/out/
+.vercel
+.env*.local
