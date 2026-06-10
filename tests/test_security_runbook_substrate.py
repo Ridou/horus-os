@@ -3,9 +3,10 @@
 Lints the SECURITY.md refresh, docs/MAINTAINER-RUNBOOK.md, the rollback
 template, and the docs/RELEASE.md repo-settings checklist additions.
 
-The autonomous-run rule forbids deleting the SECURITY.md "(not active yet)"
-block; we STAGE a PHASE-59-FLIP comment marker only. Tests assert the
-block remains INTACT.
+The contribution gate flipped open on 2026-06-10. The pre-flip
+tripwires (the PHASE-59-FLIP marker and the "(not active yet)" block)
+are inverted: tests now assert the live contributor-pipeline section
+and the current supported-versions window.
 
 No em-dashes anywhere (CLAUDE.md HR3).
 """
@@ -24,18 +25,24 @@ RELEASE_MD = REPO_ROOT / "docs" / "RELEASE.md"
 # SECDISC-01..03
 
 
-def test_security_md_phase_59_flip_marker() -> None:
+def test_security_md_phase_59_flip_executed() -> None:
+    """The gate flipped 2026-06-10: the staged marker must be gone."""
     text = SECURITY_MD.read_text(encoding="utf-8")
-    assert "PHASE-59-FLIP" in text, (
-        "SECDISC-01: SECURITY.md must contain PHASE-59-FLIP staged-marker comment"
+    assert "PHASE-59-FLIP" not in text, (
+        "SECDISC-01: the PHASE-59-FLIP staged-marker comment must be removed now that the "
+        "contribution gate is open"
     )
 
 
-def test_security_md_preserves_not_active_yet_block() -> None:
-    """Autonomous-run rule: SECURITY.md '(not active yet)' block stays until Phase 59 atomic flip."""
+def test_security_md_contributor_pipeline_live() -> None:
+    """Post-flip invariant: the contributor-pipeline section is live, not '(not active yet)'."""
     text = SECURITY_MD.read_text(encoding="utf-8")
-    assert "Contributor-pipeline security (not active yet)" in text, (
-        "Autonomous-run rule: SECURITY.md '(not active yet)' section MUST NOT be deleted by Phase 56"
+    assert "Contributor-pipeline security (not active yet)" not in text, (
+        "The '(not active yet)' framing must stay deleted after the 2026-06-10 gate flip"
+    )
+    assert "## Contributor-pipeline security" in text, (
+        "SECURITY.md must keep a live 'Contributor-pipeline security' section describing the "
+        "fork-PR token restrictions and CI-before-review gate"
     )
 
 
@@ -52,14 +59,18 @@ def test_security_md_ack_within_7_days() -> None:
 
 def test_security_md_over_capacity_language() -> None:
     text = SECURITY_MD.read_text(encoding="utf-8")
-    assert "security-update-followup" in text, (
+    assert "security-update" in text, (
         "SECDISC-02: SECURITY.md must declare the over-capacity escalation label"
+    )
+    assert "security-update-followup" not in text, (
+        "SECDISC-02: the escalation label is the taxonomy's 'security-update' "
+        "(docs/LABEL-TAXONOMY.md hard cap of 15); 'security-update-followup' does not exist"
     )
 
 
 def test_security_md_supported_versions() -> None:
     text = SECURITY_MD.read_text(encoding="utf-8")
-    for literal in ("0.6.x", "0.5.x", "< 0.5"):
+    for literal in ("0.8.x", "0.7.x", "< 0.7"):
         assert literal in text, (
             f"SECDISC-03: SECURITY.md supported-versions table missing {literal!r}"
         )

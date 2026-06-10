@@ -35,12 +35,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_MD_PATH = REPO_ROOT / "docs" / "RELEASE.md"
 
 
-# Byte-identity baseline: the verbatim pre-edit text of release-procedure
-# steps 1 through 6, extracted from docs/RELEASE.md lines 122-141 at the
-# time of Phase 52 planning. Insertions to this block are PROHIBITED
-# (per D-05 and Phase 51 D-06 invariant). Plan 02 inserts step 6.5
-# AFTER this block and BEFORE the step 7 line; this baseline must remain
-# present verbatim in the post-edit file.
+# Byte-identity baseline: the verbatim text of release-procedure
+# steps 1 through 6 (Phase 52 D-05 / Phase 51 D-06 invariant; the
+# check count in step 2 was updated from eight to fifteen when the
+# release gate grew to 15 checks). Step 6.5 is inserted AFTER this
+# block and BEFORE the step 7 line; this baseline must remain
+# present verbatim in the file.
 PRE_EDIT_STEPS_1_THROUGH_6 = (
     "1. Refresh `pricing.json` if its `updated_at` is older than 14\n"
     "   days (per the refreshing-pricing section above).\n"
@@ -49,7 +49,7 @@ PRE_EDIT_STEPS_1_THROUGH_6 = (
     "   if there is a diff. The `docs-drift` gate refuses to tag\n"
     "   otherwise.\n"
     "2. Run `python scripts/release_gate.py`. Confirm exit 0 and all\n"
-    "   eight checks pass.\n"
+    "   fifteen checks pass.\n"
     "3. Bump the version to `N.M.P` in TWO places:\n"
     '   - `pyproject.toml` line 7: `version = "N.M.P"`.\n'
     '   - `src/horus_os/__init__.py`: `__version__ = "N.M.P"`.\n'
