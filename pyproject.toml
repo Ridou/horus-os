@@ -77,9 +77,9 @@ mcp = ["mcp>=1.27.2"]
 # get their own dedicated install-smoke variant.
 local-memory = [
     "fastembed>=0.8.0",
-    # The onnxruntime upper pin keeps universal2 wheels available for Intel
-    # macOS until Microsoft restores Intel coverage (1.19+ dropped them).
-    "onnxruntime>=1.17.0,<1.19.0",
+    # The onnxruntime upper pin keeps Intel-macOS wheels available (universal2
+    # through 1.22.x, explicit x86_64 in 1.23.x; 1.24.1+ ships arm64 only).
+    "onnxruntime>=1.17.0,<1.24.0",
     "sqlite-vec>=0.1.9",
 ]
 # Phase 72 (WEB-01/WEB-03): the BYO web fetch/search tools. readability-lxml

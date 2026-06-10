@@ -22,6 +22,13 @@ updates:
     labels:
       - "dependencies"
       - "type:dev"
+    ignore:
+      # The [local-memory] extra caps onnxruntime at <1.24.0 on purpose:
+      # 1.24.1+ ships no Intel-macOS wheel, and the REL-18 guard tests
+      # (tests/test_pyproject_extras.py) enforce the exact pin. Bumps past
+      # the cap are noise; in-range updates (1.23.x) are still proposed.
+      - dependency-name: "onnxruntime"
+        versions: [">=1.24.0"]
     groups:
       ai-sdks:
         applies-to: version-updates

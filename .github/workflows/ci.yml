@@ -370,13 +370,13 @@ jobs:
         run: python scripts/install_smoke.py
 
   # TEST-38 (v0.8 local-memory wheels): the sole purpose of this job is to
-  # prove the onnxruntime <1.19.0 pin in the [local-memory] extra resolves a
+  # prove the onnxruntime <1.24.0 pin in the [local-memory] extra resolves a
   # real wheel on macOS, Ubuntu, and Windows for Python 3.11 and 3.12.
-  # onnxruntime 1.19.0+ dropped the macOS universal2 wheel that covers Intel
-  # x86_64, and 1.26.0+ dropped Intel macOS entirely; the <1.19.0 pin keeps a
-  # universal2 wheel available so Intel macOS users get a binary install with
-  # no build chain. The version-floor assertion fails the gate if a future
-  # resolver drift pulls 1.19.0 or newer.
+  # onnxruntime publishes Intel-macOS wheels up to 1.23.x (universal2 through
+  # 1.22.x, explicit x86_64 in 1.23.x); 1.24.1+ ships arm64 only. The <1.24.0
+  # pin keeps an Intel-macOS wheel available so Intel users get a binary
+  # install with no build chain. The version-ceiling assertion fails the gate
+  # if a future resolver drift pulls 1.24.0 or newer.
   install-smoke-local-memory:
     name: install-smoke-local-memory / ${{ matrix.os }} / Python ${{ matrix.python-version }}
     needs: lint-and-test
@@ -404,6 +404,6 @@ jobs:
       - name: Assert local-memory wheels imported on every OS
         run: |
           python -c "import onnxruntime, fastembed, sqlite_vec; print('LOCAL_MEMORY_WHEELS_OK', onnxruntime.__version__)"
-      - name: Assert resolved onnxruntime is below 1.19.0 (Intel macOS pin)
+      - name: Assert resolved onnxruntime is below 1.24.0 (Intel macOS pin)
         run: |
-          python -c "import onnxruntime; from packaging.version import Version; v = Version(onnxruntime.__version__); assert v < Version('1.19.0'), f'onnxruntime {v} resolved >= 1.19.0; the Intel-macOS universal2 pin drifted'; print('ONNXRUNTIME_PIN_OK', v)"
+          python -c "import onnxruntime; from packaging.version import Version; v = Version(onnxruntime.__version__); assert v < Version('1.24.0'), f'onnxruntime {v} resolved >= 1.24.0; the Intel-macOS wheel pin drifted'; print('ONNXRUNTIME_PIN_OK', v)"

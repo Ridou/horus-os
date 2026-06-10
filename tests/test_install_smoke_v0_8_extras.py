@@ -100,7 +100,7 @@ def test_ci_yml_declares_both_v0_8_install_smoke_jobs() -> None:
     yml = _ci_yml_source()
     assert "install-smoke-v0-8-extras" in yml
     assert "install-smoke-local-memory" in yml
-    # The local-memory job exists to resolve the onnxruntime <1.19.0 pin.
+    # The local-memory job exists to resolve the onnxruntime <1.24.0 pin.
     assert ".[dev,local-memory]" in yml
     # The light-extras job installs the cross-OS-clean extras.
     assert ".[dev,local-llm,mcp,web,pdf,vision]" in yml
@@ -108,9 +108,9 @@ def test_ci_yml_declares_both_v0_8_install_smoke_jobs() -> None:
 
 def test_ci_local_memory_job_asserts_onnxruntime_pin() -> None:
     yml = _ci_yml_source()
-    # A future resolver drift to 1.19.0+ (no Intel macOS universal2 wheel)
-    # must fail the gate, so the job asserts the resolved version floor.
-    assert "Version('1.19.0')" in yml
+    # A future resolver drift to 1.24.0+ (no Intel macOS wheel) must fail
+    # the gate, so the job asserts the resolved version ceiling.
+    assert "Version('1.24.0')" in yml
     assert "LOCAL_MEMORY_WHEELS_OK" in yml
 
 
