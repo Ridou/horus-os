@@ -26,6 +26,8 @@ import type {
   LatencyResponse,
   MemoryNoteDetail,
   MemoryResponse,
+  ReflectionsResponse,
+  ReflectionView,
   ResearchProgress,
   ResearchReport,
   ResearchStartResponse,
@@ -52,6 +54,7 @@ import observabilityFixture from "./fixtures/observability.json";
 import integrationsFixture from "./fixtures/integrations.json";
 import tasksFixture from "./fixtures/tasks.json";
 import researchFixture from "./fixtures/research.json";
+import reflectionsFixture from "./fixtures/reflections.json";
 
 const DEMO =
   typeof process !== "undefined" &&
@@ -279,6 +282,50 @@ function fallbackMemoryNote(path: string): MemoryNoteDetail {
   };
 }
 
+const reflectionsData = reflectionsFixture as ReflectionsResponse;
+
+/**
+ * View + agent filtering applied to the bundled reflections fixture, so the
+ * Standup section renders in demo mode and whenever the /api/reflections
+ * endpoint is not yet reachable. Mirrors the intended server-side view logic.
+ */
+function selectReflections(
+  view: ReflectionView,
+  agent: string,
+): ReflectionsResponse {
+  const base = agent
+    ? reflectionsData.reflections.filter((r) => r.agent_profile_name === agent)
+    : reflectionsData.reflections;
+  if (view === "growth") {
+    return {
+      reflections: base
+        .filter((r) => r.category === "win" || r.status === "done")
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    };
+  }
+  if (view === "decisions") {
+    return {
+      reflections: base
+        .filter(
+          (r) =>
+            r.status === "accepted" ||
+            r.status === "done" ||
+            r.status === "dismissed",
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    };
+  }
+  // feed: active items, most important first.
+  return {
+    reflections: base
+      .filter((r) => r.status === "open" || r.status === "acknowledged")
+      .sort(
+        (a, b) =>
+          b.importance - a.importance || b.created_at.localeCompare(a.created_at),
+      ),
+  };
+}
+
 export const api = {
   team(): Promise<TeamResponse> {
     return getJson<TeamResponse>("/team", () => team);
@@ -421,6 +468,25 @@ export const api = {
     return getJson<ActivityResponse>(`/activity?limit=${limit}`, () => ({
       events: activity.events.slice(0, limit),
     }));
+  },
+
+  /**
+   * GET /api/reflections?view=feed|growth|decisions&agent=
+   *
+   * The agents' daily self-improvement reflections that power the Standup
+   * section. Falls back to the bundled fixture (filtered to the requested
+   * view) so the page renders before the reflection backend exists.
+   */
+  reflections(
+    view: ReflectionView = "feed",
+    agent = "",
+  ): Promise<ReflectionsResponse> {
+    const params = new URLSearchParams({ view });
+    if (agent) params.set("agent", agent);
+    return getJson<ReflectionsResponse>(
+      `/reflections?${params.toString()}`,
+      () => selectReflections(view, agent),
+    );
   },
 
   health(): Promise<HealthResponse> {

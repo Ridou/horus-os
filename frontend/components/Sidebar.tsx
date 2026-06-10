@@ -18,6 +18,7 @@ import {
   Settings,
   Info,
   BookText,
+  Sparkles,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -60,6 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/research", label: "Research", icon: Telescope },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/standup", label: "Standup", icon: Sparkles },
   { href: "/traces", label: "Traces", icon: Network },
   { href: "/costs", label: "Costs", icon: DollarSign },
   { href: "/integrations", label: "Integrations", icon: Plug },

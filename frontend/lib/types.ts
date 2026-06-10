@@ -393,3 +393,49 @@ export interface ChatStreamEvent {
   latency_ms?: number;
   message?: string;
 }
+
+/** A reflection's category. */
+export type ReflectionCategory = "improvement" | "win" | "risk" | "question";
+
+/**
+ * Reflection lifecycle. open and acknowledged are active (they show in the
+ * feed); accepted, done, and dismissed are settled decisions, retained and
+ * shared so no agent re-raises them.
+ */
+export type ReflectionStatus =
+  | "open"
+  | "acknowledged"
+  | "accepted"
+  | "done"
+  | "dismissed";
+
+/** Which slice of the Standup section to load. */
+export type ReflectionView = "feed" | "growth" | "decisions";
+
+/**
+ * One self-improvement reflection an agent produced about its own recent work.
+ * Mirrors a row of GET /api/reflections.
+ */
+export interface Reflection {
+  reflection_id: string;
+  agent_profile_name: string;
+  created_at: string;
+  run_date: string;
+  item_key: string;
+  category: ReflectionCategory;
+  title: string;
+  body: string;
+  /** 1 (note) to 5 (critical); the feed sort key. */
+  importance: number;
+  /** How many days this issue has recurred. */
+  recurrence: number;
+  status: ReflectionStatus;
+  /** The human's reason when a decision was recorded; null while open. */
+  resolution: string | null;
+  read_at: string | null;
+}
+
+/** GET /api/reflections?view=feed|growth|decisions&agent= */
+export interface ReflectionsResponse {
+  reflections: Reflection[];
+}
