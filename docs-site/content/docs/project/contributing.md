@@ -3,27 +3,23 @@ title: "Contributing"
 description: "How to set up a horus-os dev environment, run the lint and test checks, follow the commit conventions, and the hard rules every contribution must meet."
 ---
 
-## Status
+## Status: open for contributions
 
-`horus-os` is in a solo development phase. The project was open-sourced from a working private command center, and the maintainer is moving through the milestones toward the contribution gate. Outside pull requests are not merged yet, and "I want to claim this issue" comments are not assigned yet.
-
-This guide stays public so the standards are clear in advance, and so you can mirror them locally if you want to. Treat everything below as the contract that will apply once the project opens for contributions, not as an invitation to open a PR today.
+`horus-os` accepts outside contributions as of 2026-06-10. The project was open-sourced from a working private command center and spent its first weeks behind a supply-chain readiness gate (sigstore-signed releases, SBOMs, pip-audit, SHA-pinned actions, sandboxed forked-PR CI). That gate shipped, and the flow below is live.
 
 > [!NOTE]
 > If anything in this guide is wrong, unclear, or out of date, open an issue on [GitHub](https://github.com/Ridou/horus-os).
 
-### What you can do today
+### Where to start
 
+- Pick an issue labeled `good-first-issue` or `help-wanted` and comment to claim it. The maintainer reviews the claim and assigns the issue by adding the `claimed` label; until that label lands, the issue is not reserved. Once assigned, open a draft PR within 7 days.
 - File issues for real bugs you hit running `horus-os` locally.
-- Open Discussions for design questions or scope proposals.
-- Star or watch the repo to follow along.
-- Run the project for real and write up your experience. That feedback is the most valuable input at this stage.
+- Open Discussions for design questions or scope proposals before writing code.
+- Run the project for real and write up your experience. Real-use feedback still shapes the roadmap more than anything else.
 
-### What is not currently accepted
+### Honest expectations
 
-- Pull requests from forks. They are acknowledged and closed.
-- Issue claims ("on it", "working on this", "assign to me"). The maintainer keeps the issue queue and assigns work to themselves.
-- Scope-expansion proposals via PR. Use Discussions instead.
+horus-os is solo-maintained. Triage targets a weekly Sunday pass and may go quiet for up to two weeks. Every PR runs the full three-OS CI matrix before human review, and forked-PR builds run with restricted tokens that never see repository secrets. There is no CLA: Apache 2.0 inbound-equals-outbound is the only licensing requirement.
 
 ## Dev setup
 
@@ -54,7 +50,7 @@ The test suite does not require live API keys. Provider tests use recorded respo
 
 ## Workflow
 
-1. **Pick or open an issue.** New contributors should look for the `good first issue` and `help wanted` labels.
+1. **Pick or open an issue.** New contributors should look for the `good-first-issue` and `help-wanted` labels.
 2. **Branch from `main`.** Branch names use the pattern `<type>/<short-slug>`, for example `feat/streaming-responses` or `fix/wizard-windows-paths`. Long-lived forks of project direction are not accepted without a roadmap update first.
 3. **Make your change.** Keep PRs focused. One concern per branch.
 4. **Add at least one regression test** when you can. The test directory mirrors the source layout under `tests/`.
@@ -128,7 +124,7 @@ New files do not require a per-file license header for v0.x. The top-level `LICE
 
 ## Scope check
 
-Before opening a substantial PR (once the project is open for contributions), read:
+Before opening a substantial PR, read:
 
 1. `PROJECT.md`, the project intent and out-of-scope list.
 2. `ROADMAP.md`, the current milestone and phases.

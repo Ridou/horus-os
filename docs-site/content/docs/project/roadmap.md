@@ -10,18 +10,21 @@ Research"), tagged on 2026-06-03. The runtime is Python 3.11+, the
 dashboard is a static-exported Next.js app bundled into the wheel, and
 persistence is a single SQLite file at database **schema version 13**.
 
-Since the v0.8.0 tag, three product surfaces have landed on `main` and
+Since the v0.8.0 tag, five product surfaces have landed on `main` and
 sit unreleased in the changelog `[Unreleased]` section, shipping in the
 next tagged cut: a streaming dashboard chat surface, an agent store
-with a custom-agent builder, and an opt-in Twilio voice adapter.
+with a custom-agent builder, an opt-in Twilio voice adapter, a 10-step
+onboarding tour, and a mobile sidebar drawer with a new agent Standup
+view.
 
-horus-os is in active solo development. Outside pull requests are not
-being merged yet, and issue claim comments are not honored yet. The
-most valuable outside input right now is real-use feedback: run
-horus-os against a real workload, then open a GitHub Discussion about
-what worked and what did not. For the full collaboration policy, read
-the [security policy](/project/security-policy/) and
-[contributing guide](/project/contributing/).
+horus-os is open for outside contributions as of 2026-06-10: pick an
+issue labeled `good-first-issue` or `help-wanted`, comment to claim
+it, and the maintainer assigns it. The single most valuable outside
+input remains real-use feedback: run horus-os against a real
+workload, then open a GitHub Discussion about what worked and what
+did not. For the full collaboration policy, read the
+[contributing guide](/project/contributing/) and the
+[security policy](/project/security-policy/).
 
 > [!NOTE]
 > Planning detail lives in the repository's `.planning/` directory and
@@ -156,10 +159,10 @@ finalized through the normal planning flow before any phase work
 begins. The detail lives in the repository's `.planning/` directory
 (`PROGRAM-v0.9-v0.14.md`).
 
-The project opens for outside contributions once an internal
-supply-chain readiness gate is met. Until then, the highest-value
-contribution is real-use feedback in GitHub Discussions, which shapes
-the roadmap.
+The project is open for outside contributions; the
+[contributing guide](/project/contributing/) covers the claim flow.
+The highest-value contribution is still real-use feedback in GitHub
+Discussions, which shapes the roadmap.
 
 ## Anti-goals
 

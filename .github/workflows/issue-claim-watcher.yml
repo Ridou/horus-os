@@ -1,7 +1,9 @@
 name: Issue claim watcher
 
-# Posts a canned reply when an outside commenter uses
-# claim-the-issue phrasing on an open issue or PR conversation.
+# Posts a canned acknowledgment when an outside commenter uses
+# claim-the-issue phrasing on an open issue or PR conversation,
+# so claimers immediately learn how assignment works instead of
+# waiting for the next triage pass.
 # The marker comment <!-- horus-os-claim-watcher --> in the reply
 # body prevents duplicate replies on the same thread.
 #
@@ -69,11 +71,11 @@ jobs:
             const repo = context.repo.repo;
             const body = [
               '<!-- horus-os-claim-watcher -->',
-              'Hey, thanks for the offer.',
+              'Hey, thanks for offering, and claim noted.',
               '',
-              `horus-os is in solo development mode right now and the issue queue is not open for claims. The README and [STATUS.md](https://github.com/${owner}/${repo}/blob/main/STATUS.md) cover the gate (earliest v0.6, not promised). I am leaving this issue open for tracking, but it is not assigned to you, and a fork PR against it will not be merged until the contribution gate opens.`,
+              `Heads-up on how assignment works here: the maintainer reviews claims (usually on the weekly triage pass) and assigns the issue by adding the \`claimed\` label. Until that label lands, the issue is not reserved. Once assigned, the expectation is a draft PR within 7 days; the full flow is in [CONTRIBUTING.md](https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md).`,
               '',
-              'The most useful thing you can do today: run horus-os locally and write up what worked and what did not in a Discussion. Real-use feedback shapes the roadmap.',
+              'While you wait: reading the relevant source and sketching your approach in a comment speeds up the assignment decision, especially for first-time contributors.',
               '',
               'Sorry for the canned reply, an automation flagged the wording. If you were not claiming, ignore me.',
             ].join('\n');

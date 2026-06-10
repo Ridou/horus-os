@@ -24,7 +24,7 @@ released.
 ## Release gate
 
 `scripts/release_gate.py` is a local pre-tag quality gate. It runs
-eight checks and exits 0 only when all enabled checks pass.
+fifteen checks and exits 0 only when all enabled checks pass.
 
 The four v0.4 checks:
 
@@ -46,12 +46,20 @@ v0.5 extends the gate with four additional checks: `docs-drift`
 `plugin-install-smoke-ci` (asserts the `install-smoke-plugin` job is
 present in `ci.yml`), `reference-plugin-manifest-valid` (runtime
 `validate_manifest()` accepts
-`examples/horus-os-example-plugin/horus-plugin.toml` with zero
-errors), and `v0-4-fixture-roundtrip`
+`examples/horus-os-example-plugin/src/horus_os_example_plugin/horus-plugin.toml`
+with zero errors), and `v0-4-fixture-roundtrip`
 (`tests/fixtures/v0_4_database.sqlite3` survives the v5 to v6
 migration with all three new plugin tables, two new `plugin_name`
-columns, and one new index present). Default invocation runs all
-EIGHT checks (4 v0.4 + 4 v0.5).
+columns, and one new index present).
+
+v0.6 adds five supply-chain checks:
+`release-workflow-signing-present`, `release-workflow-sbom-present`,
+`audit-workflow-present`, `local-pip-audit-clean` (a live pip-audit
+scan, network-backed), and `actions-pinned-by-sha`. Later releases
+add `sbom-matches-wheel` (diffs the built wheel's dependency tree
+against the CycloneDX SBOM at rehearsal time) and
+`v0-8-install-smoke-ci` (asserts both v0.8 install-smoke job names
+in `ci.yml`). Default invocation runs all FIFTEEN checks.
 
 Exit semantics: 0 on full pass; 1 if any check fails. The runner
 prints one diagnostic per failing check rather than
@@ -68,9 +76,20 @@ Environment overrides:
 
 CLI flags:
 
-- `--check pricing|wheel|ci|tests|docs-drift|plugin-install|reference-manifest|fixture-roundtrip`
-  runs only the named check.
+- `--check <name>` runs only the named check. Valid names: `pricing`,
+  `wheel`, `ci`, `tests`, `docs-drift`, `plugin-install`,
+  `reference-manifest`, `fixture-roundtrip`,
+  `release-workflow-signing-present`, `release-workflow-sbom-present`,
+  `audit-workflow-present`, `local-pip-audit-clean`,
+  `actions-pinned-by-sha`, `sbom-matches-wheel`,
+  `v0-8-install-smoke-ci`.
 - `--skip-build` is the alias for `HORUS_OS_RELEASE_GATE_SKIP_BUILD=1`.
+- `--tier local|release`: `local` restricts the run to the four fast
+  grep-only workflow checks (under 10 seconds); `release` (the
+  default) runs everything.
+- `--allow-offline` short-circuits the network-backed
+  `local-pip-audit-clean` check with SKIP. Use when offline; rerun
+  without the flag before tagging.
 
 If `pricing-freshness` fails, follow the refreshing-pricing
 section below before re-running the gate.
@@ -126,7 +145,7 @@ The full sequence:
    if there is a diff. The `docs-drift` gate refuses to tag
    otherwise.
 2. Run `python scripts/release_gate.py`. Confirm exit 0 and all
-   eight checks pass.
+   fifteen checks pass.
 3. Bump the version to `N.M.P` in TWO places:
    - `pyproject.toml` line 7: `version = "N.M.P"`.
    - `src/horus_os/__init__.py`: `__version__ = "N.M.P"`.
@@ -162,35 +181,13 @@ The full sequence:
 9. Confirm the release is visible at
    `https://github.com/Ridou/horus-os/releases/tag/vN.M.P`.
 
-### v0.7.0 cut (staged, awaiting owner go-ahead)
+### Historical note: v0.7.0 and v0.8.0
 
-The v0.7.0 release is STAGED and validated locally; the remote
-actions are not performed by the planner or executor and await
-explicit owner confirmation. The staging is complete:
-
-- Step 3 (version bump to `0.7.0` in `pyproject.toml` and
-  `src/horus_os/__init__.py`) is done.
-- Step 4 (CHANGELOG `[Unreleased]` promoted to
-  `[0.7.0] - 2026-06-02`, fresh empty `[Unreleased]` stub left on
-  top) is done.
-- A migration note lives at `docs/MIGRATION-v0.5-to-v0.7.md`
-  (the upgrade is v0.5 to v0.7 because v0.6 was never tagged).
-- A DRAFTED GitHub Release body lives at
-  `docs/RELEASE-NOTES-v0.7.0.md`. It carries the CHANGELOG
-  summary, a link to the migration note, and the optional-extras
-  documentation. Hand it to step 8 with
-  `gh release create v0.7.0 --title "v0.7.0 - Command Center"
-  --notes-file docs/RELEASE-NOTES-v0.7.0.md`.
-
-STOP-BEFORE-TAG boundary (owner-confirmed only): the following are
-NOT run autonomously by the planner or executor and require the
-owner's explicit go-ahead, in order: `git push` of the release
-commits, the `gitsign` confirmation (step 6.5), the annotated tag
-and its push (step 7, `git push origin v0.7.0`), the GitHub Release
-publish (step 8), and any merge to `main`. The three-OS hard gate
-green is a post-push CI result the owner triggers by pushing; it
-cannot be produced before the push. CLAUDE.md is explicit: do not
-push to any remote without explicit confirmation.
+v0.7.0 (Command Center) shipped on 2026-06-03 using this procedure,
+with the release body at `docs/RELEASE-NOTES-v0.7.0.md` and the
+migration note at `docs/MIGRATION-v0.5-to-v0.7.md` (v0.6 was never
+tagged). v0.8.0 (Local-first and Autonomous Research) followed,
+with its migration note at `docs/MIGRATION-v0.7-to-v0.8.md`.
 
 ## Post-release
 
@@ -202,9 +199,9 @@ push to any remote without explicit confirmation.
 - Open a tracking issue or note for the next milestone's planning
   phase.
 
-## One-time repo settings checklist (v0.6 contribution-gate setup)
+## One-time repo settings checklist (contribution-gate setup)
 
-The v0.6 contribution-gate flip (Phase 59) assumes the following repo settings are enabled. They are one-time toggles; the maintainer runs through this list ONCE at v0.6 setup time and then never again. Each item includes a `gh api` verification command so the state can be re-confirmed if a downstream consumer asks.
+The contribution-gate flip assumes the following repo settings are enabled. They are one-time toggles; the maintainer runs through this list once at gate-flip time and then never again. Each item includes a `gh api` verification command so the state can be re-confirmed if a downstream consumer asks.
 
 ### Private vulnerability reporting (GHSA)
 
@@ -272,7 +269,7 @@ Expect `true`. Then create the four categories via the Discussions Settings UI (
 
 See `docs/MAINTAINER-RUNBOOK.md` Part 4 for the rationale per category.
 
-The pinned "Project Status" Discussion post is created at v0.6.0 ship time as Phase 59 work.
+The pinned "Project Status" Discussion post is created when the contribution gate flips.
 
 ## Why the release gate exists
 

@@ -16,11 +16,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   watches delegation unfold in real time.
 - **Agent store and custom-agent builder.** A dashboard surface to
   browse and install featured agent bundles (Atlas, Vitriol, Sol) and
-  a no-code custom-agent builder. Installing a bundle or saving a
-  custom agent writes an `agent_profiles` row via the existing
-  `POST /api/agents` path; installs are additive and never overwrite an
-  existing profile (a duplicate name returns 409). Profiles can be
-  exported back to a shareable bundle via `GET /api/agents/{name}/export`.
+  a no-code custom-agent builder. Bundles are served by new
+  `GET /api/store` and `GET /api/store/{slug}` routes, and
+  `POST /api/store/{slug}/install` creates the agent profile; installs
+  are additive and never overwrite an existing profile (a duplicate
+  name returns 409). Saving a custom agent goes through the existing
+  `POST /api/agents` path, and profiles can be exported back to a
+  shareable bundle via `GET /api/agents/{name}/export`.
+- **10-step onboarding tour.** A guided tour with a visible spotlight
+  overlay that walks first-run users across the dashboard (team,
+  memory, tasks, research, activity, traces, costs, integrations),
+  skippable at any step and backed by `localStorage` so it runs once.
+- **Agent Standup view and mobile sidebar drawer.** A Standup page
+  that surfaces each agent's reflections (improvements, growth,
+  decisions) most-important-first, plus a slide-out sidebar drawer so
+  the dashboard navigates well on phones.
+- **Community Discord.** A public community server (invite surfaced
+  in the README, the dashboard Community link, and the docs site)
+  with a searchable `#help` forum.
 - **Voice and reservations adapter (opt-in).** A new optional
   `[voice]` extra (`twilio>=9.0`) adds a `VoiceAdapter` for outbound
   calls and phone reservations through the Twilio REST API. The
@@ -42,6 +55,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `<1.24.0` ceiling, and Dependabot ignores onnxruntime bumps past the
   cap so it stops proposing Intel-breaking updates.
 
+### Documentation
+
+- **Official documentation site.** Searchable docs at
+  [docs.horus-demo.com](https://docs.horus-demo.com): installation,
+  quickstart, guides for every surface and integration, and a full
+  CLI, configuration, and environment reference. Source lives in
+  `docs-site/`.
+- **Contribution gate opened (2026-06-10).** The project accepts
+  outside contributions; `CONTRIBUTING.md`, `STATUS.md`, the issue
+  and PR templates, and the docs site all reflect the live claim and
+  review flow.
+
 ## [0.8.0] - 2026-06-03
 
 Eighth alpha, "Local-first and Autonomous Research." horus-os gains a
@@ -62,7 +87,8 @@ See `docs/MIGRATION-v0.7-to-v0.8.md` for upgrade notes from v0.7.
   server (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter) through a
   single `base_url` override. The provider is constructed lazily, so a
   bare install never imports the `openai` SDK. `HORUS_OS_LOCAL_BASE_URL`
-  and `HORUS_OS_LOCAL_MODEL` wire the endpoint; `horus-os doctor --local`
+  (and optionally `HORUS_OS_LOCAL_API_KEY`) wire the endpoint, with the
+  model set in config; `horus-os doctor --local`
   validates the base URL (rejecting a wildcard bind) and live-probes the
   endpoint without printing a key.
 - **On-device vector memory (opt-in).** A new optional `[local-memory]`
@@ -660,59 +686,6 @@ See `docs/MIGRATION-v0.2-to-v0.3.md` for upgrade notes from v0.2.
   Documents entries for the migration guide and the adapter
   setup guides.
 
-## [0.1.0] - 2026-05-23
-
-First alpha release. A working v0.1 foundation: install the package,
-run an agent through CLI or local web chat, and read or write a
-markdown notes folder with a full SQLite audit trail.
-
-### Added
-
-- **Agent runtime** (`run_agent`, `run_agent_async`, `run_agent_loop`)
-  with sync and async paths. Multi-turn tool-execution loop.
-- **Anthropic provider** with sync and async call functions and a
-  `Conversation` class for stateful multi-turn use.
-- **Google Gemini provider** with the same surface as Anthropic.
-- **Tool registry** (`ToolRegistry`, `execute_tool_uses`) plus a
-  built-in `read_file_tool` factory with optional path sandboxing.
-- **Memory layer** for markdown notes folders: `NotesStore`,
-  `list_notes` / `search_notes` / `read_note` / `create_note` /
-  `append_note` tool factories.
-- **SQLite persistence** (`Database`, `TraceRecord`, `NoteWrite`)
-  with WAL mode, schema v2, idempotent migrations, and a
-  reviewable audit trail for every note write.
-- **CLI surface**: `horus-os init`, `init --interactive` (setup
-  wizard with API key onboarding and 1-token live validation),
-  `traces`, `run "<prompt>"`, `serve`.
-- **Local web dashboard** served by FastAPI: chat surface, traces
-  explorer, writes audit view. Single-file HTML + vanilla JS, no
-  build step required.
-- **JSON API** under `/api`: health, traces, trace-by-id, writes,
-  chat.
-- **Three-OS install verification** via GitHub Actions
-  `install-smoke` job on (Ubuntu, macOS, Windows) by (Python 3.11,
-  3.12).
-- 175 automated tests covering every public API surface.
-- Optional dependency groups: `[anthropic]`, `[gemini]`,
-  `[dashboard]`, `[all]`, `[dev]`.
-
-### Documentation
-
-- `README.md`, `PROJECT.md`, `ARCHITECTURE.md`, `ROADMAP.md`,
-  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CLAUDE.md`.
-- Apache 2.0 license.
-
-### Known limitations
-
-- No streaming responses. The dashboard waits for the full loop to
-  finish before rendering.
-- No retry, no rate-limit handling, no cost tracking. Defer to
-  v0.5 Observability.
-- The dashboard is a single-page vanilla-JS surface. A Next.js
-  evolution is anticipated when the UX requirements grow.
-- Tool execution loop bails out at 10 iterations by default; users
-  can override with `--max-iterations`.
-
 ## [0.2.0] - 2026-05-23
 
 Second alpha. Moves from "one agent answers questions" to "a personal
@@ -795,3 +768,56 @@ See `docs/MIGRATION-v0.1-to-v0.2.md` for upgrade notes from v0.1.
 - GitHub issue templates (bug report, feature request) and pull
   request template added under `.github/`.
 
+
+## [0.1.0] - 2026-05-23
+
+First alpha release. A working v0.1 foundation: install the package,
+run an agent through CLI or local web chat, and read or write a
+markdown notes folder with a full SQLite audit trail.
+
+### Added
+
+- **Agent runtime** (`run_agent`, `run_agent_async`, `run_agent_loop`)
+  with sync and async paths. Multi-turn tool-execution loop.
+- **Anthropic provider** with sync and async call functions and a
+  `Conversation` class for stateful multi-turn use.
+- **Google Gemini provider** with the same surface as Anthropic.
+- **Tool registry** (`ToolRegistry`, `execute_tool_uses`) plus a
+  built-in `read_file_tool` factory with optional path sandboxing.
+- **Memory layer** for markdown notes folders: `NotesStore`,
+  `list_notes` / `search_notes` / `read_note` / `create_note` /
+  `append_note` tool factories.
+- **SQLite persistence** (`Database`, `TraceRecord`, `NoteWrite`)
+  with WAL mode, schema v2, idempotent migrations, and a
+  reviewable audit trail for every note write.
+- **CLI surface**: `horus-os init`, `init --interactive` (setup
+  wizard with API key onboarding and 1-token live validation),
+  `traces`, `run "<prompt>"`, `serve`.
+- **Local web dashboard** served by FastAPI: chat surface, traces
+  explorer, writes audit view. Single-file HTML + vanilla JS, no
+  build step required.
+- **JSON API** under `/api`: health, traces, trace-by-id, writes,
+  chat.
+- **Three-OS install verification** via GitHub Actions
+  `install-smoke` job on (Ubuntu, macOS, Windows) by (Python 3.11,
+  3.12).
+- 175 automated tests covering every public API surface.
+- Optional dependency groups: `[anthropic]`, `[gemini]`,
+  `[dashboard]`, `[all]`, `[dev]`.
+
+### Documentation
+
+- `README.md`, `PROJECT.md`, `ARCHITECTURE.md`, `ROADMAP.md`,
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CLAUDE.md`.
+- Apache 2.0 license.
+
+### Known limitations
+
+- No streaming responses. The dashboard waits for the full loop to
+  finish before rendering.
+- No retry, no rate-limit handling, no cost tracking. Defer to
+  v0.5 Observability.
+- The dashboard is a single-page vanilla-JS surface. A Next.js
+  evolution is anticipated when the UX requirements grow.
+- Tool execution loop bails out at 10 iterations by default; users
+  can override with `--max-iterations`.

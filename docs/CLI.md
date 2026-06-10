@@ -5,6 +5,28 @@ Tests pass StringIO buffers and assert on captured text. All numeric
 output respects the precision contract documented under `horus-os
 usage` below.
 
+## Command overview
+
+| Command | What it does |
+| ------- | ------------ |
+| `init` | Initialize a new horus-os installation (seeds a starter team, an example vault, and a demo trace; `--interactive` walks through API keys). |
+| `run` | Run a single agent prompt with the configured tools (streams by default; `--no-stream` buffers). |
+| `serve` | Start the local web dashboard and JSON API on `127.0.0.1:8765`. |
+| `traces` | List recent agent traces. |
+| `agents` | Manage agent profiles. |
+| `schedule` | Manage recurring agent schedules (cron). |
+| `service` | Install and manage the always-on service (systemd, launchd, NSSM). |
+| `skills` | List and show discoverable skills. |
+| `plugins` | Manage installed plugins (install, list, info, enable, disable, grant, revoke). |
+| `usage` | Print a usage report: cost, latency, tool reliability. Documented in detail below. |
+| `doctor` | Check integration health and configuration (`--service`, `--supabase`, `--local`, `--memory`, `--mcp`). |
+| `memory` | Manage on-device vector memory (model download, index status). |
+
+Run `horus-os <command> --help` for per-command flags. The complete
+per-command reference lives on the documentation site at
+[docs.horus-demo.com](https://docs.horus-demo.com). The rest of this
+file documents the `usage` subcommand's output contract.
+
 ## horus-os usage
 
 Print a usage report (cost, latency, tool reliability) over a window

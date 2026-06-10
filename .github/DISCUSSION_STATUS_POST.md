@@ -12,49 +12,51 @@ To use:
 
 # Project Status (pinned)
 
-> **TL;DR:** horus-os is in **solo development mode**. Outside PRs
-> are not being merged. Issue claim comments are not honored. See
+> **TL;DR:** horus-os is **open for outside contributions** as of
+> 2026-06-10. The latest release is **v0.8.0** (Local-first and
+> Autonomous Research). See
 > [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
-> for the timeline and the gate for when this changes.
+> for the dated, canonical version of everything below.
 
 This Discussion is the rolling public-facing update for the
-project. The full timeline, dates, and gate condition live in
+project. The full timeline and dates live in
 [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md).
 Bookmark that file. The rest of this post is a snapshot.
 
 ## Where the project is right now
 
-- **Active milestone:** v0.4 Observability (planning).
-- **Last release:** v0.3.0 on 2026-05-24.
-- **Open for outside PRs:** no. Earliest possible: v0.6. Not
-  promised, not scheduled.
+- **Latest release:** v0.8.0 (Local-first and Autonomous Research)
+  on 2026-06-03: local LLM provider, on-device vector memory, MCP
+  client, web access, vision and PDF, the Deep Research workflow, a
+  skills system, and gated shell execution.
+- **On `main`, unreleased:** a streaming dashboard chat, an agent
+  store with a custom-agent builder, an opt-in Twilio voice adapter,
+  a 10-step onboarding tour, and an agent Standup view. They ship in
+  the next tagged cut.
+- **Next milestone:** v0.9, Autonomy and Control (planned).
+- **Open for outside PRs:** yes, through the claim flow in
+  [CONTRIBUTING.md](https://github.com/Ridou/horus-os/blob/main/CONTRIBUTING.md).
 
-## What you can do today
+## How to contribute
 
-- Run horus-os locally and write up what worked and what did not.
-  Real-use feedback shapes the roadmap and is the single highest
-  value outside contribution at this stage.
-- File bug reports for defects you actually hit. The bug template
-  has the required fields.
-- Open a Discussion for design questions or scope ideas.
+1. Pick an issue labeled `good-first-issue` or `help-wanted`, or
+   file the bug or proposal you actually hit.
+2. Comment to claim it. The maintainer reviews and assigns; the
+   `claimed` label means it is yours.
+3. Open a draft PR within 7 days. CI runs the full three-OS matrix
+   plus supply-chain scans before human review.
 
-## What is not currently accepted
+Design questions and scope ideas go to Discussions first. Questions
+and help live in the
+[community Discord](https://discord.gg/vwX9WvwQhp).
 
-- **Pull requests from forks.** Acknowledged and closed without
-  review.
-- **Issue claim comments.** Phrases like "on it", "claim this",
-  "assign to me", "I'll take this", "working on this" are not
-  honored. The maintainer holds the queue and assigns all work
-  internally. An automation will reply to common claim phrasing
-  pointing you back here; sorry for the canned tone, it cuts
-  down on confusion.
-- **Scope-expansion proposals via PR.** Use a Discussion first.
+## Honest expectations
 
-## When this changes
+horus-os is solo-maintained. Triage targets a weekly Sunday pass and
+may go quiet for up to two weeks; see
+[docs/TRIAGE.md](https://github.com/Ridou/horus-os/blob/main/docs/TRIAGE.md).
+There is no 24-hour SLA, no stale-bot, and no CLA.
 
-The project opens for outside contributions once an internal
-readiness gate is met. When it ships, STATUS.md flips first, and
-a follow-up reply lands on this thread.
-
-Until then: keep the bar high, keep it transparent, keep it
-honest. Thanks for being patient with the cadence.
+Real-use feedback is still the highest-value input: run horus-os
+against a real workload and write up what worked and what did not,
+right here in Discussions.

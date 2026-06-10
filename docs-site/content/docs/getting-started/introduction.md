@@ -56,7 +56,7 @@ decisions you will meet in these docs.
 | Persistence | A single SQLite database (WAL mode) on disk |
 | Knowledge base | A folder of plain markdown files (your vault), with optional on-device vector search |
 | Dashboard | A Next.js app served locally by the runtime (optional; the CLI works without it) |
-| Chat surfaces | CLI first, plus opt-in Discord, Slack, Email, and Calendar adapters |
+| Chat surfaces | CLI and the dashboard chat page first, plus opt-in Discord, Slack, Email, Calendar, and Voice adapters |
 
 For the full picture, read the [Architecture](/concepts/architecture/) page.
 

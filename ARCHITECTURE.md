@@ -56,7 +56,7 @@ guides; the latest is `docs/MIGRATION-v0.7-to-v0.8.md`.
 
                 +----------------------------+
                 |  SQLite (horus_os.storage) |
-                |  WAL mode, schema v4       |
+                |  WAL mode, schema v13      |
                 |  traces (parent_trace_id,  |
                 |   agent_profile_name),     |
                 |  note_writes,              |
@@ -123,9 +123,9 @@ is queryable at `GET /api/adapters` and toggleable via
 | `tools/delegation.py` | `IterationBudget`, `_filter_registry`, `make_delegate_tool`. The delegation primitives the multi-agent runtime is built on. |
 | `memory/notes.py` | `NotesStore` over a markdown folder. List, search, read, create, append. |
 | `memory/tools.py` | Tool factories that expose the notes store to an agent. |
-| `storage.py` | `Database`, `TraceRecord`, `NoteWrite`, `AgentProfile` CRUD. SQLite with WAL mode and idempotent migrations through v4. |
+| `storage.py` | `Database`, `TraceRecord`, `NoteWrite`, `AgentProfile` CRUD. SQLite with WAL mode and idempotent migrations through the current `SCHEMA_VERSION` (v13 as of v0.8). |
 | `server/api.py` | FastAPI app. JSON API, SSE chat stream, and the static dashboard. Calls `discover_adapters()` at app startup and binds each one. |
-| `cli/` | Argparse subcommands: `init`, `run`, `serve`, `traces`, `agents`. The `init` subcommand supports `--interactive` for the setup wizard; `run` streams by default with `--no-stream` for the v0.1 behavior. |
+| `cli/` | Argparse subcommands: `init`, `run`, `serve`, `traces`, `agents`, `schedule`, `service`, `skills`, `plugins`, `usage`, `doctor`, `memory`. The `init` subcommand supports `--interactive` for the setup wizard; `run` streams by default with `--no-stream` for the v0.1 behavior. |
 | `adapters/base.py` | `Adapter` Protocol, optional `LifecycleAdapter` Protocol (async `start`/`stop`), `AdapterContext` (with `registry` and optional `tool_registry`), `AdapterEntry`, `AdapterRegistry`, three `ADAPTER_STATUS_*` constants, `discover_adapters`, `ADAPTER_ENTRY_POINT_GROUP`. |
 | `adapters/webhook.py` | Reference `WebhookAdapter`: HMAC-SHA256 signed HTTP webhook receiver mounted at `/api/adapters/webhook`. |
 | `adapters/discord_adapter.py` | `DiscordAdapter` (v0.3). Lazy `discord.py` import, gateway mention/DM handler, chunked replies, lifecycle hooks. |
@@ -363,7 +363,8 @@ per-adapter Enable / Disable / n/a button driven by
 
 SQLite, single file, WAL mode, 5000ms busy timeout. Schema is
 idempotent and re-applies safely on every boot. The current schema
-version is 4 (v0.1 shipped v2).
+version is 13 (see `SCHEMA_VERSION` in `src/horus_os/storage.py`;
+v0.1 shipped v2).
 
 Three tables matter for v0.2:
 
@@ -460,8 +461,9 @@ extension surfaces are:
 - **Replay protection on the webhook adapter.** A signed request
   stays valid until the secret rotates. A timestamp plus nonce
   sliding window is a candidate for a future revision.
-- **Profile editing in the dashboard.** The Agents tab is
-  read-only; CRUD stays on the CLI and JSON API.
+- **Profile editing in the dashboard.** Creating agents works in the
+  dashboard (the store and the custom-agent builder), but editing or
+  deleting an existing profile stays on the CLI and JSON API.
 - **Provider-per-profile.** A sub-agent inherits the coordinator's
   provider. Mixing Anthropic, Gemini, and the local LLM provider in
   one delegation tree is on the post-v0.8 list.

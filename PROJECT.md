@@ -40,7 +40,9 @@ This table reflects the choices made through v0.8. See `ARCHITECTURE.md` for the
 `horus-os` is intentionally not:
 
 - A multi-user chat platform.
-- A no-code agent builder.
+- A general-purpose no-code workflow platform. (The dashboard ships a
+  simple custom-agent builder, but the product is a personal agent
+  team, not a visual programming environment.)
 - An IDE replacement.
 - A general-purpose workflow engine.
 
@@ -48,4 +50,4 @@ The goal is a personal command center for one person, running locally, with full
 
 ## Status
 
-Alpha, v0.8.0 (2026-06-03), "Local-first and Autonomous Research." See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases) for the full history. Since the tag, a streaming dashboard chat, an agent store, and an opt-in Twilio voice adapter have landed on `main` unreleased; the next planned milestone is v0.9, Autonomy and Control. See `ROADMAP.md`.
+Alpha, v0.8.0 (2026-06-03), "Local-first and Autonomous Research." See `CHANGELOG.md` and the [Releases page](https://github.com/Ridou/horus-os/releases) for the full history. Since the tag, several product surfaces (a streaming dashboard chat, an agent store, an opt-in Twilio voice adapter, an onboarding tour, and an agent Standup view) have landed on `main` unreleased; the `CHANGELOG.md` `[Unreleased]` section is the authoritative list. The next planned milestone is v0.9, Autonomy and Control. See `ROADMAP.md`. The project is open for outside contributions as of 2026-06-10; see `CONTRIBUTING.md`.

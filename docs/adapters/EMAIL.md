@@ -130,9 +130,9 @@ Never commit a real `.env`. Add it to `.gitignore`.
   account. Rotate on leak
 - Never paste an app password into a chat, a screenshot, or a
   pull request. Treat it like a regular password
-- The adapter calls `run_agent(..., tools=None)`. Tool gating
-  per channel will land in v0.4. Until then, assume the agent
-  has only the capabilities of its profile
+- The adapter calls `run_agent(..., tools=None)`; the agent runs
+  with only the capabilities of its profile. Per-channel tool
+  gating is not currently supported
 
 ## 5. Run and verify
 

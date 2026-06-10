@@ -161,8 +161,12 @@ voice = "horus_os.adapters.voice_adapter:VoiceAdapter"
 
 [project.urls]
 Homepage = "https://github.com/Ridou/horus-os"
+Documentation = "https://docs.horus-demo.com"
+Changelog = "https://github.com/Ridou/horus-os/blob/main/CHANGELOG.md"
 Issues = "https://github.com/Ridou/horus-os/issues"
 Source = "https://github.com/Ridou/horus-os"
+Demo = "https://horus-demo.com"
+Discord = "https://discord.gg/vwX9WvwQhp"
 
 [tool.setuptools.packages.find]
 where = ["src"]

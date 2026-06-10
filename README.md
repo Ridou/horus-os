@@ -10,7 +10,7 @@
   <a href="https://github.com/Ridou/horus-os/actions/workflows/ci.yml"><img src="https://github.com/Ridou/horus-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-00d4ff.svg" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/python-3.11+-00d4ff.svg" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/providers-Anthropic%20%2B%20Gemini-00d4ff.svg" alt="Providers">
+  <img src="https://img.shields.io/badge/providers-Anthropic%20%2B%20Gemini%20%2B%20local-00d4ff.svg" alt="Providers">
   <img src="https://img.shields.io/badge/runs-macOS%20%7C%20Linux%20%7C%20Windows-00d4ff.svg" alt="Runs on macOS, Linux, Windows">
   <a href="https://discord.gg/vwX9WvwQhp"><img src="https://img.shields.io/badge/Discord-join%20the%20community-00d4ff.svg?logo=discord&logoColor=white" alt="Discord community"></a>
 </p>
@@ -117,7 +117,7 @@ Need a key first? Grab one from the [Anthropic Console](https://console.anthropi
 
 The `[research]` meta-extra installs the whole v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`) at once. The `[local-memory]` extra pins `onnxruntime>=1.17.0,<1.24.0` so an Intel-macOS wheel is available (1.24.1+ ships arm64 only); for that reason it is kept out of `[all]` and is an explicit opt-in. See [docs/MIGRATION-v0.7-to-v0.8.md](docs/MIGRATION-v0.7-to-v0.8.md) for the full extras table and upgrade notes.
 
-`pip install 'horus-os[all]'` installs the AI providers (`anthropic`, `gemini`), the light v0.8 extras (`local-llm`, `mcp`, `web`, `pdf`, `vision`), and the `dashboard`, `slack`, `calendar`, and `otel` extras. It deliberately EXCLUDES `[local-memory]` (its native onnxruntime wheels need the Intel-macOS pin) and the four opt-in integrations: `[discord]`, `[supabase]`, `[vercel]`, and `[github]`. Install those individually when you want them, for example `pip install 'horus-os[supabase]'` or `pip install 'horus-os[local-memory]'`.
+`pip install 'horus-os[all]'` installs the AI providers (`anthropic`, `gemini`), the light v0.8 extras (`local-llm`, `mcp`, `web`, `pdf`, `vision`), and the `dashboard`, `slack`, `calendar`, `voice`, and `otel` extras. It deliberately EXCLUDES `[local-memory]` (its native onnxruntime wheels need the Intel-macOS pin) and the four opt-in integrations: `[discord]`, `[supabase]`, `[vercel]`, and `[github]`. Install those individually when you want them, for example `pip install 'horus-os[supabase]'` or `pip install 'horus-os[local-memory]'`.
 
 ## Your starter team
 
@@ -135,14 +135,18 @@ The Coordinator delegates to the others through the built-in `delegate_to_agent`
 
 ## The dashboard
 
-A local web dashboard ships with horus-os: a team view with an org chart, a markdown memory browser, a live activity timeline, a traces explorer, a cost and latency overview, settings, and an about page. It is built as a static Next.js export and bundled into the wheel, so end users run it with **no Node and no build step**, just `horus-os serve`. (Node is only needed by contributors who rebuild the dashboard.)
+A local web dashboard ships with horus-os: a streaming chat, a team view with an org chart, an agent store, a markdown memory browser, a tasks queue, a Deep Research surface, a live activity timeline, an agent Standup view, a traces explorer, a cost and latency overview, an integrations setup surface, settings, and an about page, plus a guided 10-step onboarding tour on first run. It is built as a static Next.js export and bundled into the wheel, so end users run it with **no Node and no build step**, just `horus-os serve`. (Node is only needed by contributors who rebuild the dashboard.)
 
 The dashboard talks only to your local backend. There is no hosted service behind it.
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="assets/screenshots/dashboard-memory.png" alt="Memory browser"><br><sub><b>Memory</b>, browse and search your markdown vault</sub></td>
-    <td width="50%" align="center"><img src="assets/screenshots/dashboard-activity.png" alt="Activity timeline"><br><sub><b>Activity</b>, a live timeline of what every agent did</sub></td>
+    <td width="50%" align="center"><img src="assets/screenshots/dashboard-chat.png" alt="Streaming chat"><br><sub><b>Chat</b>, talk to your team and watch replies stream in live</sub></td>
+    <td width="50%" align="center"><img src="assets/screenshots/dashboard-store.png" alt="Agent store"><br><sub><b>Store</b>, install ready-made agents or build your own, no code</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/screenshots/dashboard-memory.png" alt="Memory browser"><br><sub><b>Memory</b>, browse and search your markdown vault</sub></td>
+    <td align="center"><img src="assets/screenshots/dashboard-activity.png" alt="Activity timeline"><br><sub><b>Activity</b>, a live timeline of what every agent did</sub></td>
   </tr>
   <tr>
     <td align="center"><img src="assets/screenshots/dashboard-traces.png" alt="Traces explorer"><br><sub><b>Traces</b>, every run with its prompt, model, cost, and tools</sub></td>
@@ -154,7 +158,7 @@ The dashboard talks only to your local backend. There is no hosted service behin
 
 ## What is inside
 
-- **Two providers, your keys.** Anthropic Claude and Google Gemini through the official SDKs, no abstraction layer.
+- **Two cloud providers plus local, your keys.** Anthropic Claude and Google Gemini through the official SDKs, no abstraction layer, plus an opt-in provider for any OpenAI-compatible local server (Ollama, llama.cpp, LM Studio, vLLM) via the `[local-llm]` extra.
 - **A real agent team.** Named profiles in SQLite, a `delegate_to_agent` tool, parent and child traces, streaming responses on the CLI and the dashboard.
 - **Tools and memory.** A tool registry plus a markdown notes vault the agents read and write, with every write captured in an audit log. The vault is plain markdown you can edit in any editor, including Obsidian (point an Obsidian vault at your notes folder).
 - **Observability.** Per-run cost, latency, and tool-reliability tracking, a costs dashboard, a `horus-os usage` CLI, and an opt-in OpenTelemetry exporter behind an extra.
@@ -180,11 +184,20 @@ v0.8, "Local-first and Autonomous Research," adds a full local-first capability 
 - **Gated shell execution.** A `shell_exec` tool gated by a double lock: it registers only when `HORUS_OS_SHELL_ENABLED=true` AND the agent profile's `allowed_tools` explicitly list it.
 - **`[research]` meta-extra.** A single `pip install 'horus-os[research]'` installs the full v0.8 infrastructure layer (`local-llm`, `local-memory`, `mcp`, `web`, `pdf`, `vision`).
 
-Three more product surfaces have since landed on `main`, on top of the v0.8 core. They sit in the `[Unreleased]` section of the [changelog](CHANGELOG.md) and ship in the next tagged cut, they are not part of the v0.8.0 tag:
+More product surfaces have since landed on `main`, on top of the v0.8 core. They sit in the `[Unreleased]` section of the [changelog](CHANGELOG.md) and ship in the next tagged cut, they are not part of the v0.8.0 tag:
 
 - **Streaming chat in the dashboard.** A first-class chat surface in the Next.js dashboard that streams tokens live as the team works, not just a buffered final answer.
 - **An agent store.** Browse and install featured agent bundles (Atlas, Vitriol, Sol) or build your own with a custom-agent builder, no code required.
 - **Voice and reservations (opt-in).** An optional Twilio voice adapter behind the `[voice]` extra for outbound calls and phone reservations.
+- **A guided onboarding tour.** A 10-step spotlight tour across the dashboard that walks first-run users through the team, memory, traces, and integrations surfaces.
+- **Standup and mobile.** An agent Standup view that summarizes what every agent did, plus a mobile sidebar drawer so the dashboard works on a phone.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="assets/screenshots/dashboard-standup.png" alt="Agent Standup view"><br><sub><b>Standup</b>, each agent's daily take on how it can improve</sub></td>
+    <td width="50%" align="center"><img src="assets/screenshots/dashboard-tour.png" alt="Onboarding tour spotlight"><br><sub><b>Tour</b>, a 10-step spotlight walkthrough on first run</sub></td>
+  </tr>
+</table>
 
 The next planned milestone is **v0.9, Autonomy and Control**: monetary budgets that pause on breach, risk-tiered approvals, secrets redaction, an event and lifecycle-hook substrate, priority execution lanes, and controlled overnight autonomy that rides behind every gate. It is the first of a six-milestone program (v0.9 through v0.14). See [ROADMAP.md](ROADMAP.md).
 
@@ -219,17 +232,18 @@ None of this gives up the core promise. It all runs on your machine, against you
 
 ## Status and how to get involved
 
-**horus-os is in solo development mode.** It was open-sourced out of a working private command center that runs against real data on a real machine. v0.8 is the latest shipped release; since the tag, three more product surfaces (streaming chat, an agent store, and an opt-in voice adapter) have landed on `main` ahead of the next cut, and v0.9 (Autonomy and Control) is in planning. The contribution flow opens only once an internal supply-chain readiness gate is met; until then, outside pull requests are acknowledged and closed unreviewed, and issue-claim comments are not honored. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
+**horus-os is open for contributions.** It was open-sourced out of a working private command center that runs against real data on a real machine, and it spent its first weeks behind a supply-chain readiness gate (sigstore-signed releases, SBOMs, pip-audit, SHA-pinned actions, sandboxed forked-PR CI). That gate shipped, and as of 2026-06-10 outside contributions are welcome. v0.8 is the latest shipped release; since the tag, more product surfaces (streaming chat, an agent store, an opt-in voice adapter, an onboarding tour, and a Standup view) have landed on `main` ahead of the next cut, and v0.9 (Autonomy and Control) is in planning. [STATUS.md](STATUS.md) has the dated, canonical version of all of this.
 
-You can still help right now, and this feedback is the single most valuable contribution today:
+Ways to get involved, in rough order of impact:
 
-- **Run it against a real workload** and write up what worked and what did not, in [Discussions](https://github.com/Ridou/horus-os/discussions).
+- **Run it against a real workload** and write up what worked and what did not, in [Discussions](https://github.com/Ridou/horus-os/discussions). Real-use feedback still shapes the roadmap more than anything else.
+- **Pick up an issue.** Look for [`good-first-issue`](https://github.com/Ridou/horus-os/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) and [`help-wanted`](https://github.com/Ridou/horus-os/issues?q=is%3Aissue+is%3Aopen+label%3Ahelp-wanted) labels, comment to claim, and the maintainer assigns it. [CONTRIBUTING.md](CONTRIBUTING.md) walks through the whole flow.
 - **File a bug** the moment you hit one, in [Issues](https://github.com/Ridou/horus-os/issues).
 - **Open a design question** in Discussions before it becomes a PR.
 - **Join the [community Discord](https://discord.gg/vwX9WvwQhp)** to ask questions, get help, and share what you built. The `#help` channel is a forum that works as a searchable Q&A, so a good answer stays findable for the next person instead of scrolling away.
-- **Star or watch** the repo to follow releases and the status flip.
+- **Star or watch** the repo to follow releases.
 
-[CONTRIBUTING.md](CONTRIBUTING.md) documents the dev setup, workflow, and code style that will apply once contributions open.
+[CONTRIBUTING.md](CONTRIBUTING.md) documents the dev setup, the claim and review flow, and the code style. horus-os is solo-maintained, so triage targets a weekly pass; [docs/TRIAGE.md](docs/TRIAGE.md) sets honest expectations.
 
 ## Documentation
 

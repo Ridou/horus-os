@@ -1,7 +1,7 @@
 name: Security report (redirect)
 description: Do NOT file security issues in the public tracker. This template redirects you to private vulnerability reporting.
 title: "[security] DO NOT FILE PUBLICLY"
-labels: ["security"]
+labels: ["security-update"]
 body:
   - type: markdown
     attributes:

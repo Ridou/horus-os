@@ -2,69 +2,38 @@
 
 # Contributing to horus-os
 
-<!-- PHASE-59-FLIP: when contributions open, replace the entire Status block (next H2 below) with "Status: open for contributions" and delete the "Future contribution flow (not active yet)" section. The "Future contribution flow (active after v0.6 gate flip)" section becomes the current flow. -->
-## Status: not currently accepting outside contributions
+## Status: open for contributions
 
-`horus-os` is in a solo development phase. The project was
-open-sourced out of a working private command center, and the
-maintainer is moving through the milestones toward the contribution
-gate. v0.6 Contribution Gate and v0.7 Look and Feel + Starter Team
-are both in active development. Outside pull requests are not merged
-yet, and "I want to claim this issue" comments are not assigned yet.
+`horus-os` accepts outside contributions as of 2026-06-10. The
+supply-chain readiness gate that held the door shut (the v0.6
+Contribution Gate milestone: keyless sigstore signing, CycloneDX
+SBOMs, pip-audit scanning, SHA-pinned actions, sandboxed forked-PR
+CI) shipped, and the flow below is live.
 
-This guide stays public so the standards are clear in advance, and so
-contributors can mirror them locally if they want to. **Treat
-everything below as the contract that will apply once the project
-opens for contributions, not as an invitation to open a PR today.**
-
-What you can do today:
+Where to start:
+- **Pick an issue** labeled `good-first-issue` or `help-wanted`, and
+  comment to claim it. The claim flow below explains how assignment
+  works.
 - **File issues** for real bugs you hit running `horus-os` locally.
-- **Open Discussions** for design questions or scope proposals.
-- **Star or watch** the repo to follow along.
-- **Run the project for real** and write up your experience. That
-  feedback is the most valuable input at this stage.
+- **Open Discussions** for design questions or scope proposals
+  before writing code.
+- **Join the [community Discord](https://discord.gg/vwX9WvwQhp)**
+  for questions and help while you work.
+- **Run the project for real** and write up your experience. Real-use
+  feedback still shapes the roadmap more than anything else.
 
-What is not currently accepted:
-- Pull requests from forks. They will be acknowledged and closed.
-- Issue claims ("on it", "working on this", "assign to me"). The
-  maintainer keeps the issue queue and assigns work to themselves.
-- Scope-expansion proposals via PR. Use Discussions instead.
-
-The maintainer will update this banner once the internal
-supply-chain readiness gate is met. That gate is the **v0.6**
-milestone, now in active development; not promised, not scheduled.
+Honest expectations before you start: horus-os is solo-maintained.
+Triage targets a weekly Sunday pass and may go quiet for up to two
+weeks (see `docs/TRIAGE.md`). Every PR runs the full three-OS CI
+matrix, and forked-PR builds run with restricted tokens that never
+see repository secrets.
 
 If anything in this guide is wrong, unclear, or out of date, open an
 issue.
 
-## Future contribution flow (not active yet)
+## Contribution flow
 
-When the project opens up, every incoming PR will go through:
-
-1. **Author vetting.** Maintainer checks GitHub account history and
-   prior public work. First-time contributors get a small intro task
-   (typo fix, doc tweak) before any code review on substantive
-   changes.
-2. **Automated checks.** Incoming PRs run the full CI suite first:
-   lint, the test matrix across macOS, Ubuntu, and Windows on Python
-   3.11 and 3.12, the install-smoke jobs, and the supply-chain scans.
-   Human review starts only after CI is green.
-3. **Sandboxed CI.** Forked-PR CI runs with restricted tokens. No
-   repository secrets are exposed to fork builds.
-4. **Maintainer review.** Human review only after the above gates
-   pass. No auto-merge.
-5. **Graduated trust.** Repeated quality contributions move a
-   contributor from "unknown" to "intro-task-passed" to
-   "reviewed-PR-merged" to "trusted". Trust level affects which
-   labels and review depth apply.
-
-The rest of this document covers the workflow, code style, and
-standards. Everything below is still accurate for code already in
-the repo and for the maintainer's own development.
-
-## Future contribution flow (active after v0.6 gate flip)
-
-When the project opens for contributions, the day-to-day flow is:
+The day-to-day flow is:
 
 1. **Pick or open an issue.** New contributors should look for
    `good-first-issue` and `help-wanted` labels. Read
@@ -82,8 +51,8 @@ When the project opens for contributions, the day-to-day flow is:
    3.12, plus the install-smoke matrix and the supply-chain
    scanning workflow (`pip-audit` dual-mode +
    `dependency-review-action` license allowlist). The release-gate
-   13-check enum must pass for any change that touches the release
-   pipeline.
+   check suite (`scripts/release_gate.py`, 15 checks) must pass for
+   any change that touches the release pipeline.
 5. **Code review.** Path-scoped reviewers are auto-assigned per
    `.github/CODEOWNERS`. Workflow changes, release scripts, and the
    SECURITY policy require the maintainer.
@@ -131,12 +100,12 @@ of them:
 - `.planning/decisions/sbom-cyclonedx.md`: why CycloneDX 1.6 JSON
   is the SBOM format.
 - `.planning/decisions/no-pypi-in-v0.6.md`: why PyPI Trusted
-  Publishing is deferred to v0.7.
+  Publishing was deferred past v0.6 (installs come from source or
+  GitHub Releases for now).
 
 ## Scope check
 
-Before opening a substantial PR (once the project is open for
-contributions), read:
+Before opening a substantial PR, read:
 
 1. `PROJECT.md`, the project intent and out-of-scope list.
 2. `ROADMAP.md`, the current milestone and phases.
@@ -174,7 +143,7 @@ recorded responses and adapters.
 ## Workflow
 
 1. **Pick or open an issue.** New contributors should look for the
-   `good first issue` and `help wanted` labels.
+   `good-first-issue` and `help-wanted` labels.
 2. **Branch from `main`.** Branch names use the pattern
    `<type>/<short-slug>`, for example `feat/streaming-responses` or
    `fix/wizard-windows-paths`. Long-lived forks of project direction

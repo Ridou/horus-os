@@ -5,7 +5,7 @@ description: "How horus-os maintainers triage issues and pull requests, apply th
 
 ## Overview
 
-This page is for maintainers. It summarizes how the project handles the inbound queue (issues and pull requests), the label set used to route work, and the high-level release procedure. horus-os is a solo-maintained, open-source project, so the workflow is deliberately lightweight and honest about timelines.
+This page is for maintainers. It summarizes how the project handles the inbound queue (issues and pull requests), the label set used to route work, and the high-level release procedure. horus-os is a solo-maintained, open-source project that welcomes outside contributions, so the workflow is deliberately lightweight and honest about timelines.
 
 The canonical, full-length versions of these procedures live in the repository:
 

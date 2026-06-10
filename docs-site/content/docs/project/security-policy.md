@@ -16,7 +16,7 @@ For hardening your own deployment, see [Security](/operations/security/).
 
 ## Supported versions
 
-horus-os is pre-1.0 software. Only the most recent minor release receives
+horus-os is pre-1.0 software. The two most recent minor lines receive
 security fixes, on a rolling-window policy: when a new minor ships, the
 oldest still-supported line retires automatically and the supported-versions
 table is updated in the same release.

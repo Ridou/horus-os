@@ -152,6 +152,23 @@ See [Email](/integrations/email/).
 
 See [Calendar](/integrations/calendar/).
 
+## Voice
+
+The voice adapter places outbound calls through Twilio. The call tools register
+only when all three Twilio variables are set, and calling stays disarmed until
+you explicitly opt in with the ask-first gate.
+
+| Variable | Secret | Purpose |
+| --- | --- | --- |
+| `HORUS_OS_TWILIO_ACCOUNT_SID` | No | Twilio account SID. One of the three variables required for the voice tools to register. |
+| `HORUS_OS_TWILIO_AUTH_TOKEN` | Yes | Twilio auth token. One of the three variables required for the voice tools to register. |
+| `HORUS_OS_TWILIO_FROM_NUMBER` | No | The caller-id phone number, in E.164 form. One of the three variables required for the voice tools to register. |
+| `HORUS_OS_VOICE_PUBLIC_BASE_URL` | No | Public base URL Twilio can reach to fetch call instructions and open the media stream (a tunnel works in local development). Required to place a call. |
+| `HORUS_OS_VOICE_CALLS_ALLOWED` | No | The ask-first arming gate for outbound calling. A call is placed only when this equals the exact string `true`, and the handler re-checks it at call time. Unset or any other value keeps calling disarmed, so an agent can never dial out unless you have armed it. |
+| `HORUS_OS_VOICE_NOTIFY_WEBHOOK` | No | Optional URL that receives a JSON notification when a call completes. |
+
+See [Voice](/integrations/voice/).
+
 ## GitHub
 
 | Variable | Secret | Purpose |
@@ -230,6 +247,7 @@ shell history, screenshots, and any browser-facing surface:
 - `HORUS_OS_DISCORD_TOKEN`
 - `HORUS_OS_SLACK_BOT_TOKEN`, `HORUS_OS_SLACK_SIGNING_SECRET`
 - `HORUS_OS_EMAIL_IMAP_PASSWORD`, `HORUS_OS_EMAIL_SMTP_PASSWORD`
+- `HORUS_OS_TWILIO_AUTH_TOKEN`
 - `GITHUB_TOKEN`
 - `SUPABASE_SERVICE_KEY`
 - `HORUS_OS_VERCEL_TOKEN`, `HORUS_OS_TAILSCALE_API_KEY`

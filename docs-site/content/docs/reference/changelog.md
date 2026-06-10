@@ -22,6 +22,10 @@ Landed on `main` after the v0.8.0 tag, shipping in the next tagged cut:
 - **Streaming dashboard chat.** A first-class chat surface that streams tokens live as the team works, over the existing `POST /api/chat/stream` SSE path, with tool-call and done frames surfaced inline.
 - **Agent store and custom-agent builder.** Browse and install featured agent bundles (Atlas, Vitriol, Sol) or build your own with no code. Installs are additive and never overwrite an existing profile.
 - **Voice and reservations adapter** (`[voice]` extra). An opt-in Twilio `VoiceAdapter` for outbound calls and phone reservations, with the SDK imported lazily so a bare install never pulls it. See [the voice adapter](/integrations/voice/).
+- **10-step onboarding tour.** A spotlight overlay that auto-starts on a first visit and walks through every dashboard surface in order. Skippable at any step and replayable from the About page.
+- **Mobile sidebar drawer and agent Standup view.** The dashboard sidebar collapses into a drawer on small screens, and a new Standup page surfaces each agent's reflections, wins, and decisions.
+- **Community Discord.** The project's community server is now linked from the README, the site, and the docs.
+- **Looser onnxruntime pin for `[local-memory]`.** The upper cap rises to `<1.24.0`, the real Intel-macOS wheel boundary (1.23.x still ships x86_64 wheels; 1.24.1+ is arm64 only).
 
 ## v0.8.0 (2026-06-03) Local-first and Autonomous Research
 

@@ -62,24 +62,28 @@ export GEMINI_API_KEY=your-api-key
 
 ## 3. Run your first prompt
 
-Hand your team a goal in plain language. The Coordinator routes the work and synthesizes a single answer:
+Hand the runtime a prompt in plain language. The default run streams the model's answer straight to your terminal:
 
 ```bash
-horus-os run "Summarize today's notes and list the open TODOs."
+horus-os run "Explain what a good daily status update contains."
 ```
 
-By default the response streams to your terminal, and the run is recorded as a trace. When it finishes you see a one-line footer with the provider, model, and latency.
+By default the response streams live and the run is recorded as a trace. When it finishes you see a one-line footer with the provider, model, and latency. The default streaming run executes no tools, so it cannot read or write your vault.
+
+For a goal that should actually touch your notes, pass `--no-stream`. The buffered path runs the built-in tool loop (listing, searching, reading, and writing notes), prints the final answer, and then reports each tool call it made:
+
+```bash
+horus-os run --no-stream "Summarize today's notes and list the open TODOs."
+```
 
 A few useful flags on `run`:
 
-- `--no-stream` buffers the full response before printing it, and also reports each tool call.
+- `--no-stream` buffers the full response, executes the built-in tools, and reports each tool call.
 - `--no-record` skips persisting a trace row for this run.
 - `--provider anthropic` or `--provider gemini` overrides the default provider from your config.
 - `--model your-model-id` overrides the default model.
 
-```bash
-horus-os run --no-stream "Read my project notes and list the open risks."
-```
+For the full picture of what each path can do, see [First team run](/getting-started/first-team-run/).
 
 > [!TIP]
 > If you see `No API key found`, set `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` in your environment, or re-run `horus-os init --interactive`.
@@ -108,7 +112,7 @@ Start the bundled local web dashboard:
 horus-os serve
 ```
 
-By default it binds to `http://127.0.0.1:8765`. Open that URL in a browser to see the team org view, a markdown memory browser, a live activity timeline, the traces explorer, and a costs and observability page. The dashboard talks only to your local backend; there is no hosted service behind it.
+By default it binds to `http://127.0.0.1:8765`. Open that URL in a browser to reach the full command center: streaming chat, the team org view, the agent store, a markdown memory browser, tasks, research, a live activity timeline, the Standup view, the traces explorer, costs, and integrations. See [Using the dashboard](/guides/dashboard/) for a page-by-page tour. The dashboard talks only to your local backend; there is no hosted service behind it.
 
 Change the bind address with `--host` and `--port`:
 
