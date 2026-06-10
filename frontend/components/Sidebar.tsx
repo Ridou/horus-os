@@ -18,10 +18,13 @@ import {
   Settings,
   Info,
   BookText,
+  Sparkles,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isDemoMode } from "@/lib/api";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 
 /** Public community Discord invite. */
 const DISCORD_URL = "https://discord.gg/vwX9WvwQhp";
@@ -58,6 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/research", label: "Research", icon: Telescope },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/standup", label: "Standup", icon: Sparkles },
   { href: "/traces", label: "Traces", icon: Network },
   { href: "/costs", label: "Costs", icon: DollarSign },
   { href: "/integrations", label: "Integrations", icon: Plug },
@@ -70,28 +74,70 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  /**
+   * Whether the mobile drawer is open. Ignored at the md breakpoint and up,
+   * where the sidebar is always a persistent static column.
+   */
+  open?: boolean;
+  /**
+   * Called when a nav link or the close control is activated, so the parent
+   * can dismiss the mobile drawer. No-op on desktop.
+   */
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ open = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const isDesktop = useIsDesktop();
+  // On mobile the closed drawer is only translated off-screen, which leaves its
+  // links in the tab order and the accessibility tree. Mark it inert so keyboard
+  // and screen-reader users do not land on invisible controls. The desktop
+  // column (and the open drawer) stay fully interactive.
+  const collapsed = !isDesktop && !open;
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border-subtle bg-bg-secondary">
-      {/* Logo + wordmark */}
-      <Link
-        href="/"
-        className="flex items-center gap-2.5 border-b border-border-subtle px-4 py-4"
-      >
-        <Image
-          src="/horus-eye.svg"
-          alt="horus-os"
-          width={28}
-          height={21}
-          priority
-          className="status-pulse"
-        />
-        <span className="text-base font-bold tracking-tight text-text-primary">
-          horus<span className="text-accent-cyan">-os</span>
-        </span>
-      </Link>
+    <aside
+      id="app-sidebar"
+      aria-label="Primary"
+      aria-hidden={collapsed || undefined}
+      inert={collapsed || undefined}
+      className={cn(
+        // Mobile: fixed off-canvas drawer that slides in from the left.
+        "fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col border-r border-border-subtle bg-bg-secondary transition-transform duration-200 ease-out",
+        // Desktop: persistent static column, always on screen.
+        "md:static md:z-auto md:w-56 md:translate-x-0 md:transition-none",
+        open ? "translate-x-0" : "-translate-x-full",
+      )}
+    >
+      {/* Logo + wordmark, with a close control on mobile */}
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-4">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className="flex items-center gap-2.5"
+        >
+          <Image
+            src="/horus-eye.svg"
+            alt="horus-os"
+            width={28}
+            height={21}
+            priority
+            className="status-pulse"
+          />
+          <span className="text-base font-bold tracking-tight text-text-primary">
+            horus<span className="text-accent-cyan">-os</span>
+          </span>
+        </Link>
+        <button
+          type="button"
+          onClick={onNavigate}
+          aria-label="Close navigation menu"
+          className="-mr-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-bg-elevated hover:text-text-primary md:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
@@ -102,6 +148,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition-colors",

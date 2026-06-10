@@ -20,4 +20,6 @@ export const queryKeys = {
   researchProgress: (id: string) => ["research-progress", id] as const,
   researchReport: (id: string) => ["research-report", id] as const,
   storeBundles: () => ["store-bundles"] as const,
+  reflections: (view: string, agent: string) =>
+    ["reflections", view, agent] as const,
 };

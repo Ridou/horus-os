@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import { queryKeys } from "./query-keys";
+import type { ReflectionView } from "./types";
 
 /** GET /api/team */
 export function useTeam() {
@@ -140,6 +141,14 @@ export function useTasks(status = "") {
   return useQuery({
     queryKey: queryKeys.tasks(status),
     queryFn: () => api.tasks(status),
+  });
+}
+
+/** GET /api/reflections?view=&agent= for the Standup section. */
+export function useReflections(view: ReflectionView = "feed", agent = "") {
+  return useQuery({
+    queryKey: queryKeys.reflections(view, agent),
+    queryFn: () => api.reflections(view, agent),
   });
 }
 
