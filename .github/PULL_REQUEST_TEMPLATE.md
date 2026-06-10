@@ -1,11 +1,8 @@
 <!--
-NOTICE: horus-os is in a solo development phase and is NOT currently
-accepting outside pull requests. PRs from forks will be acknowledged
-and closed without review. See README.md "Project status" section
-and CONTRIBUTING.md.
-
-If you are the maintainer working from a local branch, ignore this
-notice and fill out the template.
+Thanks for contributing. Substantial changes should start from an
+assigned issue (comment to claim, the maintainer assigns); see
+CONTRIBUTING.md for the flow. CI must be green across the three-OS
+matrix before human review starts.
 
 Drafts are welcome; mark the PR as Draft if it's not ready for review.
 -->

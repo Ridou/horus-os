@@ -36,12 +36,15 @@ Per trace (rolled up onto `traces` on `RUN_END`):
 - `total_input_tokens`, `total_output_tokens`
 - `total_cost_usd`, `total_duration_ms`
 
-Everything lives in `$HORUS_OS_HOME/horus.sqlite`. Open it with
-any SQLite client; nothing is hidden behind a binary protocol.
+Everything lives in `<data_dir>/horus.sqlite`, where the data
+directory is the platform default or the `HORUS_OS_DATA_DIR`
+override. Open it with any SQLite client; nothing is hidden behind
+a binary protocol.
 
-## How to read the /observability dashboard
+## How to read the Costs dashboard
 
-Open `http://localhost:8000/observability`. Three panels:
+Run `horus-os serve` and open `http://127.0.0.1:8765`, then the
+Costs page. Three panels:
 
 - **Cost by agent** (bar chart, sorted high to low).
 - **Latency p50 and p95** (table per model).
@@ -60,8 +63,9 @@ A small-sample guard renders a placeholder dash for cells with
 fewer than 10 samples; statistics with too little data are not
 shown so they cannot mislead.
 
-The existing `/agents` tab gains three new columns sourced from
-the same rollups: `total_cost_usd`, `latency_p50`, `latency_p95`.
+The Team page surfaces the same rollups per agent
+(`total_cost_usd`, `latency_p50`, `latency_p95`) on each agent's
+detail view.
 
 ## How to use the horus-os usage CLI
 
@@ -162,7 +166,7 @@ New traces created on v0.4 populate the columns as agents run.
 
 - `docs/MIGRATION-v0.3-to-v0.4.md`: upgrade notes from v0.3,
   including the schema migration and the inherited bug fixes.
-- `docs/CLI.md`: full CLI reference; `horus-os usage` JSON output
+- `docs/CLI.md`: CLI overview and the `horus-os usage` JSON output
   schema.
 - `docs/OTEL.md`: opt-in OpenTelemetry adapter setup and threat
   model.

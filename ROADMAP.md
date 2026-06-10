@@ -23,11 +23,13 @@ For the live phase pointer read `.planning/STATE.md`. For the public status page
 
 v0.8 is the latest tagged release (`v0.8.0`, 2026-06-03, SQLite schema v13). v0.1 through v0.8 have all shipped. v0.6 (Contribution Gate) was folded into the contribution-readiness work and never tagged on its own, so `v0.7.0` follows `v0.5.0` directly in the tag history.
 
-Since the v0.8.0 tag, three product surfaces have landed on `main` and currently sit unreleased in the changelog `[Unreleased]` section. They ship in the next tagged cut:
+Since the v0.8.0 tag, several product surfaces have landed on `main` and currently sit unreleased in the changelog `[Unreleased]` section. They ship in the next tagged cut:
 
 - A streaming chat surface in the dashboard.
 - An agent store with featured bundles and a no-code custom-agent builder.
 - An optional Twilio voice and reservations adapter behind the `[voice]` extra.
+- A 10-step onboarding tour with a visible spotlight across the dashboard.
+- A mobile sidebar drawer and an agent Standup view.
 
 ## Next milestone: v0.9 Autonomy and Control
 

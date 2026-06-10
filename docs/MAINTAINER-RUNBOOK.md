@@ -1,12 +1,12 @@
 # Maintainer runbook
 
-Single doc covering BOTH the v0.6.0 release procedure AND the post-flip operational playbook for `horus-os`. Lives here instead of in `docs/RELEASE.md` because the operational content is broader than a single release.
+Single doc covering BOTH the release procedure AND the operational playbook for `horus-os`. Lives here instead of in `docs/RELEASE.md` because the operational content is broader than a single release.
 
 For the v0.5 era step-by-step release sequence (pricing refresh, release gate, version bumps, CHANGELOG promotion, tag, GitHub Release), see `docs/RELEASE.md`. This runbook extends that doc with the Phase 52 + 53 substrate (release.yml runs, signed-tag procedure, SBOM attestations).
 
-## Part 1: v0.6.0 release procedure
+## Part 1: release procedure (v0.6+ substrate, used for v0.7.0 and v0.8.0)
 
-The v0.5-era procedure in `docs/RELEASE.md` Section "Release procedure" stays as-is for steps 1 through 6. Phase 52 inserts a new step 6.5, modifies step 7, and adds post-tag verification.
+The base procedure in `docs/RELEASE.md` Section "Release procedure" stays as-is for steps 1 through 6. The v0.6 hardening work inserted step 6.5, modified step 7, and added post-tag verification.
 
 ### Step 6.5: confirm gitsign is configured
 
@@ -105,7 +105,7 @@ Expect exit 0 and the identity line matches `https://github.com/Ridou/horus-os/.
 
 ## Part 2: post-flip operational playbook
 
-After the v0.6.0 atomic gate flip lands (Phase 59), contributions are open. This section is the operational playbook for handling the queue.
+Contributions are open (the v0.6 gate flipped on 2026-06-10). This section is the operational playbook for handling the queue.
 
 ### Freeze triggers
 
@@ -125,7 +125,7 @@ Below freeze, but enough load that PRs accumulate faster than they can be review
 - More than 5 open external PRs awaiting first review for >7 days.
 - More than 2 weeks of accumulated "weekly Sunday triage" backlog (see `docs/TRIAGE.md`).
 
-Throttle by labeling new PRs `accepted-for-review` only after a first-pass scope check. Unlabelled PRs sit in a "received but not yet promised" pool. Communicate the throttle in the Discussion post.
+Throttle by labeling new PRs `accepted` only after a first-pass scope check. Unlabelled PRs sit in a "received but not yet promised" pool. Communicate the throttle in the Discussion post.
 
 ### Burnout triggers
 
@@ -153,7 +153,7 @@ The matrix exists so close decisions are documented in the maintainer's notes, n
 
 ## Part 3: one-time repo settings checklist
 
-See `docs/RELEASE.md` "One-time repo settings checklist (v0.6 contribution-gate setup)" for the canonical list with `gh api` verification commands.
+See `docs/RELEASE.md` "One-time repo settings checklist (contribution-gate setup)" for the canonical list with `gh api` verification commands.
 
 This runbook references the checklist by pointer because the release procedure is the canonical place the maintainer reads when shipping; repeating the checklist here would create drift.
 
@@ -172,7 +172,7 @@ Configure these categories via the Discussions UI:
 - **Show and Tell**: user-built things on top of horus-os. Show-don't-tell shape.
 - **Ideas**: future-direction proposals that are not yet concrete enough for an issue. Issues belong in the issue tracker; ideas live here while the shape is still negotiable.
 
-The pinned "Project Status" Discussion post is created at v0.6.0 ship time as part of Phase 59 (DISCGH-02 owner). The category for that post is General; the title is "Project Status: v0.6.0 ships <date>"; the body mirrors the README "Project status" section.
+The pinned "Project Status" Discussion post lives in Announcements with the title "Project Status (pinned)"; the body mirrors `.github/DISCUSSION_STATUS_POST.md` and gets a reply whenever `STATUS.md` changes.
 
 ## Part 5: rollback procedure
 

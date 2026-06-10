@@ -9,7 +9,10 @@ macOS, Linux, and Windows.
 ## Install with pip
 
 The fastest way to a working install is the `all` extra, which pulls both AI
-providers, the dashboard, and the common integrations in one command:
+providers, the dashboard, and the common integrations in one command. (`all`
+includes the `voice` extra, but it deliberately does not bundle
+`local-memory`, `discord`, `supabase`, `vercel`, or `github`; add those
+explicitly if you want them.)
 
 ```bash
 pip install 'horus-os[all]'
@@ -44,6 +47,7 @@ does not need. Combine them in one set of brackets, for example
 | `discord` | The Discord adapter and control bot |
 | `slack` | The Slack adapter |
 | `calendar` | The Google Calendar adapter |
+| `voice` | The opt-in Twilio [voice and reservations adapter](/integrations/voice/) (outbound calls) |
 | `supabase` | The optional Supabase sync loop |
 | `vercel` | The Vercel deploy-status surface |
 | `github` | The read-only GitHub tool |

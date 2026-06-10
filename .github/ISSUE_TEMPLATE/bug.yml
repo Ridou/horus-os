@@ -6,24 +6,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
-        ### Heads-up: this repo is not accepting outside PRs yet
-
-        Filing this bug does **not** assign you to fix it. The
-        maintainer holds the issue queue and assigns all work
-        internally. Issue-claim comments ("on it", "claim this",
-        "assign to me") are not honored, and an automation will
-        reply to common claim phrasing.
-
-        See
-        [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
-        for the project timeline and the gate for when outside
-        contributions open (earliest v0.6, not promised).
-
-        Reproducible bug reports are still the single most useful
-        thing an outside reader can submit, so please do file the
-        bug if you hit one. The fields below are the required
-        signal for triage.
+        Reproducible bug reports are among the most useful things
+        you can submit. If you would also like to fix the bug
+        yourself, say so in a comment after filing; the maintainer
+        reviews claims and assigns per
+        [CONTRIBUTING.md](https://github.com/Ridou/horus-os/blob/main/CONTRIBUTING.md).
+        The fields below are the required signal for triage.
 
   - type: markdown
     attributes:
@@ -75,7 +63,7 @@ body:
     attributes:
       label: horus-os version
       description: Output of `pip show horus-os | grep Version`, or commit SHA.
-      placeholder: "0.6.0"
+      placeholder: "0.8.0"
     validations:
       required: true
 

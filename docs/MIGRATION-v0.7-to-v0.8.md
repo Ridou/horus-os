@@ -26,8 +26,11 @@ The optional `[local-llm]` extra adds an OpenAI-compatible provider
 that points at any local server (Ollama, llama.cpp, LM Studio, vLLM,
 OpenRouter) through a single `base_url` override. The provider is
 constructed lazily, so a bare install never imports the `openai` SDK.
-Set `HORUS_OS_LOCAL_BASE_URL` and `HORUS_OS_LOCAL_MODEL` to wire the
-endpoint, then run `horus-os doctor --local` to validate the base URL
+Set `HORUS_OS_LOCAL_BASE_URL` (or `base_url` under `[local]` in
+`<data_dir>/config.toml`) to wire the endpoint, set the model name via
+`model` under the same `[local]` table, and optionally set
+`HORUS_OS_LOCAL_API_KEY` for servers that require one. Then run
+`horus-os doctor --local` to validate the base URL
 (a wildcard bind is rejected so the model API is not exposed to the
 LAN) and live-probe the endpoint. No key ever prints.
 
@@ -204,15 +207,19 @@ byte-identical under v0.8.
 ## Verification
 
 The migration ran successfully when the SQLite `schema_version` table
-reports 12:
+reports 13:
 
 ```
-sqlite3 ~/.horus-os/horus.sqlite "SELECT version FROM schema_version"
+sqlite3 <data_dir>/horus.sqlite "SELECT version FROM schema_version"
 ```
 
-Expected output: `12`. Later releases bump this number as they add
-additive tables, so a value above `12` is also healthy. If the value
-is `11`, the v0.8 runtime did not finish its startup migration. Check
+`<data_dir>` defaults to `~/Library/Application Support/horus-os` on
+macOS, `%APPDATA%\horus-os` on Windows, and `~/.local/share/horus-os`
+on Linux, unless overridden via `HORUS_OS_DATA_DIR`.
+
+Expected output: `13`. Later releases bump this number as they add
+additive tables, so a value above `13` is also healthy. If the value
+is `12`, the v0.8 runtime did not finish its startup migration. Check
 the server logs for the migration error and re-run `horus-os serve`.
 
 ## See also
@@ -222,5 +229,3 @@ the server logs for the migration error and re-run `horus-os serve`.
   threat model.
 - `docs/MIGRATION-v0.4-to-v0.5.md`: the prior migration guide this one
   mirrors.
-</content>
-</invoke>

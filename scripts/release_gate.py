@@ -1213,7 +1213,7 @@ def main(argv: list[str] | None = None) -> int:
         default="release",
         help=(
             "Tier filter (v0.6 / Phase 57): 'local' restricts to the 4 grep-only "
-            "Phase 57 checks (<10s); 'release' (default) runs all 13 checks."
+            "Phase 57 checks (<10s); 'release' (default) runs all 15 checks."
         ),
     )
     parser.add_argument(

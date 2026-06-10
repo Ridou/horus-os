@@ -85,10 +85,10 @@ must be reachable from the internet on HTTPS. Slack will not
 accept an `http://` or a `localhost` request URL.
 
 1. Start the server locally so the tunnel has something to point
-   at: `horus-os serve`. Note the port it listens on (8000 by
+   at: `horus-os serve`. Note the port it listens on (8765 by
    default).
 2. For local development, open a tunnel to that port. With ngrok:
-   `ngrok http 8000`. Copy the `https://xxxx.ngrok.app` address it
+   `ngrok http 8765`. Copy the `https://xxxx.ngrok.app` address it
    prints; that is your public host for steps 7 and 8.
 3. For a server deployment instead, put the process behind a
    reverse proxy that terminates TLS (Caddy, nginx, or Cloudflare
@@ -254,10 +254,10 @@ The env var is empty or unset in the process that started
 the server, the existing server process did not inherit it.
 Restart the server.
 
-## What the adapter does NOT do (v0.3)
+## What the adapter does NOT do
 
-- Socket Mode (persistent WebSocket via an `xapp-` token). v0.3
-  ships HTTP-only
+- Socket Mode (persistent WebSocket via an `xapp-` token). The
+  adapter is HTTP-only
 - Interactive components: buttons, modals, view submissions
 - `response_url` deferred replies for slash commands (Slack's
   3-second window applies)

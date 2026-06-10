@@ -1,6 +1,6 @@
 ---
 title: "Using the dashboard"
-description: "Start the local horus-os web dashboard with horus-os serve and tour its pages, from Home and Team to Traces, Costs, and Settings."
+description: "Start the local horus-os web dashboard with horus-os serve and tour its pages, from Home, Chat, and Team to Standup, Traces, Costs, and Settings."
 ---
 
 ## What the dashboard is
@@ -33,13 +33,23 @@ If you have not initialized your instance yet, run `horus-os init` first so the 
 
 The sidebar lists the dashboard's pages. Each one is a different view onto the same local instance.
 
+On your first visit the dashboard starts a 10-step onboarding tour: a spotlight overlay highlights each surface in turn and walks you through the pages in order. You can skip it at any step, and replay it any time from the About page.
+
 ### Home
 
 The landing view for your instance. It gives you an at-a-glance entry point into the rest of the dashboard.
 
+### Chat
+
+Talk to your team in the browser. Pick an agent (or use the default), watch the reply stream back token by token, and see any tool calls inline; every assistant turn links to the trace it produced. See [Chat](/getting-started/chat/).
+
 ### Team
 
 Your agents as an organization. The Team view shows the agent roster (the Coordinator and its specialists) and how they relate, so you can see who delegates to whom. A fresh install seeds five generic agents you can rename, re-persona, or delete. See [The agent team](/concepts/agent-team/).
+
+### Store
+
+The agent store. Install a featured agent bundle in one click, or build a custom agent from a form with no code. Installed agents join your team and are available in chat like any profile you built by hand. See [Agent store](/guides/agent-store/).
 
 ### Memory
 
@@ -56,6 +66,10 @@ The surface for autonomous research runs, where the team gathers, analyzes, and 
 ### Activity
 
 A live timeline of what every agent did, in order. Use it to watch a run unfold and to review recent actions across the team.
+
+### Standup
+
+The team's reflections surface. A feed of each agent's improvement ideas, wins, risks, and questions, with a Growth tab for shipped wins and a Decisions tab recording what you accepted or dismissed, and why.
 
 ### Traces
 
@@ -75,7 +89,7 @@ Configuration for your instance, surfaced in the browser.
 
 ### About
 
-Build and version information for your dashboard.
+Build and version information for your dashboard, plus the button that replays the onboarding tour.
 
 ## Where the data lives
 

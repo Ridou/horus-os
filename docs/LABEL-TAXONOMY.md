@@ -25,7 +25,7 @@ The `horus-os` CLI surface (subcommands, argparse, init wizard, usage output).
 Triaged and confirmed in-scope. The maintainer intends to land a fix or feature for this. Adding `accepted` is the maintainer's commitment; do not add this label until that commitment is honest.
 
 ### `claimed`
-Assigned to a specific contributor (active post-v0.6-gate-flip). Pre-flip, the maintainer assigns all issues to themselves; this label is unused pre-flip.
+Assigned to a specific contributor. The maintainer adds this label when accepting a claim; until it lands, the issue is not reserved. Removed if no draft PR appears within 7 days.
 
 ### `blocked`
 Cannot proceed until something else lands. Always paired with a comment explaining the block (an upstream issue link, a related horus-os issue number, or a date / external event the block resolves on).

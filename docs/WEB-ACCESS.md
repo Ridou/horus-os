@@ -101,11 +101,11 @@ automated access.
 
 ## Uploads (images and PDFs)
 
-The dashboard chat surface has a file-upload affordance: an attach button next
-to Send. Selecting an image or PDF POSTs it as multipart form data to
+Clients upload an image or PDF as multipart form data to
 `POST /api/uploads`, which stores it under `<data_dir>/uploads/` with a
-uuid-based filename and returns the absolute path. The path is prepended to your
-chat message so the agent can call the `analyze_file` tool on it. The uploads
+uuid-based filename and returns the absolute path. Reference that path in a
+chat message (or any agent prompt) so the agent can call the `analyze_file`
+tool on it. The uploads
 route enforces a content-type allowlist (PNG, JPEG, GIF, WebP, PDF), a size cap,
 and a stored filename derived from the validated content type rather than the
 client filename, so a crafted filename cannot escape the uploads directory. The

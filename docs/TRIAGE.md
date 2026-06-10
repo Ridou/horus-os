@@ -62,14 +62,15 @@ Bad examples: anything in `src/horus_os/agent/` (runtime); anything that require
 
 Good examples: typo fix in a docstring; adding a missing test for an existing feature; small CLI usage-string improvement.
 
-## Claim flow (active after v0.6 gate flip)
+## Claim flow
 
-Pre-flip: the maintainer assigns all issues to themselves. Outside claims are not honored; the issue template heads-up banner repeats this.
+Contributions opened on 2026-06-10 (the v0.6 gate flip). The claim flow is:
 
-Post-flip (Phase 59):
 1. Comment on the issue: "I'd like to take this." The maintainer reviews recent contribution history and, for first-time contributors, may suggest a smaller intro task first.
 2. Maintainer adds the `claimed` label and assigns the issue. Until assigned, the issue is not claimed.
 3. The contributor opens a draft PR within 7 days. If the PR does not appear, the `claimed` label is removed and the issue returns to the queue.
+
+An automation (`.github/workflows/issue-claim-watcher.yml`) acknowledges claim-style comments immediately so claimers learn the flow without waiting for the next triage pass.
 
 ## Saved replies
 

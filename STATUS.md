@@ -8,28 +8,30 @@ yet?" question has a clear, dated answer.
 For the deep planning detail, read `ROADMAP.md` and `.planning/`.
 For release contents, read `CHANGELOG.md`.
 
-**Last updated:** 2026-06-03.
+**Last updated:** 2026-06-10.
 
 ## TL;DR
 
-- horus-os is in **solo development mode**. v0.1 through v0.8 have
-  shipped. v0.6 (Contribution Gate) was never tagged; v0.7 and v0.8
-  shipped on 2026-06-03. See `CHANGELOG.md` for what is in each release.
-- Since the v0.8.0 tag, three product surfaces (a streaming dashboard
-  chat, an agent store, and an opt-in Twilio voice adapter) have landed
-  on `main` and sit unreleased in the changelog `[Unreleased]` section.
-  They ship in the next tagged cut. The next planned milestone is
+- horus-os is **open for outside contributions** as of 2026-06-10.
+  The supply-chain readiness gate (the v0.6 Contribution Gate
+  milestone) shipped, and the contribution flow in `CONTRIBUTING.md`
+  is live.
+- v0.1 through v0.8 have shipped. v0.6 (Contribution Gate) was never
+  tagged; v0.7 and v0.8 shipped on 2026-06-03. See `CHANGELOG.md` for
+  what is in each release.
+- Since the v0.8.0 tag, more product surfaces (a streaming dashboard
+  chat, an agent store, an opt-in Twilio voice adapter, a 10-step
+  onboarding tour, and an agent Standup view) have landed on `main`
+  and sit unreleased in the changelog `[Unreleased]` section. They
+  ship in the next tagged cut. The next planned milestone is
   **v0.9, Autonomy and Control** (planned, not yet committed to phases).
-- Outside pull requests are **not being merged yet**. Issue claim
-  comments ("on it", "claim this", "assign to me") are **not honored
-  yet**.
-- The project opens for outside contributions once an internal
-  supply-chain readiness gate is met. Not promised, not scheduled.
-- You can, and this is the most valuable input right now: file bug
-  reports, open Discussions, star or watch the repo, and run
-  horus-os locally and report what worked.
-- You cannot yet: open PRs from a fork, claim issues, or get assigned
-  to work.
+- You can now: claim issues labeled `good-first-issue` or
+  `help-wanted` (comment to claim, the maintainer assigns), open PRs
+  from a fork against assigned issues, and propose features through
+  Discussions.
+- Still the most valuable input: file bug reports, open Discussions,
+  star or watch the repo, and run horus-os locally and report what
+  worked.
 
 ## Milestone timeline
 
@@ -40,17 +42,18 @@ For release contents, read `CHANGELOG.md`.
 | v0.3 Adapter Ecosystem | Discord, Slack, Email, Calendar adapters, lifecycle hooks, dashboard adapters view | **SHIPPED** | `v0.3.0` | 2026-05-24 |
 | v0.4 Observability | Cost tracking, latency, tool reliability, observability dashboard tab, opt-in OTel exporter, `horus-os usage` CLI | **SHIPPED** | `v0.4.0` | 2026-05-26 |
 | v0.5 Plugin System | Third-party tools and adapters loadable from a `horus-plugin.toml` manifest. Default-deny capability grants, two-phase installer, `/plugins` dashboard tab, per-plugin observability, reference plugin. | **SHIPPED** | `v0.5.0` | 2026-05-27 |
-| v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, release-gate extended to 13 checks. The readiness gate for opening outside contributions. | **SHIPPED** | never tagged (skipped; v0.7.0 follows v0.5.0) | 2026-06-02 |
+| v0.6 Contribution Gate | Supply-chain hardening: keyless sigstore signing, CycloneDX SBOMs, pip-audit, SHA-pinned actions, refreshed contributor docs, an extended release gate. The readiness gate that opened outside contributions on 2026-06-10. | **DELIVERED** | never tagged (skipped; v0.7.0 follows v0.5.0) | 2026-06-02 |
 | v0.7 Command Center | A bundled Next.js dashboard, a seeded five-agent starter team with SOUL personas, an example vault, eye-of-Horus branding, a unified marketing and demo site, a Discord control bot, a Supabase sync loop, a cron scheduler with an always-on service, and a Vercel deploy path. | **SHIPPED** | `v0.7.0` | 2026-06-03 |
 | v0.8 Local-first and Autonomous Research | Local LLM provider, on-device vector memory via `sqlite-vec`, MCP client, web access and search, vision and PDF analysis, a Deep Research flagship workflow, a skills system, gated shell execution, the `[research]` meta-extra. (A streaming dashboard chat, an agent store, and an opt-in Twilio voice adapter landed on `main` after the tag and are unreleased.) | **SHIPPED** | `v0.8.0` | 2026-06-03 |
 | v0.9 Autonomy and Control | Event and lifecycle-hook substrate, monetary budgets that pause on breach, risk-tiered approvals, secrets redaction, priority execution lanes, watch rules, controlled overnight autonomy, and a minimal supervision surface (approvals queue, unified inbox, run-liveness watchdog). | **PLANNED** | (none) | program drafted 2026-06-03 |
 
 State legend: **SHIPPED** means tagged and on the Releases page.
-**IN DEVELOPMENT** means the roadmap is committed and phases are
-executing, but it is not tagged yet. **PLANNED** means a program-level
-roadmap exists but the milestone is not yet broken into committed
-phases. **NOT PLANNED** means scope is sketched with no commitment and
-no schedule.
+**DELIVERED** means the milestone's scope landed on `main` but no tag
+was cut. **IN DEVELOPMENT** means the roadmap is committed and phases
+are executing, but it is not tagged yet. **PLANNED** means a
+program-level roadmap exists but the milestone is not yet broken into
+committed phases. **NOT PLANNED** means scope is sketched with no
+commitment and no schedule.
 
 ## Recently shipped
 
@@ -81,13 +84,15 @@ features. Each capability lives behind its own optional extra.
   lists it in `allowed_tools`.
 - `[research]` meta-extra: installs the full local-first stack at once.
 
-Three product surfaces on top of the v0.8 core landed on `main` after
-the v0.8.0 tag and currently sit in the changelog `[Unreleased]`
+Several product surfaces on top of the v0.8 core landed on `main`
+after the v0.8.0 tag and currently sit in the changelog `[Unreleased]`
 section, so they are not part of v0.8.0 itself and ship in the next
 tagged cut: a streaming chat surface in the dashboard that streams
 tokens live as the team works; an agent store with featured bundles
-(Atlas, Vitriol, Sol) and a custom-agent builder; and an optional
-Twilio voice and reservations adapter behind the `[voice]` extra.
+(Atlas, Vitriol, Sol) and a custom-agent builder; an optional Twilio
+voice and reservations adapter behind the `[voice]` extra; a 10-step
+onboarding tour across the dashboard; and a mobile sidebar drawer
+plus an agent Standup view.
 
 The SQLite schema advanced from v12 to v13 (additive and idempotent):
 two new tables (`skills`, `shell_invocations`). v0.7 databases load
@@ -138,25 +143,29 @@ analysis in `.planning/research/v0.9-gap-analysis.md`.
    the maintainer is actively working on).
 4. **Subscribe to the pinned "Project Status" Discussion** for
    forward-looking updates without a commit.
+5. **Join the [community Discord](https://discord.gg/vwX9WvwQhp)**
+   for questions, help, and release chatter; the `#help` channel is
+   a searchable forum.
 
-## When collaboration opens
+## Collaboration is open
 
-The project opens for outside contributions once an internal
-supply-chain readiness gate is met. When that gate is met, this page
-flips first, and the pinned Discussion gets a follow-up reply.
-`CONTRIBUTING.md` already documents the full standards and the
-day-to-day flow that will apply, so you can read them in advance.
+As of 2026-06-10 the project accepts outside contributions.
+`CONTRIBUTING.md` documents the full standards and the day-to-day
+flow: pick an issue labeled `good-first-issue` or `help-wanted`,
+comment to claim it, the maintainer assigns it, and a draft PR is
+expected within 7 days. Every PR runs the full three-OS CI matrix
+plus the supply-chain scans before human review.
 
-Why the gate exists: horus-os was open-sourced from a working
-private command center that runs against the maintainer's real
-data and home PC. One bad merge could compromise that PC, the
-downstream package, or both. A readiness gate is the precondition
-for any open contribution model.
+Why there was a gate: horus-os was open-sourced from a working
+private command center that runs against real data. The v0.6
+Contribution Gate milestone (keyless sigstore signing, CycloneDX
+SBOMs, pip-audit, SHA-pinned actions, sandboxed forked-PR CI)
+existed so that opening the door would not put the downstream
+package or any user at risk. That gate shipped, so the door is open.
 
-Until then, the most valuable outside contribution is **real-use
-feedback in Discussions**. Run horus-os against a real workload
-and write up what worked and what did not. That feedback shapes
-the roadmap.
+Real-use feedback is still gold: run horus-os against a real
+workload and write up what worked and what did not in Discussions.
+That feedback shapes the roadmap.
 
 ## Shipped milestone detail
 

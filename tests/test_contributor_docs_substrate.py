@@ -4,10 +4,10 @@ Lints the contributor-docs + templates substrate landed in Phase 55:
 decision files, CODEOWNERS, issue templates, CONTRIBUTING.md refresh,
 docs/TRIAGE.md + docs/LABEL-TAXONOMY.md, PROJECT.md key-decisions table.
 
-The autonomous-run rule forbids deleting the NOTICE block in the PR
-template and the "Status: not currently accepting" block in
-CONTRIBUTING.md (Phase 59 atomic flip territory). Tests assert those
-blocks remain INTACT.
+The contribution gate flipped open on 2026-06-10. The pre-flip
+tripwires (PHASE-59-FLIP markers, the closed-status notice blocks)
+are inverted: tests now assert the OPEN state and that the closed
+prose stays gone.
 
 No em-dashes anywhere (CLAUDE.md HR3).
 """
@@ -157,19 +157,24 @@ def test_label_taxonomy_has_saved_replies() -> None:
 # CONTRIB-01: CONTRIBUTING.md refresh
 
 
-def test_contributing_md_phase_59_flip_marker() -> None:
+def test_contributing_md_phase_59_flip_executed() -> None:
+    """The gate flipped 2026-06-10: the staged marker must be gone."""
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert "PHASE-59-FLIP:" in text, (
-        "CONTRIB-01: CONTRIBUTING.md must contain PHASE-59-FLIP staged-marker comment"
+    assert "PHASE-59-FLIP:" not in text, (
+        "CONTRIB-01: the PHASE-59-FLIP staged-marker comment must be removed now that the "
+        "contribution gate is open"
     )
 
 
-def test_contributing_md_preserves_existing_notice() -> None:
-    """Autonomous-run hard rule: the NOTICE / Status block stays until Phase 59 atomic flip."""
+def test_contributing_md_declares_open_status() -> None:
+    """Post-flip invariant: CONTRIBUTING.md declares contributions open, not closed."""
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert "Status: not currently accepting outside contributions" in text, (
-        "Autonomous-run rule: the existing 'Status: not currently accepting' heading MUST NOT "
-        "be deleted by Phase 55; Phase 59 is the atomic flip commit territory"
+    assert "Status: open for contributions" in text, (
+        "CONTRIBUTING.md must carry the 'Status: open for contributions' heading after the "
+        "2026-06-10 gate flip"
+    )
+    assert "Status: not currently accepting outside contributions" not in text, (
+        "The pre-flip closed-status heading must stay deleted after the gate flip"
     )
 
 
@@ -216,14 +221,19 @@ def test_project_md_key_decisions_table_has_all_five() -> None:
         )
 
 
-# CONTRIB-02: PR template invariants (we do NOT modify the NOTICE block; just verify it stays)
+# CONTRIB-02: PR template invariants (post-flip: the closed NOTICE block stays gone)
 
 
-def test_pr_template_notice_block_preserved() -> None:
-    """Autonomous-run hard rule: PR template NOTICE block stays until Phase 59 atomic flip."""
+def test_pr_template_notice_block_removed() -> None:
+    """Post-flip invariant: the closed-to-PRs NOTICE block is gone and stays gone."""
     text = PR_TEMPLATE.read_text(encoding="utf-8")
-    assert "NOTICE: horus-os is in a solo development phase" in text, (
-        "Autonomous-run rule: PR template NOTICE block MUST NOT be deleted by Phase 55"
+    assert "NOTICE: horus-os is in a solo development phase" not in text, (
+        "The PR template's closed-to-PRs NOTICE block must stay deleted after the "
+        "2026-06-10 gate flip"
+    )
+    assert "Thanks for contributing" in text, (
+        "The PR template must open with the contributor-welcome comment that replaced "
+        "the closed NOTICE block"
     )
 
 

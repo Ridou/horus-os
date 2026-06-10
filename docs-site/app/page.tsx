@@ -80,7 +80,7 @@ export default function Home() {
             Quickstart
           </Link>
           <a
-            href="https://horus-os-demo.vercel.app"
+            href="https://horus-demo.com"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-2 py-2.5 text-sm font-bold text-text-secondary transition-colors hover:text-accent-cyan"

@@ -2,15 +2,15 @@
 
 ## Supported versions
 
-`horus-os` is pre-1.0 software. Only the most recent minor release receives security fixes. As of v0.6, the supported lines are v0.5.x and v0.6.x; earlier lines are retired and will not receive backported fixes.
+`horus-os` is pre-1.0 software. The two most recent minor lines receive security fixes. As of v0.8, the supported lines are v0.8.x and v0.7.x; earlier lines are retired and will not receive backported fixes.
 
 | Version | Supported |
 |---------|-----------|
-| 0.6.x   | yes       |
-| 0.5.x   | yes       |
-| < 0.5   | no        |
+| 0.8.x   | yes       |
+| 0.7.x   | yes       |
+| < 0.7   | no        |
 
-When v0.7 ships, v0.5 retires automatically (the "most recent minor" rolling-window policy). The supported-versions table is updated in the same atomic flip commit as the v0.7 release.
+When the next minor ships, the oldest supported line retires automatically (a two-line rolling window). The supported-versions table is updated in the same commit as each release.
 
 ## Reporting a vulnerability
 
@@ -39,11 +39,11 @@ The maintainer's response targets:
 
 ## Over-capacity language
 
-horus-os is a solo-maintained project. If the maintainer goes silent on a report (no acknowledgement after 7 days, no progress comment after the fix target lapses), the reporter is invited to file a public issue tagged `security-update-followup` with the advisory reference. This is the explicit escalation path; the maintainer prefers public reminders over the report being silently dropped.
+horus-os is a solo-maintained project. If the maintainer goes silent on a report (no acknowledgement after 7 days, no progress comment after the fix target lapses), the reporter is invited to file a public issue tagged `security-update` with the advisory reference. This is the explicit escalation path; the maintainer prefers public reminders over the report being silently dropped.
 
 ## Test-advisory ritual
 
-Before any real CVE lands, the maintainer publishes at least one rehearsal GitHub Security Advisory (test record, no actual vulnerability) to verify the disclosure flow works end-to-end. This is part of the v0.6.0 release rehearsal (Phase 58 territory).
+Before any real CVE lands, the maintainer publishes at least one rehearsal GitHub Security Advisory (test record, no actual vulnerability) to verify the disclosure flow works end-to-end. This is standing policy, established during the contribution-gate hardening work.
 
 ## Scope
 
@@ -66,10 +66,9 @@ Out of scope:
 
 The maintainer practices coordinated disclosure. Once a fix is ready, we will publish the advisory, release a patched version, and credit the reporter unless the reporter prefers to remain anonymous.
 
-<!-- PHASE-59-FLIP: when contributions open, delete the "Contributor-pipeline security (not active yet)" section below; the live contribution flow replaces it. -->
-## Contributor-pipeline security (not active yet)
+## Contributor-pipeline security
 
-`horus-os` is in a solo development phase and **does not currently accept outside pull requests** (see `CONTRIBUTING.md` for the full notice). When the project opens for contributions, every incoming PR will run the full public CI and supply-chain checks before any human review, and forked-PR builds run with restricted tokens that never see repository secrets. Until then, treat the existing surface area as single-maintainer code with no third-party PR exposure.
+`horus-os` accepts outside pull requests (see `CONTRIBUTING.md` for the flow). Every incoming PR runs the full public CI and supply-chain checks (lint, the three-OS test matrix, install-smoke, pip-audit, dependency review) before any human review. Forked-PR builds run with restricted tokens that never see repository secrets. Workflow changes, release scripts, and this policy file require maintainer review per `.github/CODEOWNERS`.
 
 ## Operational security guidance for users
 

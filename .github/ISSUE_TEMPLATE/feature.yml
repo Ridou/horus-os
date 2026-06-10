@@ -6,23 +6,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        <!-- PHASE-59-FLIP: when contributions open, remove the heads-up banner below -->
-        ### Heads-up: this repo is not accepting outside PRs yet
-
-        Filing this feature request does **not** reserve the work
-        for you. The maintainer holds the queue and assigns all
-        work internally. Issue-claim comments ("on it", "claim
-        this", "assign to me") are not honored, and an automation
-        will reply to common claim phrasing.
-
-        See
-        [STATUS.md](https://github.com/Ridou/horus-os/blob/main/STATUS.md)
-        for the project timeline and the gate for when outside
-        contributions open (earliest v0.6, not promised).
-
         Open-ended design questions belong in a Discussion, not
         an issue. Use this template only for concrete proposals
-        scoped to the current `ROADMAP.md`.
+        scoped to the current `ROADMAP.md`. If you want to build
+        the feature yourself once accepted, say so; the claim flow
+        in
+        [CONTRIBUTING.md](https://github.com/Ridou/horus-os/blob/main/CONTRIBUTING.md)
+        covers how assignment works.
 
   - type: markdown
     attributes:

@@ -12,7 +12,9 @@ Two tools ship:
 
 - `request_reservation_call(venue_name, to_number, reservation_datetime, ...)`
   places one outbound call. Registered when the adapter binds
-  successfully AND outbound calling is armed.
+  successfully (the `[voice]` extra installed and the three
+  `HORUS_OS_TWILIO_*` vars set); the tool refuses to dial until
+  outbound calling is armed via `HORUS_OS_VOICE_CALLS_ALLOWED`.
 - `get_reservation_calls(status="")` lists recorded calls and
   their outcomes.
 
@@ -148,4 +150,4 @@ classified, it just does not write an event.
 | GET | `/api/adapters/voice/status` | Configuration and pending-call summary |
 | GET | `/api/adapters/voice/twiml` | TwiML that connects a call to the media stream |
 | POST | `/api/adapters/voice/calls/{record_id}/complete` | Record a transcript and run side effects |
-| WS | `/api/adapters/voice/media` | Two-way audio bridge (deployment-bound) |
+| WS | `/api/adapters/voice/media` | Two-way audio bridge. Not mounted by the adapter; your deployment implements this route (see section 5) |

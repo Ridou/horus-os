@@ -6,7 +6,7 @@ Read [`docs/PLUGIN-SECURITY.md`](PLUGIN-SECURITY.md) before granting capabilitie
 
 ## What is a plugin?
 
-A plugin is a Python package that ships a `horus-plugin.toml` manifest, declares the capabilities it needs (`filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`), and contributes tools and/or adapters to a running `horus-os` instance. Tools extend the agent's tool registry; adapters extend the FastAPI app with new routes, background tasks, or external integrations. Discovery happens through two channels: Python entry points (`importlib.metadata.entry_points(group="horus_os.plugins")`) for pip-installed plugins, and a local `~/.horus-os/plugins/<name>/` directory for in-tree development.
+A plugin is a Python package that ships a `horus-plugin.toml` manifest, declares the capabilities it needs (`filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`, `skill.exec`, `shell.exec`, `code.exec`; see the capability catalog below), and contributes tools and/or adapters to a running `horus-os` instance. Tools extend the agent's tool registry; adapters extend the FastAPI app with new routes, background tasks, or external integrations. Discovery happens through two channels: Python entry points (`importlib.metadata.entry_points(group="horus_os.plugins")`) for pip-installed plugins, and a local `~/.horus-os/plugins/<name>/` directory for in-tree development.
 
 Every plugin runs in the same Python process as `horus-os` itself. Capability grants reduce the surface a plugin can touch, but they do not sandbox the plugin from the rest of the interpreter. See `docs/PLUGIN-SECURITY.md` for the threat model.
 
@@ -56,7 +56,7 @@ Field-by-field:
 - `description` (string, required, ≤200 chars). One-line plain-English summary; appears in the dashboard's `/plugins` tab and in `horus-os plugins info <name>` output.
 - `author` (string, required). Non-empty. Shown next to the description in the capability grant prompt.
 - `license` (string, required). SPDX identifier preferred. Surfaced in dashboard listings.
-- `horus_os_compat` (string, required). PEP 440 specifier set, e.g. `>=0.5,<0.7,!=0.5.1`. Parsed via `packaging.specifiers.SpecifierSet`; the installer refuses to load a plugin whose specifier excludes the running `horus-os` version.
+- `horus_os_compat` (string, required). PEP 440 specifier set, e.g. `>=0.5,<0.9`. Parsed via `packaging.specifiers.SpecifierSet`; the installer refuses to load a plugin whose specifier excludes the running `horus-os` version.
 - `homepage`, `issue_tracker` (URL, optional). Surfaced in the dashboard.
 - `capabilities` (list of strings, optional). Closed enum drawn from `horus_os.plugins.capability_catalog.Capability`. Unknown values are refused at validation time.
 - `[[contributions.tools]]` / `[[contributions.adapters]]` (optional repeat tables). Each entry has a `name` (lowercase ASCII identifier scoped within the plugin) and an `entry_point` (dotted-path import with an optional `:Symbol` suffix). The Phase 42 loader instantiates each entry at startup.
@@ -111,7 +111,7 @@ End-to-end install in a throwaway venv. Gated by the `--run-installer-e2e` pytes
 
 ## Walkthrough of the reference plugin
 
-Phase 48 will ship `examples/horus-os-example-plugin/` as a reference implementation. Until then, the four scenarios it will demonstrate are a contract, not shipped code:
+`examples/horus-os-example-plugin/` is the reference implementation. It demonstrates four scenarios:
 
 - (a) A tool requiring `filesystem.read`. Decorated with `@require_capability(Capability.FILESYSTEM_READ)`; reads files via `ctx.filesystem.read(path)`; raises `PermissionDenied` when the user denied the cap at install time.
 - (b) A tool requiring `secrets.read`. Reads an API key via `ctx.secrets.read("EXAMPLE_KEY")`; returns `None` (not an exception) when the env var is unset, matching the `DESCRIPTIONS[SECRETS_READ]` semantics.
@@ -122,13 +122,13 @@ Phase 48 lands the reference plugin under `examples/horus-os-example-plugin/`. T
 
 ## Public API surface
 
-`horus_os.plugins.api` is the ONLY supported import surface for plugin authors. The Phase 48 ruff custom rule (TEST-21) will refuse any other `from horus_os.<submodule>` import inside the reference plugin. Plugins that import from internal modules must expect those imports to break on minor releases.
+`horus_os.plugins.api` is the ONLY supported import surface for plugin authors. A ruff custom rule (TEST-21) refuses any other `from horus_os.<submodule>` import inside the reference plugin. Plugins that import from internal modules must expect those imports to break on minor releases.
 
 | Name | Purpose |
 | --- | --- |
 | `Adapter` | Protocol for adapter contributions; mount routes / handle external integrations. |
 | `AdapterContext` | Per-app context handed to `Adapter`s at startup. |
-| `Capability` | Closed enum of capability strings (`filesystem.read`, `filesystem.write`, `net.outbound`, `secrets.read`). |
+| `Capability` | Closed enum of the seven capability strings; see the capability catalog above. |
 | `LifecycleAdapter` | Optional Protocol extending `Adapter` with async `start(ctx)` and `stop()` hooks. |
 | `PluginContext` | Per-plugin context with `filesystem`, `secrets`, `net` shims plus name/version/data_dir. |
 | `PluginSpec` | Frozen description of a discovered plugin (name, version, capabilities, contributions). |
@@ -155,4 +155,4 @@ The two-phase installer runs: `pip download --no-deps` into a tmpdir; manifest v
 
 Drop a `horus-plugin.toml` plus the Python module under `~/.horus-os/plugins/<plugin_name>/`. Restart `horus-os` to pick up the new filesystem plugin - `v0.5` does not ship a hot-reload command; the `enable`/`disable` subcommands toggle a discovered plugin between active and inactive without removing it.
 
-The dashboard `/plugins` tab and the `horus-os plugins list` CLI surface both pip-installed and filesystem plugins in the same view.
+The `horus-os plugins list` CLI surfaces both pip-installed and filesystem plugins in the same view, and is the primary management surface (see also `plugins info`, `enable`, `disable`).
